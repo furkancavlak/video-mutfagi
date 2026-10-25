@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video Mutfağı · Panel</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231F4A39'/%3E%3Cpath d='M12 9l11 7-11 7z' fill='%23F2D36B'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Caveat:wght@600;700&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="stil.css">
+</head>
+<body>
+<header class="ust">
+  <div class="logo"><span class="logo-i">▶</span>Video Mutfağı</div>
+  <nav class="sekmeler" id="sekmeler">
+    <button data-s="bugun" class="on">Bugün</button>
+    <button data-s="sira">Sıra</button>
+    <button data-s="takvim">Takvim</button>
+    <button data-s="videolar">Videolar</button>
+    <button data-s="sonuclar">Sonuçlar</button>
+  </nav>
+  <div class="saglik" id="saglik"></div>
+</header>
+
+<main>
+  <section id="s-bugun" class="sayfa on">
+    <div class="izgara-bugun">
+      <article class="tahta" id="siradaki"></article>
+      <article class="tahta" id="son"></article>
+    </div>
+    <div class="hazir" id="hazir"></div>
+  </section>
+
+  <section id="s-sira" class="sayfa">
+    <div class="baslik-satir"><h1>Sıra</h1><span class="say" id="sira-say"></span></div>
+    <div id="sira-liste" class="liste"></div>
+  </section>
+
+  <section id="s-takvim" class="sayfa">
+    <div class="baslik-satir"><h1>Takvim</h1>
+      <div class="ok-grup"><button class="ok" data-h="-1">‹</button><span id="takvim-ay"></span><button class="ok" data-h="1">›</button></div>
+    </div>
+    <div id="takvim" class="takvim"></div>
+  </section>
+
+  <section id="s-videolar" class="sayfa">
+    <div class="baslik-satir"><h1>Videolar</h1><span class="say" id="video-say"></span></div>
+    <div id="video-izgara" class="video-izgara"></div>
+  </section>
+
+  <section id="s-sonuclar" class="sayfa">
+    <div class="baslik-satir"><h1>Sonuçlar</h1>
+      <div class="secici" id="metrik">
+        <button data-m="views" class="on">İzlenme</button><button data-m="reach">Erişim</button><button data-m="likes">Beğeni</button><button data-m="shares">Paylaşım</button><button data-m="saved">Kayıt</button>
+      </div>
+      <button class="dugme ince" id="yenile">↻</button>
+    </div>
+    <article class="tahta genis" id="sonuclar"></article>
+  </section>
+</main>
+
+<dialog id="pencere">
+  <form method="dialog" id="ekle-form">
+    <div class="p-ust"><h2>Sıraya ekle</h2><button value="kapat" class="kapat" aria-label="Kapat">✕</button></div>
+    <video id="p-video" controls playsinline preload="metadata"></video>
+    <label>Açıklama<textarea id="p-aciklama" rows="4"></textarea></label>
+    <div class="p-satir">
+      <label>Zaman<input type="datetime-local" id="p-zaman"></label>
+      <label class="kutu"><input type="checkbox" id="p-onay"> Önce ben onaylayayım</label>
+    </div>
+    <p class="ipucu" id="p-ipucu"></p>
+    <div class="p-alt"><button value="kapat" class="dugme ince">Vazgeç</button><button value="ekle" class="dugme sari" id="p-ekle">Sıraya ekle</button></div>
+  </form>
+</dialog>
+
+<div id="bildirim" class="bildirim" role="status"></div>
+<script src="panel.js"></script>
+</body>
+</html>
