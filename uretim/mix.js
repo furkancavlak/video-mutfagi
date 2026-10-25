@@ -9,6 +9,7 @@
 // after the sentence, and the voice comes back ~0.75 s later over the ducked tail (like a video transition).
 const fs = require('fs'), path = require('path');
 const { videoYukle, okuJson, sh, sure, fail, KOK } = require('./cekirdek');
+const { hizala } = require('./hizala');
 
 const { dir, video, kimlik } = videoYukle(process.argv[2]);
 const SR = 48000, TEMPO = video.hiz || 1;
@@ -59,7 +60,9 @@ lines.forEach((f, i) => {
   const start = t;
   ev.push([proc[f].wav, start, 1, 'ses']);
   Z.satirlar.push({ dosya: f, kim, bas: +start.toFixed(3), son: +(start + proc[f].d).toFixed(3) });
-  for (const [w, a, b] of words[f]) {
+  // caption text comes from the script; Whisper only supplies the timing (uretim/hizala.js)
+  const hizali = hizala(video.satirlar[i].metin, words[f]) || words[f];
+  for (const [w, a, b] of hizali) {
     const son = Z.kelimeler[Z.kelimeler.length - 1];
     // Whisper splits Turkish suffixes after an apostrophe ("Karadeniz" + "'in"): glue them back onto the word
     if (/^['’]/.test(w) && son && son.satir === i) { son.w += w.replace('’', "'"); son.b = +(start + b / TEMPO).toFixed(3); continue; }

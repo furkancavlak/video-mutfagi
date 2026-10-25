@@ -65,7 +65,10 @@ function altyazi(T, video, C) {
   const anons = new Set(video.anons_rolleri || []);
   const fixw = w => { const m = w.match(/^(.*?)([.,?!…]*)$/); const k = m[1].toLocaleLowerCase('tr'); if (!FIX[k]) return w; const v = FIX[k]; return (m[1][0] === m[1][0].toLocaleUpperCase('tr') ? v[0].toLocaleUpperCase('tr') + v.slice(1) : v) + m[2]; };
   const chunks = [];
-  Z.satirlar.forEach((s, li) => { const ws = Z.kelimeler.filter(k => k.satir === li); let cur = []; ws.forEach((w, i) => { cur.push(w); if (cur.length >= 4 || /[.,?!…]$/.test(w.w) || i === ws.length - 1) { chunks.push({ ws: cur, kim: s.kim, li }); cur = []; } }); });
+  Z.satirlar.forEach((s, li) => { const ws = Z.kelimeler.filter(k => k.satir === li); let cur = []; ws.forEach((w, i) => { cur.push(w);
+    // 4 words per card, but never leave a clause's last word alone on the next card ("amına" / "koyayım.")
+    const yetim = cur.length === 4 && ws[i + 1] && /[.,;:?!…]$/.test(ws[i + 1].w);
+    if ((cur.length >= 4 && !yetim) || /[.,;:?!…]$/.test(w.w) || i === ws.length - 1) { chunks.push({ ws: cur, kim: s.kim, li }); cur = []; } }); });
   let html = ''; const tl = [];
   chunks.forEach((c, ci) => {
     const a = c.ws[0].a, nx = chunks[ci + 1];

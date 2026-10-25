@@ -75,6 +75,11 @@ function simKontrol(S) {
     if (!a.an) s.push(`adım ${i}: an yok`);
     if (a.yil && cetvel.length && !cetvel.includes(a.yil)) s.push(`adım ${i}: yil "${a.yil}" cetvelde yok`);
     if (a.odak && !['genel', 'gok', 'kiyi', 'yuzey', 'deniz', 'dip'].includes(a.odak)) s.push(`adım ${i}: odak "${a.odak}" geçersiz`);
+    if (a.kahraman) {
+      if (!S.kahraman) s.push(`adım ${i}: kahraman adımı var ama en üstte "kahraman" tanımı yok`);
+      if (!['deniz', 'yuzey', 'kiyi', 'balkon', 'kara', 'dip'].includes(a.kahraman.yer)) s.push(`adım ${i}: kahraman yeri "${a.kahraman.yer}" geçersiz`);
+      if ((a.kahraman.yazi || '').length > 18) s.push(`adım ${i}: kahraman yazısı çok uzun, en fazla 18 karakter ("${a.kahraman.yazi}")`);
+    }
   }
   return s;
 }
