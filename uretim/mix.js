@@ -59,7 +59,12 @@ lines.forEach((f, i) => {
   const start = t;
   ev.push([proc[f].wav, start, 1, 'ses']);
   Z.satirlar.push({ dosya: f, kim, bas: +start.toFixed(3), son: +(start + proc[f].d).toFixed(3) });
-  for (const [w, a, b] of words[f]) Z.kelimeler.push({ w, a: +(start + a / TEMPO).toFixed(3), b: +(start + b / TEMPO).toFixed(3), kim, satir: i });
+  for (const [w, a, b] of words[f]) {
+    const son = Z.kelimeler[Z.kelimeler.length - 1];
+    // Whisper splits Turkish suffixes after an apostrophe ("Karadeniz" + "'in"): glue them back onto the word
+    if (/^['’]/.test(w) && son && son.satir === i) { son.w += w.replace('’', "'"); son.b = +(start + b / TEMPO).toFixed(3); continue; }
+    Z.kelimeler.push({ w, a: +(start + a / TEMPO).toFixed(3), b: +(start + b / TEMPO).toFixed(3), kim, satir: i });
+  }
   const end = start + proc[f].d;
   if (i === 0) {                                  // hook -> woven sting
     const hit = end + 0.1; ev.push([sting, hit - RISE, 0.55, 'fx']); Z.sting.push(+hit.toFixed(3)); t = hit + 0.75;
