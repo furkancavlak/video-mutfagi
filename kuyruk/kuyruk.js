@@ -5,7 +5,8 @@
 //   node kuyruk/kuyruk.js ekle <video.mp4> --aciklama "..." [--zaman "2026-10-27 19:00"] [--onay-gerekli]
 //   node kuyruk/kuyruk.js liste                   what is waiting, when it goes, what needs approval
 //   node kuyruk/kuyruk.js onayla <id> | iptal <id>
-//   node kuyruk/kuyruk.js calistir [--kuru]       scheduler entry: posts at most one due video, then exits
+//   node kuyruk/kuyruk.js calistir [--kuru|--hazirla]  scheduler entry: posts at most one due video, then exits
+//                       --kuru: tunnel check only · --hazirla: Instagram ingests the video, nothing is published
 //   node kuyruk/kuyruk.js sonuclar                pulls views/reach/likes of posted videos (free, read-only)
 //   node kuyruk/kuyruk.js durum                   is the automation alive? last run, overdue videos, warnings
 //   node kuyruk/kuyruk.js zamanlayici kur|kaldir|durum
@@ -117,7 +118,7 @@ function kucult(mp4, mb) {
   return out;
 }
 
-async function paylas(j, a, kuru) {
+async function paylas(j, a, kuru, hazirla) {
   const P = require('../instagram/paylas.js');
   const mp4 = path.resolve(KOK, j.mp4);
   if (!fs.existsSync(mp4)) throw new Error('video dosyası yok: ' + j.mp4);
@@ -126,18 +127,18 @@ async function paylas(j, a, kuru) {
     if (!y.klasor || !y.adres) throw new Error('ayarlar/kuyruk.json → yayin.klasor ve yayin.adres gerekli');
     const ad = 'vm-' + crypto.randomBytes(8).toString('hex') + '.mp4', hedef = path.join(y.klasor, ad);
     fs.copyFileSync(mp4, hedef);
-    try { return await P.gonder(mp4, j.aciklama, kuru, false, y.adres.replace(/\/?$/, '/') + ad); }
+    try { return await P.gonder(mp4, j.aciklama, kuru, hazirla, y.adres.replace(/\/?$/, '/') + ad); }
     finally { fs.rmSync(hedef, { force: true }); }
   }
   const mb = fs.statSync(mp4).size / 1048576, sinir = y.tunel_en_fazla_mb ?? 6;
   let dosya = mp4;
   if (mb > sinir) { log(`video ${mb.toFixed(1)} MB, ev internetinde Instagram yetişemeyebilir: ${sinir} MB'a küçültülüyor`); dosya = kucult(mp4, sinir); }
-  try { return await P.gonder(dosya, j.aciklama, kuru, false, null); }
+  try { return await P.gonder(dosya, j.aciklama, kuru, hazirla, null); }
   finally { if (dosya !== mp4) fs.rmSync(dosya, { force: true }); }
 }
 
 async function calistir() {
-  const kuru = process.argv.includes('--kuru'), a = ayar(), durum = fs.existsSync(DURUM) ? okuJ(DURUM) : {};
+  const kuru = process.argv.includes('--kuru'), hazirla = process.argv.includes('--hazirla'), a = ayar(), durum = fs.existsSync(DURUM) ? okuJ(DURUM) : {};
   // one run at a time; a stale lock (crashed run) is ignored after 30 min
   if (fs.existsSync(KILIT) && Date.now() - fs.statSync(KILIT).mtimeMs < 30 * 60e3) { console.log('Başka bir çalışma sürüyor, çıkılıyor.'); return; }
   fs.writeFileSync(KILIT, String(process.pid));
@@ -152,10 +153,10 @@ async function calistir() {
     const j = sirada[0];
     const gecikme = (Date.now() - new Date(j.ne_zaman)) / 3600e3;
     if (gecikme > (a.gecikme_uyari_saat ?? 2)) log(`UYARI: ${j.id} ${gecikme.toFixed(1)} saat gecikti (bilgisayar kapalı ya da uykudaydı). Şimdi paylaşılıyor.`);
-    log(`${kuru ? 'KURU: ' : ''}paylaşılıyor: ${j.id}`);
+    log(`${kuru ? 'KURU (Instagram\'a gitmez): ' : hazirla ? 'HAZIRLA (Instagram işler, YAYINLANMAZ): ' : 'GERÇEK PAYLAŞIM: '}${j.id}`);
     try {
-      const r = await paylas(j, a, kuru);
-      if (kuru) { yaz({ son_sonuc: 'kuru koşu tamam' }); return; }
+      const r = await paylas(j, a, kuru, hazirla);
+      if (kuru || hazirla) { yaz({ son_sonuc: kuru ? 'kuru koşu tamam' : 'hazırla tamam: Instagram kabul etti, yayınlanmadı' }); return; }
       tasi(j.f, D.paylasilan, { paylasildi: new Date().toISOString(), media_id: r.media_id, link: r.link });
       yaz({ son_sonuc: 'paylaşıldı: ' + r.link, son_paylasim: new Date().toISOString() });
       log('YAYINDA: ' + r.link);
