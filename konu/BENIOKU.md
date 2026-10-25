@@ -74,7 +74,7 @@ Aynı fikir ikinci kez gelirse yeni fikir açılmaz, kaynakları birleşir. Redd
 
 - **Varsayılan: Claude aboneliği** (`claude -p`). Claude Code kuruluysa ayrıca anahtar gerekmez. Radar, Claude'u kullanıcının kişisel ayarlarından ayrı çalıştırır: boş bir geçici klasör, `.beyin-yok` işareti, `BEYIN_V3_SKIP=1`, `--setting-sources project,local`, `--strict-mcp-config`. Böyle yapılmazsa kullanıcının kişisel kancaları (hook) her çağrıya karışır.
 - **Alternatif: API anahtarı.** `ANTHROPIC_API_KEY` tanımla, repo klasöründe `npm i @anthropic-ai/sdk` çalıştır, `konu.json` → `llm.yol: "api"`. Kullandıkça ödenir. Bu yol yazıldı ama bizim makinede denenmedi.
-- **Maliyet:** Bir puanlama turu tek çağrıdır, bizim denemede ~1,5 dakika sürdü (abonelikte ek ücret yok; API'de karşılığı ~0,15-0,30 $). Bir videonun metni + internette doğrulama + görsel tarifi 3-6 çağrıdır.
+- **Maliyet:** Bir puanlama turu tek çağrıdır, bizim denemede 1,5-2 dakika sürdü (abonelikte ek ücret yok; Claude'un kendi tahminiyle API karşılığı 0,15-0,30 $). Bir videonun metni + internette doğrulama + görsel tarifi 3-7 çağrıdır. Denemede metin 3 tur doğrulandı: 7 çağrı, ~13 dakika, API karşılığı ~3 $. Aboneliğin kullanım sınırından düşer.
 
 ## Otomasyon (kanal başına, `konu.json` → `otomasyon`)
 
@@ -144,3 +144,7 @@ Tarama: Ekşi 267 başlık (yapay zekâya gönderilmedi, ham konu), Reddit 50, V
 | 8.0 | Bir canlı nasıl görünmez olur? | Reddit r/todayilearned (deniz safiri) |
 | 7.1 | Evrendeki bütün oksijen yok olursa gümüş ve altına ne olur? | Google Trends TR ("gümüş") |
 | 6.8 | DNA'nı onaran sistem bir gün durursa ne olur? | Vikipedi (tr) en çok okunanlar |
+
+Aynı gün ikinci tur (`calistir`): önceki 40 konu yeniden gönderilmedi, yalnız yeni gelenler puanlandı, 6 fikir daha eklendi (ör. 8.7 "Bir kara deliğe el feneri tutarsan ne olur?", 8.7 "Möbius şeridinin üstünde yaşasaydın ne olurdu?").
+
+İlk fikirle `uret` denemesi (`--onay` yok): metin yazıldı, 30 bilgi internette doğrulandı (21 doğru, 9 öncülün sonucu; iki düzeltme turu), `ucretli.json` yazıldı (8 resim, 5 klip, 50 kredi bütçe). Radar ses kapısında durdu: ~1.641 ElevenLabs karakteri ve tahmini ~38 kredi gösterdi, hiçbir şey harcamadı. Bu denemeden sonra metin uzunluğu sınırı istemlere eklendi (örnek 1.070 karakterdi, deneme metni daha uzun çıktı).

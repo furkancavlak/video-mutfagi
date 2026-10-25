@@ -36,7 +36,7 @@ Kullanılabilir roller: {{roller}}. Ana anlatıcı bu videoda **{{ana_rol}}**. �
 
 - Her satırda en az bir gerçek, doğrulanabilir bilgi olsun. Bilgiyi uydurma; emin olmadığın rakamı yazma. Her bilgi aşağıdaki "bilgiler" listesinde ayrıca yer alsın.
 - Öncülün mantıksal sonucu olan ama deneye dayanmayan cümleler ("toz oldu") bilgiler listesinde tur: "oncul" olarak işaretlensin.
-- 6-9 satır. İlk satır kanca, son satır ters köşe kapanış. Kapanış çağrısını seslendirme (marka ekranı yazar).
+- 6-9 satır, toplam 900-1200 karakter (ses etiketleri dahil). Onaylı örnek 1.070 karakter ve 76 saniye; daha uzunu 80 saniyeyi geçer, kısalt. İlk satır kanca, son satır ters köşe kapanış. Kapanış çağrısını seslendirme (marka ekranı yazar).
 - Ses etiketleri ([excited], [shouting], [laughs], [pause], [calm], [dramatic pause]) satır başına en fazla 2.
 - Küfür kimlikteki kurala göre: ünlem olarak, olayın ortasında. Kişiye ya da gruba hakaret yok.
 - Kesirli karakter (⅓) yazma, yazıyla yaz ("üçte biri"). Sayıları seslendirmeye uygun yaz.
