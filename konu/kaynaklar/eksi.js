@@ -1,7 +1,6 @@
 // Ekşi Sözlük: public topic lists (gündem, debe, channel pages such as kanal/bilim). Only topic TITLES and the
 // day's entry counts are read, never entry text or author names. robots.txt is checked before each page.
-// Ekşi's robots.txt carries "Content-Signal: ai-input=no": unless the channel opts in (llm_e_gonder: true)
-// these titles are NOT sent to the language model; they stay in the pool as raw signals for a human to pick.
+// Titles go to the language model like every other source; a channel can opt out with llm_e_gonder: false.
 const { getir, robotsKontrol, icerikSinyali, duzMetin, KaynakHatasi, uyu } = require('./ag');
 
 const KOK = 'https://eksisozluk.com';
@@ -26,10 +25,9 @@ function listeAyristir(html, sayfa) {
 
 async function topla(ayar = {}) {
   const sayfalar = ayar.sayfalar || ['gundem', 'debe'];
-  const llmIzni = ayar.llm_e_gonder === true;
+  const llmIzni = ayar.llm_e_gonder !== false;
   const sinyal = await icerikSinyali(KOK + '/', 'eksi').catch(() => ({}));
   const notlar = [];
-  if (sinyal['ai-input'] === 'no' && !llmIzni) notlar.push('Ekşi robots.txt "ai-input=no" diyor: başlıklar yapay zekâya gönderilmeyecek, havuzda ham konu olarak duracak (konu.json → eksi.llm_e_gonder).');
   const ogeler = [], gorulen = new Set();
   for (const s of sayfalar) {
     const url = sayfaUrl(s);

@@ -120,12 +120,8 @@ Her madde aynı biçimde yazılmıştır: **ne oldu**, ardından **→ ne yap**.
 
 - **Ekşi Sözlük, Node'un yerleşik `fetch()` isteğine "Just a moment" (403) döndü,** aynı tanıtımla `curl` sayfayı açtı. Sebep `fetch()`'in eklediği tarayıcı tipi `sec-fetch-*` başlıklarıydı.
   → Toplayıcılar sade `node:https` isteği atar, tanıtımı (User-Agent) dürüsttür, tarayıcı taklidi yapılmaz. Site yine engellerse radar Türkçe uyarı verip o kaynağı atlar; ısrar etmez.
-- **Ekşi'nin robots.txt dosyası "Content-Signal: ai-input=no" diyor.**
-  → Ekşi başlıkları varsayılan olarak yapay zekâya gönderilmez, havuzda "ham konu" olarak durur. Göndermek kanal sahibinin kararıdır (`konu.json` → `eksi.llm_e_gonder`).
 - **Reddit'in oturumsuz `.json` adresi 403 veriyor** ve robots.txt otomatik erişimi kapatıyor. Herkese açık RSS akışı çalışıyor.
   → Varsayılan RSS, tek istek, günde birkaç tur. Uyumlu yol resmî API (`yontem: "api"`).
-- **X'e tarayıcıyla otomatik giriş yapan eski projede hesap engellendi.**
-  → X yalnız resmî API ve kullanıcının kendi anahtarıyla açılır; varsayılan kapalı. Başka projelerdeki çerez ya da oturum dosyaları kullanılmaz.
 - **Aynı serinin farklı bölümleri tek fikir sanıldı.** "Evrendeki bütün oksijen yok olursa Everest'te / İstanbul'da…" başlıkları ortak kelimelerden dolayı birleşti, 7 fikir 3'e düştü.
   → Benzerlik ölçülürken kanalın seri kalıbındaki kelimeler (kimlik → konu ve ilk videonun başlığı) sayılmaz.
 - **Vikipedi'nin en çok okunanlarında her gün "Bilim", "Türkiye" gibi sayfalar üstte.** Bugünle ilgisiz oldukları hâlde ilgi puanı yüksek çıktı.

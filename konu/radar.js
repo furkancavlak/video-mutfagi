@@ -37,7 +37,7 @@ function fikirTablosu(ctx, h, hepsi) {
   if (!liste.length) { yaz('Havuz boş. Önce: node konu/radar.js topla ' + ctx.kanal + ' && node konu/radar.js puanla ' + ctx.kanal); return; }
   yaz(`\n${'PUAN'.padEnd(5)} ${'ID'.padEnd(11)} ${'DURUM'.padEnd(15)} FİKİR  (kaynak)`);
   for (const f of liste) yaz(`${f.puan.toFixed(1).padEnd(5)} ${f.id.padEnd(11)} ${f.durum.padEnd(15)} ${f.baslik}  (${[...new Set(f.kaynaklar.map(k => k.kaynak))].join(', ')})`);
-  if ((h.ham_konular || []).length) yaz(`\n+ ${h.ham_konular.length} ham konu (yapay zekâya gönderilmeyen siteden), fikirler.md'nin sonunda.`);
+  if ((h.ham_konular || []).length) yaz(`\n+ ${h.ham_konular.length} ham konu (yapay zekâsı kapatılmış kaynaktan), fikirler.md'nin sonunda.`);
   yaz(`\nOkunaklı liste: ${path.relative(process.cwd(), path.join(ctx.dir, 'fikirler.html'))}`);
 }
 

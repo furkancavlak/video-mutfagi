@@ -69,7 +69,7 @@ function md(ctx, h) {
     for (const n of f.notlar || []) s.push(`> ${n.zaman.slice(0, 16)} ${n.not}`, '');
   }
   if ((h.ham_konular || []).length) {
-    s.push('## Ham konular (yapay zekâya gönderilmedi)', '', 'Bu sitenin kuralı içeriğinin yapay zekâya girdi olmamasını istiyor. Göz at; ilginç olanı elle fikre çevir.', '');
+    s.push('## Ham konular (yapay zekâya gönderilmedi)', '', 'Bu kaynak için yapay zekâ kapalı (konu.json → llm_e_gonder: false). Göz at; ilginç olanı elle fikre çevir.', '');
     for (const k of h.ham_konular) s.push(`- [${k.baslik}](${k.url}) · ${k.alt}${k.metrikler.entry_bugun != null ? ` · bugün ${k.metrikler.entry_bugun} entry` : ''} · ön puan ${k.on_puan}`);
     s.push('');
   }
@@ -99,7 +99,7 @@ h1{margin:0 0 4px}.k{background:#fff;border-radius:14px;padding:16px 18px;margin
 ul.h{columns:2;font-size:14px}@media(max-width:600px){ul.h{columns:1}}</style></head><body><main>
 <h1>${kac(ctx.kimlik.hesap || ctx.kanal)}: video fikirleri</h1><p class="m">Son güncelleme ${kac(h.guncelleme)}. Puan 10 üzerinden.</p>
 ${kart.join('\n')}
-${ham ? `<h2>Ham konular (yapay zekâya gönderilmedi)</h2><p class="m">Bu sitenin kuralı içeriğinin yapay zekâya girdi olmamasını istiyor. İlginç olanı elle fikre çevir.</p><ul class="h">${ham}</ul>` : ''}
+${ham ? `<h2>Ham konular (yapay zekâya gönderilmedi)</h2><p class="m">Bu kaynak için yapay zekâ kapalı (konu.json → llm_e_gonder: false). İlginç olanı elle fikre çevir.</p><ul class="h">${ham}</ul>` : ''}
 </main></body></html>`;
 }
 function raporYaz(ctx, h) {

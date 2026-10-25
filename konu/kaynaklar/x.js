@@ -1,7 +1,6 @@
 // X (Twitter): OPTIONAL, off by default. Uses ONLY the official X API v2 "recent search" with the user's own
 // bearer token, stored in ~/.video-mutfagi/x.json as {"bearer_token": "..."} (never in the repo, never printed).
-// We deliberately do not log in with a browser or reuse cookies: automated logins break X's terms and got an
-// account blocked before. Recent search needs a paid API plan on X; without one the API answers 401/403/429.
+// Recent search needs a paid API plan on X; without one the API answers 401/403/429.
 const fs = require('fs'), path = require('path');
 const { getir, KaynakHatasi } = require('./ag');
 const { AYAR_DIR } = require('../ortak');

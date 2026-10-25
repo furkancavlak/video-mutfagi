@@ -40,11 +40,11 @@ Her kaynak `konu/kaynaklar/` içinde küçük bir dosyadır ve aynı biçimde li
 
 | Kaynak | Ne alınır | Kural |
 |---|---|---|
-| **Ekşi Sözlük** | gündem, debe ve kanal sayfalarındaki (ör. `kanal/bilim`) başlıklar ve o günkü entry sayısı. Entry metni ve yazar adı alınmaz | robots.txt her taramada okunur. Sayfalar arasında 4 sn beklenir. Site engellerse Türkçe uyarı verilir, diğer kaynaklar devam eder. **Ekşi'nin robots.txt dosyası "ai-input=no" diyor**: başlıklar varsayılan olarak yapay zekâya gönderilmez. Havuzun sonunda "ham konular" olarak durur, insan bakıp seçer. `llm_e_gonder: true` yapmak kanal sahibinin kararıdır |
+| **Ekşi Sözlük** | gündem, debe ve kanal sayfalarındaki (ör. `kanal/bilim`) başlıklar ve o günkü entry sayısı. Entry metni ve yazar adı alınmaz | robots.txt her taramada okunur. Sayfalar arasında 4 sn beklenir. Site engellerse Türkçe uyarı verilir, diğer kaynaklar devam eder. İstersen `llm_e_gonder: false` ile başlıkları yapay zekâya göndermeyip yalnız ham liste olarak görebilirsin |
 | **Reddit** | seçilen subreddit'lerin günün en iyileri | `rss` (varsayılan): herkese açık akış, tek istek. Beğeni sayısı gelmez, sıra kullanılır. Reddit'in robots.txt dosyası otomatik erişimi genel olarak kapatıyor; akış okuyucu gibi günde birkaç istekle sınırlı tut. Uyumlu yol resmî API'dir: `yontem: "api"` (aşağıda) |
 | **Vikipedi** | günün en çok okunan maddeleri (tr, en) ve seçkin madde; görüntülenme ve son 5 günün eğrisi | Wikimedia'nın ücretsiz, kararlı servisi. Her gün okunan "Bilim", "Türkiye" gibi sayfalar düşük, birden yükselenler yüksek puan alır |
 | **Google Trends** | ülkenin günlük arama trendleri ve ilgili haber başlıkları | herkese açık RSS |
-| **X** | kendi sorgularınla son tweetler (beğeni, repost) | **Kapalı.** Yalnız resmî X API ile ve kendi anahtarınla çalışır (ücretli plan ister). Tarayıcıyla otomatik giriş yapmayız: X'in kurallarına aykırı, bizim bir hesabımız böyle engellendi |
+| **X** | kendi sorgularınla son tweetler (beğeni, repost) | **Kapalı.** Yalnız resmî X API ile ve kendi anahtarınla çalışır (ücretli plan ister). |
 
 Bütün isteklerde dürüst bir tanıtım (User-Agent) gönderilir: `video-mutfagi-konu-radari/0.1`. Radar tarayıcı taklidi yapmaz.
 
@@ -135,7 +135,7 @@ Kuyruk iş dosyası (kuyruk modülüyle sözleşme):
 
 ## Örnek çıktı (oxygbio, 25.10.2026, gerçek tarama)
 
-Tarama: Ekşi 267 başlık (yapay zekâya gönderilmedi, ham konu), Reddit 50, Vikipedi 80, Google Trends 10. Yasak kelimeyle 26 konu elendi, 40 konu yapay zekâya gitti, 6 fikir çıktı. İlk beşi:
+Tarama: Ekşi 267 başlık, Reddit 50, Vikipedi 80, Google Trends 10. Yasak kelimeyle 26 konu elendi, 40 konu yapay zekâya gitti, 6 fikir çıktı. İlk beşi:
 
 | Puan | Fikir | Kaynak |
 |---|---|---|

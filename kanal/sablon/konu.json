@@ -7,8 +7,7 @@
         "gundem",
         "debe"
       ],
-      "llm_e_gonder": false,
-      "_not": "Ekşi robots.txt 'ai-input=no' diyor. false iken Ekşi başlıkları yapay zekâya gönderilmez, havuzda ham konu olarak listelenir. true yapmak kanal sahibinin kararıdır."
+      "llm_e_gonder": true
     },
     "reddit": {
       "aktif": true,
@@ -43,7 +42,7 @@
         "(\"ne olur\" OR \"nasıl çalışıyor\" OR \"biliyor muydunuz\") lang:tr -is:retweet"
       ],
       "adet": 50,
-      "_not": "Yalnız resmi X API (ücretli plan) ve kendi anahtarınla. Tarayıcıyla otomatik giriş hesabı kapattırabilir, kullanılmaz."
+      "_not": "Yalnız resmî X API ile ve kendi anahtarınla çalışır (X ücretli plan ister)."
     }
   },
   "on_eleme": {
