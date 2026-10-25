@@ -15,7 +15,8 @@ Ajan aşağıdaki sırayı kullanıcıyla birlikte yürütür. Her adımda kulla
 ## 2. Ton
 
 - **Komedi mi, ciddi mi, karışık mı?** Örnek kanalın tonu: her şaka gerçek bir bilgiye dayanır.
-- **Küfür:** Ne kadar olacak, nerede kullanılacak? Örnek kanalda küfür ünlem olarak, olayın ortasında geçer.
+- **Küfür:** Ne kadar olacak, nerede kullanılacak? Örnek kanalda küfür bol, olaya verilen tepki olarak geçer; kişiye hakaret yok.
+- **Karışım (`karisim`):** Metnin yüzde kaçı bilgi, kaçı küfür, kaçı absürt şaka olsun? Örnek kanal: %30 bilgi, %25 küfür, %45 absürt. Bilgi oranı düştükçe video eğlenceye kayar; bilgi ne kadar az olursa olsun doğrulanır.
 
 ## 3. Anlatıcı sesi (en az 3-4 ses dinlet)
 

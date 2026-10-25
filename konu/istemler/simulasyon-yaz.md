@@ -39,6 +39,7 @@ Altyazı, marka ekranları ve köşe etiketi ayrıca otomatik gelir.
   - Oksijensiz dipte kükürt bakterileri çoğalır: `gaz` artar, deniz `yesil` ya da `mor` olur.
   - Gökyüzü ancak gaz atmosfere çıkınca `sari` olur.
   - Oksijen nerede bitiyorsa göstergesi ona göre iner. Diğeri gerçek bilgiye göre değişir ya da sabit kalır.
+  - Göstergedeki rakam da bir bilgidir: dayanağı yoksa değiştirme. Havadaki oksijen stoku çok büyüktür; deniz oksijeni bitse bile bin yılda gözle görülür düşmez, `hava_o2` 100 kalır.
 - **`baslangic`:** Videonun başındaki hâl.
 - `_aciklama` alanlarını yazma.
 

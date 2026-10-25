@@ -34,11 +34,15 @@ Kullanılabilir roller: {{roller}}. Ana anlatıcı bu videoda **{{ana_rol}}**. �
 
 ## Kesin kurallar
 
-- Her satırda en az bir gerçek, doğrulanabilir bilgi olsun. Bilgiyi uydurma; emin olmadığın rakamı yazma. Her bilgi aşağıdaki "bilgiler" listesinde ayrıca yer alsın.
+- **Seri kalıbı önce gelir.** Kimlikte `seri_kalibi` varsa metnin iskeleti odur: duraklar sırayla, her durak ayrı satır ve durağın adıyla başlar ("Birinci yıl."). Her durakta `her_durakta` maddelerinin hepsi bulunur; tırmanış `tirmanis` kuralına uyar. Absürt öğe ve küfür bu iskeletin üstüne biner, durakların yerini almaz.
+- **İçerik karışımı.** Kimlikte `karisim` varsa cümlelerin yaklaşık dağılımı ona uyar: `bilgi` yüzdesi kadar cümle gerçek bilgi, `kufur` yüzdesi kadar cümlede küfürlü tepki, kalanı `absurt` şaka. Bir cümle hem bilgi hem küfür taşıyabilir. `karisim` yoksa her satırda en az bir gerçek bilgi olur.
+- **Gerçek bilgi az da olsa sağlam.** Bilgiyi uydurma; emin olmadığın rakamı yazma. Her gerçek bilgi aşağıdaki "bilgiler" listesinde tur: "bilgi" olarak yer alsın.
+- **Absürt örnekler bilginin saçma, somut sonucudur.** Bilgiyi gösterir ("Karadeniz'deki hamsi belediyeye dilekçe veriyor"), gerçek bilgi gibi sunulmaz; izleyici şaka olduğunu hemen anlar. İçinde gerçek bir rakam ya da iddia saklama. Her absürt cümle bilgiler listesinde tur: "saka" olarak yer alsın.
+- **Sonuna kadar tutma.** Absürtlük de zaman atlamalarıyla büyür. Bir absürt öğe (bir karakter, bir nesne, bir hayvan) başta kurulur, ortada geri döner, kapanışta en büyük hâliyle patlar. Kapanış bilgi listesi değil, ters köşe.
 - Öncülün mantıksal sonucu olan ama deneye dayanmayan cümleler ("toz oldu") bilgiler listesinde tur: "oncul" olarak işaretlensin.
 - 6-9 satır, toplam 900-1200 karakter (ses etiketleri dahil). Onaylı örnek 1.070 karakter ve 76 saniye; daha uzunu 80 saniyeyi geçer, kısalt. İlk satır kanca, son satır ters köşe kapanış. Kapanış çağrısını seslendirme (marka ekranı yazar).
 - Ses etiketleri ([excited], [shouting], [laughs], [pause], [calm], [dramatic pause]) satır başına en fazla 2.
-- Küfür kimlikteki kurala göre: ünlem olarak, olayın ortasında. Kişiye ya da gruba hakaret yok.
+- Küfür kimlikteki `kufur` kuralına göre, olaya verilen doğal tepki olarak. Kişiye, gruba, kimliğe hakaret yok.
 - Kesirli karakter (⅓) yazma, yazıyla yaz ("üçte biri"). Sayıları seslendirmeye uygun yaz.
 - Instagram açıklaması: soru + kısa merak cümlesi + "Sıradaki ... ne olsun? Yoruma yaz 👇" kalıbı + 3-5 etiket.
 
@@ -52,7 +56,7 @@ Yalnız şu JSON'u döndür:
   "oncul": "Öncül, tek cümle, neden sürdüğüyle",
   "satirlar": [{"rol": "{{ana_rol}}", "metin": "[excited] ..."}],
   "anons_rolleri": [],
-  "bilgiler": [{"cumle": "metindeki ifade", "iddia": "doğrulanacak gerçek bilgi, açık ve tek başına anlaşılır", "tur": "bilgi"}],
+  "bilgiler": [{"cumle": "metindeki ifade", "iddia": "doğrulanacak gerçek bilgi, açık ve tek başına anlaşılır", "tur": "bilgi | oncul | saka"}],
   "aciklama_instagram": "..."
 }
 ```

@@ -3,8 +3,29 @@
   "hesap": "@oxygbio",
   "konu": "Geniş 'ne olurdu' merak kanalı. ANA SERİ (25.10'dan itibaren): 'Oksijen X yerde biterse 1000 yıl sonra dünyaya ne olur?' — ör. denizde, ormanlarda, toprakta, atmosferin bir katmanında. Oksijen tek bir yerde biter, sonuçları zincirleme ve zaman atlamalı izlenir (1 gün, 1 yıl, 100 yıl, 1000 yıl). İlk video (uçak) farklı öncülle yapıldı: evrendeki bütün oksijen bir anda yok oluyordu.",
   "karakter": "Ekranda sabit karakter yok; yıldız konunun kendisi.",
-  "ton": "Komedi + bilgi: her şaka gerçek bir bilgiye dayanır. Zaman atlamaları tırmanışı taşır; her atlamada bir öncekinden büyük, gerçek bilime dayanan bir sonuç gelir.",
-  "kufur": "Açık ama ünlem olarak (hassiktir, amına koyayım, lan) ve olayın ORTASINDA tepki olarak; başa/sona eklenmez; kişiye/gruba hakaret yok.",
+  "ton": "Komedi ağırlıklı, bilgi omurga. Video gerçek bir bilgi zincirinin üstünde akar ama izleyiciyi sonuna kadar tutan şey absürt örnekler ve küfürlü tepkilerdir. Zaman atlamaları tırmanışı taşır; her atlamada hem bilgi hem saçmalık bir öncekinden büyür.",
+  "kufur": "Bol ve açık (hassiktir, amına koyayım, siktir, lan…): her 2-3 cümlede bir, olaya verilen doğal tepki olarak; kancada da olabilir. Kişiye, gruba, kimliğe hakaret yok; küfür olaya ve duruma.",
+  "karisim": {
+    "_aciklama": "Metnin cümle bazında yaklaşık dağılımı (yüzde). Metin yazarı bu orana göre yazar.",
+    "bilgi": 30,
+    "kufur": 25,
+    "absurt": 45,
+    "bilgi_notu": "Bilgi az ama sağlam: her gerçek bilgi doğrulanır, rakam uydurulmaz.",
+    "absurt_notu": "Absürt örnekler bilginin somut, saçma sonucu: komşunun balkonundaki balık, belediyenin açıklaması, son kalan midye. Gerçek bilgi gibi sunulmaz, izleyici şaka olduğunu anlar. Bir absürt öğe videoda geri döner (geri çağırma) ve kapanışta patlar."
+  },
+  "seri_kalibi": {
+    "_aciklama": "Ana serinin iskeleti. Metin bu duraklarla kurulur; her durak ayrı satırdır ve durağın adıyla başlar.",
+    "duraklar": [
+      "Kanca: öncül + absürt öğe tanıtılır",
+      "Birinci gün",
+      "Birinci yıl",
+      "Yüzüncü yıl",
+      "Bininci yıl",
+      "Kapanış: absürt öğenin son hâli, ters köşe"
+    ],
+    "her_durakta": "1) O anda dünyada GÖZLE görülen somut değişim (denizin rengi, koku, gökyüzü, kıyı, hayvanlar, insanlar). 2) Bu değişimin arkasındaki gerçek bilgi. 3) Küfürlü tepki. 4) Absürt öğenin o duraktaki hâli.",
+    "tirmanis": "Her durak bir öncekinden büyük ve farklı bir değişim getirir; aynı sonucu tekrar etme. Bininci yıl en büyük değişimdir: dünyanın görünüşü değişmiş olur (ör. deniz mor, gökyüzü sarı, kıyı zehirli gaz). Bir durakta yalnız geçmişten bilgi anlatıp değişimi atlama."
+  },
   "dogruluk": "Her bilgi yayından önce kaynaktan doğrulanır; metnin altında bilgi kontrol tablosu olur. Uydurma rakam yok.",
   "anlaticilar": [
     {

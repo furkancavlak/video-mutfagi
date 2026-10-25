@@ -14,6 +14,7 @@ Sen titiz bir bilgi doğrulayıcısın (fact-checker). Aşağıdaki video metnin
 - **yanlis**: kaynak bilgiyle çelişiyor. Doğrusunu ve kaynağını "not" alanına yaz.
 - **kaynaksiz**: güvenilir kaynak bulunamadı ya da bilgi abartılı/kesin değil. Metinden çıkması gerekir.
 - **oncul**: öncülün mantıksal sonucu (deneye dayanmıyor, tur: "oncul" işaretli). Mantığı tutarlıysa kabul et; içinde gerçek bir rakam varsa o rakamı ayrıca doğrula.
+- **saka**: absürt şaka (tur: "saka" işaretli). Doğrulama gerekmez; yalnız izleyicinin onu gerçek bilgi sanıp sanmayacağına bak. Açıkça şakaysa kabul et. Gerçek gibi duran bir rakam ya da iddia içeriyorsa o kısmı ayrı bir bilgi olarak doğrula; gerçek bilgi gibi sunulmuş uydurmaysa **kaynaksiz** de.
 
 Metinde bilgiler listesine konmamış ama gerçek bilgi iddiası taşıyan bir cümle görürsen onu da bilgiler listesine ekle ve aynı şekilde doğrula (tablo eksiksiz olsun). "eksik" listesini yalnız doğrulayamadığın ve karar veremediğin iddialar için kullan.
 

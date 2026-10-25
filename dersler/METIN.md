@@ -8,14 +8,15 @@ Yapay zekâ metni bu kurallara göre yazar, kullanıcı onaylar. Metin onaylanma
    > Lan, on bir bin metredesin, ikram arabası geliyor… ve evrendeki bütün oksijen bir anda yok oluyor.
    Marka açılış sesi bu satırın hemen ardından vurur.
 2. **Tırmanış, 4-6 satır.** Her satır bir öncekinden büyük bir sonuç getirir. Örnekte sıra şöyle: cam, insan, uçak, kaptan, yer.
-3. **Her satırda bir gerçek bilgi.** Şaka bilginin kendisinden çıkar ("Uçak camı aslında cam değil, akrilik; üçte biri oksijen").
+3. **Bilgi, küfür ve absürt şaka karışımı kimlikte yazar** (`kimlik.json` → `karisim`). Örnek kanal %30 bilgi, %25 küfür, %45 absürt örnekle yazar. Karışım yoksa her satırda bir gerçek bilgi olur. Şaka bilginin kendisinden çıkar ("Uçak camı aslında cam değil, akrilik; üçte biri oksijen").
 4. **Ters köşe kapanış, son satır.** Beklenmedik ama doğru bir son: "Enkazdan sağlam çıkan tek şey ne? İkram arabası. O da alüminyum."
 5. **Kapanış çağrısı.** Bunu marka ekranı yazıyla söyler ("SIRADAKİ YER NE OLSUN? YORUMA YAZ"), ayrıca seslendirilmez.
 
 ## Kurallar
 
 - **Öncül sürer.** "Gidiyor ve geri gelmiyor." Kurtuluş yolu (maske, tüp, planör) kapatılır, yoksa hikâye 5 saniyede biter.
-- **Komedi ve bilgi birlikte.** Yalnız şaka boş kalır, yalnız bilgi sıkar. Her şakanın arkasında bir bilgi olur.
+- **Komedi ve bilgi birlikte.** Yalnız şaka boş kalır, yalnız bilgi sıkar. Absürt örnek bilginin saçma, somut sonucudur; gerçek bilgi gibi sunulmaz, tabloda "şaka" diye işaretlenir.
+- **Sonuna kadar tutma.** Bir absürt öğe başta kurulur, ortada geri döner, kapanışta en büyük hâliyle patlar.
 - **Küfür ünlem olarak, olayın ortasında.** Başa ve sona yapıştırılmaz. Kişiye ya da gruba yönelik hakaret olmaz. Ne kadar küfür kullanılacağı `kimlik.json` → `kufur` alanında yazar.
 - **İkinci bir ses varsa bir role ver.** Örnekte kaptan anonsu var. Rol `video.json` → `anons_rolleri` alanına yazılırsa hoparlör sesi ve "bing-bong" otomatik eklenir.
 - **Bir fikir bir kez anlatılır.** Aynı şeyi iki örnekle tekrar etme.

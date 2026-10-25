@@ -5,6 +5,18 @@
   "karakter": "Ekranda sabit karakter var mı? Yoksa 'yok' yaz.",
   "ton": "Komedi / ciddi / karışık; şakalar neye dayanıyor?",
   "kufur": "Yok / hafif / açık; nerede kullanılır?",
+  "karisim": {
+    "_aciklama": "İsteğe bağlı. Metnin cümle bazında yaklaşık dağılımı (yüzde): bilgi / küfür / absürt şaka. Boş bırakılırsa her satırda bir bilgi kuralı geçerli.",
+    "bilgi": 60,
+    "kufur": 0,
+    "absurt": 40
+  },
+  "seri_kalibi": {
+    "_aciklama": "İsteğe bağlı. Seri videoların iskeleti: sırayla duraklar ve her durakta ne olacağı. Boş bırakılırsa genel yapı (kanca, tırmanış, kapanış) kullanılır.",
+    "duraklar": [],
+    "her_durakta": "",
+    "tirmanis": ""
+  },
   "dogruluk": "Her bilgi yayından önce kaynaktan doğrulanır; metnin altında bilgi kontrol tablosu olur.",
   "anlaticilar": [
     {

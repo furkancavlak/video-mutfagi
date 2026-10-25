@@ -122,7 +122,7 @@ function metinMd(m, dogrulama) {
     if (i === 0) s.push('**[MARKA SESİ]**', '');
   });
   s.push('---', '', '## Bilgi kontrolü', '', '| Cümle | Doğru mu | Kaynak / hesap |', '|---|---|---|');
-  const isaret = { dogru: '✔', oncul: 'öncülün sonucu', yanlis: '✘', kaynaksiz: '? kaynak yok' };
+  const isaret = { dogru: '✔', oncul: 'öncülün sonucu', saka: 'şaka (absürt)', yanlis: '✘', kaynaksiz: '? kaynak yok' };
   for (const b of dogrulama.bilgiler) s.push(`| ${String(b.cumle).replace(/\|/g, '/')} | ${isaret[b.durum] || b.durum} | ${[b.kaynak, b.not].filter(Boolean).join(' · ').replace(/\|/g, '/')} |`);
   return s.join('\n') + '\n';
 }
@@ -190,7 +190,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
         d = await sor(LLM.istem('dogrula', { satirlar: m.satirlar, bilgiler: m.bilgiler || [] }), { is: 'dogrula', araclar: ['WebSearch', 'WebFetch'] });
         sorunlar = dogrulamaSorunlari(d);
         const say = s => (d.bilgiler || []).filter(b => b.durum === s).length;
-        yaz(`  doğru ${say('dogru')} · öncül ${say('oncul')} · yanlış ${say('yanlis')} · kaynaksız ${say('kaynaksiz')} · listede olmayan ${(d.eksik || []).length}`);
+        yaz(`  doğru ${say('dogru')} · öncül ${say('oncul')} · şaka ${say('saka')} · yanlış ${say('yanlis')} · kaynaksız ${say('kaynaksiz')} · listede olmayan ${(d.eksik || []).length}`);
         if (!sorunlar.length) break;
       }
       fs.writeFileSync(path.join(dir, 'metin.md'), metinMd(m, d));
