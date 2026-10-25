@@ -1,0 +1,74 @@
+{
+  "zaman_cetveli": [
+    "BUGÜN",
+    "1 GÜN",
+    "1 YIL",
+    "100 YIL",
+    "1000 YIL"
+  ],
+  "baslangic": {
+    "deniz_o2": 100,
+    "hava_o2": 100
+  },
+  "adimlar": [
+    {
+      "an": "kelime:yavaş@0",
+      "odak": "genel",
+      "durum": {
+        "deniz_o2": 70
+      }
+    },
+    {
+      "an": "kelime:gün@1",
+      "yil": "1 GÜN",
+      "buyuk": "1 GÜN SONRA",
+      "odak": "yuzey",
+      "tabela": "BALIKLAR YÜZEYDE",
+      "durum": {
+        "deniz_o2": 35,
+        "balik": 0.4,
+        "plankton": 0.7
+      }
+    },
+    {
+      "an": "kelime:solungaç@1",
+      "odak": "deniz",
+      "durum": {
+        "deniz_o2": 18,
+        "balik": 0.2
+      }
+    },
+    {
+      "an": "kelime:yıl@2",
+      "yil": "1 YIL",
+      "buyuk": "1 YIL SONRA",
+      "odak": "dip",
+      "tabela": "ÖLÜ BÖLGE",
+      "durum": {
+        "deniz_o2": 4,
+        "balik": 0,
+        "mercan": 0.2,
+        "plankton": 0.2,
+        "gaz": 0.6,
+        "deniz_renk": "yesil"
+      }
+    },
+    {
+      "an": "kelime:kokuyor@2",
+      "odak": "kiyi",
+      "durum": {
+        "gok_renk": "sari",
+        "kus": 0.4,
+        "gaz": 0.8
+      }
+    },
+    {
+      "an": "kelime:karadeniz@3",
+      "odak": "dip",
+      "tabela": "200 m ALTI: O₂ YOK",
+      "durum": {
+        "deniz_renk": "mor"
+      }
+    }
+  ]
+}

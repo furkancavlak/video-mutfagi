@@ -179,7 +179,7 @@
       "kaynak_metrik": {}
     },
     "gunluk_en_fazla_video": 1,
-    "katman": "ucretli",
+    "katman": "sablon",
     "butce": {
       "video_basi_kredi": 50,
       "gunluk_kredi": 0,
@@ -188,6 +188,8 @@
       "aylik_karakter": 0
     },
     "_butce_not": "0 = harcama izni yok. Otomasyon (uret/tam) ancak buraya sıfırdan büyük sınır yazılınca para harcar.",
-    "denetim_esik": 7
+    "denetim_esik": 7,
+    "sablon": "simulasyon",
+    "_katman": "ucretli: Higgsfield görsel+klip (kredi harcar) | sablon: hazır kodla animasyon şablonu, kredisiz (uretim/sablonlar/) | ucretsiz: sahneler.js elle yazılır"
   }
 }

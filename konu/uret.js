@@ -55,6 +55,30 @@ function ifadeCoz(e, Z) {
   return null;
 }
 // A word cue Whisper did not hear (split/joined words) falls back to the start of its line. Returns the notes.
+// template data (simulasyon.json): unknown word cues fall back to the line, steps are kept in time order
+function simIpucuOnar(S, Z) {
+  const notlar = [];
+  for (const a of S.adimlar || []) {
+    if (a.an == null || ifadeCoz(a.an, Z) != null) continue;
+    const m = String(a.an).match(IFADE), satir = m && m[3] != null ? +m[3] : 0;
+    notlar.push(`"${a.an}" bulunamadı → "satir:${satir}+0.5"`);
+    a.an = `satir:${satir}+0.5`;
+  }
+  S.adimlar = (S.adimlar || []).filter(a => ifadeCoz(a.an, Z) != null).sort((x, y) => ifadeCoz(x.an, Z) - ifadeCoz(y.an, Z));
+  return notlar;
+}
+function simKontrol(S) {
+  const s = [];
+  if (!Array.isArray(S.adimlar) || S.adimlar.length < 3) s.push('en az 3 adım gerekli');
+  const cetvel = S.zaman_cetveli || [];
+  for (const [i, a] of (S.adimlar || []).entries()) {
+    if (!a.an) s.push(`adım ${i}: an yok`);
+    if (a.yil && cetvel.length && !cetvel.includes(a.yil)) s.push(`adım ${i}: yil "${a.yil}" cetvelde yok`);
+    if (a.odak && !['genel', 'gok', 'kiyi', 'yuzey', 'deniz', 'dip'].includes(a.odak)) s.push(`adım ${i}: odak "${a.odak}" geçersiz`);
+  }
+  return s;
+}
+
 function ipuclariniOnar(U, Z) {
   const notlar = [];
   const onar = (o, alan) => {
@@ -200,6 +224,21 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       isaretle('ucretli_tarif', { gorsel: U.gorseller.length, klip: (U.klipler || []).length });
     }
 
+    // 4b. free template recipe (the template draws; the model only fills in the data)
+    const sablonAd = oto.sablon || 'simulasyon', simF = path.join(dir, 'simulasyon.json');
+    if (katman === 'sablon' && !bitti('sablon_tarif')) {
+      yaz(`Şablon verisi (${sablonAd}) yazılıyor…`);
+      // the template's header comment is its manual
+      const belge = fs.readFileSync(path.join(O.KOK, 'uretim', 'sablonlar', sablonAd + '.js'), 'utf8').split('\n').filter(l => l.startsWith('//')).map(l => l.replace(/^\/\/ ?/, '')).join('\n');
+      const ornekF = path.join(O.KOK, 'uretim', 'sablonlar', sablonAd + '-ornek.json');
+      const S = await sor(LLM.istem('simulasyon-yaz', { sablon_belgesi: belge, ornek: fs.existsSync(ornekF) ? fs.readFileSync(ornekF, 'utf8') : '{}', satirlar: video.satirlar.map((x, i) => `${i}: ${x.metin}`).join('\n') }), { is: 'simulasyon-yaz' });
+      const sk = simKontrol(S);
+      if (sk.length) throw new Dur('insan', 'Yapay zekânın yazdığı simulasyon.json tutarsız: ' + sk.join('; '));
+      O.yazJson(simF, S);
+      O.yazJson(videoF, { ...O.okuJson(videoF), sablon: sablonAd });
+      isaretle('sablon_tarif', { adim: S.adimlar.length });
+    }
+
     // 5. 💳 voice
     const sesDir = path.join(dir, 'ses');
     if (!bitti('ses')) {
@@ -229,19 +268,25 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     if (!bitti('kelime')) { yaz('\nKelime zamanları (Whisper)…'); if (!kos(python(), [path.join(O.KOK, 'uretim', 'kelime.py'), dir]).ok) throw new Dur('insan', 'kelime.py başarısız (çıktı yukarıda).'); isaretle('kelime'); }
     if (!bitti('mix')) { yaz('\nSes karışımı…'); if (!node('uretim/mix.js', [dir]).ok) throw new Dur('insan', 'mix.js başarısız (çıktı yukarıda).'); isaretle('mix'); }
 
-    if (katman !== 'ucretli') throw new Dur('insan', 'Ücretsiz katman seçili: sahneler.js (kodla animasyon) otomatik yazılmıyor, çünkü kare kare bakıp düzeltmeden güvenilir çıkmıyor. Ajan ya da insan sahneler.js yazmalı (uretim/TARIF.md 5a). Ses hazır.');
+    if (katman !== 'ucretli' && katman !== 'sablon') throw new Dur('insan', 'Ücretsiz katman seçili: sahneler.js (kodla animasyon) otomatik yazılmıyor, çünkü kare kare bakıp düzeltmeden güvenilir çıkmıyor. Ajan ya da insan sahneler.js yazmalı (uretim/TARIF.md 5a). Ses hazır.');
 
     // 8. repair word cues against what Whisper actually heard
     const Z = O.okuJson(path.join(sesDir, 'zaman.json'));
-    const U = O.okuJson(ucretliF);
-    if (!bitti('ipucu')) {
+    if (katman === 'sablon' && !bitti('ipucu')) {
+      const S = O.okuJson(simF), notlar = simIpucuOnar(S, Z);
+      O.yazJson(simF, S);
+      if (notlar.length) yaz('Zaman ipuçları onarıldı: ' + notlar.join('; '));
+      isaretle('ipucu', { onarilan: notlar.length });
+    }
+    const U = katman === 'ucretli' ? O.okuJson(ucretliF) : null;
+    if (katman === 'ucretli' && !bitti('ipucu')) {
       const notlar = ipuclariniOnar(U, Z);
       if (notlar.length) { O.yazJson(ucretliF, U); yaz('Zaman ipuçları onarıldı: ' + notlar.join('; ')); }
       isaretle('ipucu', { onarilan: notlar.length });
     }
 
     // 9-11. 💳 stills → review → 💳 clips
-    for (const adim of ['gorsel', 'klip']) {
+    for (const adim of katman === 'ucretli' ? ['gorsel', 'klip'] : []) {
       if (bitti(adim)) continue;
       const fiyat = node('uretim/ucretli.js', [dir, adim], { yakala: true });
       yaz(`\n💳 ${adim === 'gorsel' ? 'RESİMLER' : 'KLİPLER'}:\n` + fiyat.cikti.split('\n').map(l => '   ' + l).join('\n'));
@@ -270,8 +315,13 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     }
 
     // 12. render
-    const mp4 = path.join(dir, 'cikti', `${ad}-ucretli.mp4`);
-    if (!bitti('render') || !fs.existsSync(mp4)) { yaz('\nRender…'); if (!node('uretim/ucretli.js', [dir, 'kurgu', '--render']).ok) throw new Dur('insan', 'Render başarısız (çıktı yukarıda).'); isaretle('render'); }
+    const mp4 = path.join(dir, 'cikti', `${ad}-${katman === 'ucretli' ? 'ucretli' : 'ucretsiz'}.mp4`);
+    if (!bitti('render') || !fs.existsSync(mp4)) {
+      yaz('\nRender…');
+      const r = katman === 'ucretli' ? node('uretim/ucretli.js', [dir, 'kurgu', '--render']) : node('uretim/kurgu.js', [dir, '--render']);
+      if (!r.ok) throw new Dur('insan', 'Render başarısız (çıktı yukarıda).');
+      isaretle('render');
+    }
 
     // 13. frame review (denetim/kare-denetci.md rules)
     if (!bitti('denetim')) {

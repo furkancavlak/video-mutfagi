@@ -126,6 +126,7 @@
       "aylik_karakter": 0
     },
     "_butce_not": "0 = harcama izni yok. Otomasyon (uret/tam) ancak buraya sıfırdan büyük sınır yazılınca para harcar.",
-    "denetim_esik": 7
+    "denetim_esik": 7,
+    "_katman": "ucretli: Higgsfield görsel+klip (kredi harcar) | sablon: hazır kodla animasyon şablonu, kredisiz (uretim/sablonlar/) | ucretsiz: sahneler.js elle yazılır"
   }
 }
