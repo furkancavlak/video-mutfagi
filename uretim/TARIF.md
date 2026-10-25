@@ -90,9 +90,13 @@ node uretim/ucretli.js videolar/<video> kurgu --render
 
 ## 8. Paylaş
 
+Kuyruğa koy, zamanlayıcı saati gelince paylaşır (`kuyruk/BENIOKU.md`):
+
 ```
-node instagram/paylas.js gonder videolar/<video>/cikti/<ad>-ucretsiz.mp4 --aciklama "..."
+node kuyruk/kuyruk.js ekle videolar/<video>/cikti/<ad>-ucretsiz.mp4 --aciklama "..."
 ```
+
+Hemen paylaşmak için: `node instagram/paylas.js gonder <mp4> --aciklama "..."`.
 
 - **Açıklama:** `video.json` → `aciklama_instagram` alanında hazır durur.
 - **İlk kez paylaşıyorsan:** Önce `instagram/REHBER.md`.

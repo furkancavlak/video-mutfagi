@@ -110,6 +110,8 @@ node uretim/kurgu.js videolar/oxygbio-v01-ucak --render
 
 `instagram/REHBER.md` dosyasını adım adım izle. Meta tarafında ince bir tuzak var, rehberde yazıyor.
 
+Ardından paylaşım kuyruğu ve zamanlayıcı: `kuyruk/BENIOKU.md` → Kurulum. Zamanlayıcıyı kurmadan önce kullanıcıya ne yapacağını söyle ve onay al. Ev bilgisayarıysa kullanıcıya şunu açıkça söyle: "Paylaşım saatinde bilgisayarın açık olmalı. Otomasyonun çalıştığını `durum` komutuyla kontrol etmemiz gerekir."
+
 ### İkinci beyin
 
 İsteğe bağlı bir modül. Henüz hazırlanıyor.

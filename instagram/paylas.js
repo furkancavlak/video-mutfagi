@@ -96,9 +96,9 @@ async function waitReachable(url) {
 
 // adres: the video already sits at a public https address (e.g. on a server) -> no local server, no tunnel
 async function gonder(file, aciklama, kuru, hazirla, adres) {
-  if (!adres && !fs.existsSync(file)) fail('video yok: ' + file);
+  if (!adres && !fs.existsSync(file)) throw new Error('video yok: ' + file);
   const ayar = readAyar();
-  if (!kuru && !ayar) fail('önce token kaydet: node instagram/paylas.js kaydet <dosya>');
+  if (!kuru && !ayar) throw new Error('önce token kaydet: node instagram/paylas.js kaydet <dosya>');
   const s = adres ? { hits: [], srv: { close() {} } } : await serve(file);
   let tn;
   try {
@@ -113,7 +113,7 @@ async function gonder(file, aciklama, kuru, hazirla, adres) {
     if (kuru) {
       const r = await fetch(videoUrl, { headers: { Range: 'bytes=0-1023' } });
       console.log(`KURU KOŞU: dışarıdan erişim ${r.status}, ${(await r.arrayBuffer()).byteLength} bayt. Instagram'a bir şey gönderilmedi.`);
-      return;
+      return { kuru: true };
     }
     console.log('2/5 Instagram\'a bildiriliyor…');
     const c = await graph('POST', `/${ayar.user_id}/media`, { media_type: 'REELS', video_url: videoUrl, caption: aciklama || '', share_to_feed: 'true', access_token: ayar.token });
@@ -126,18 +126,35 @@ async function gonder(file, aciklama, kuru, hazirla, adres) {
       if (st.status_code === 'ERROR' || st.status_code === 'EXPIRED') throw new Error('Instagram videoyu kabul etmedi: ' + (st.status || st.status_code) + ` | videoya gelen istekler (${s.hits.length}): ` + (s.hits.slice(0, 8).join(', ') || 'HİÇ — Instagram adrese ulaşamadı'));
     }
     if (st.status_code !== 'FINISHED') throw new Error('Instagram 7,5 dk içinde işlemeyi bitirmedi');
-    if (hazirla) { console.log(`HAZIRLANDI, PAYLAŞILMADI: Instagram videoyu kabul etti (konteyner ${c.id}). Yayınlanmadı; 24 saat içinde kendiliğinden silinir.`); return; }
+    if (hazirla) { console.log(`HAZIRLANDI, PAYLAŞILMADI: Instagram videoyu kabul etti (konteyner ${c.id}). Yayınlanmadı; 24 saat içinde kendiliğinden silinir.`); return { hazirlandi: c.id }; }
     console.log('4/5 Paylaşılıyor…');
-    const pub = await graph('POST', `/${ayar.user_id}/media_publish`, { creation_id: c.id, access_token: ayar.token });
-    const info = await graph('GET', `/${pub.id}`, { fields: 'permalink,timestamp', access_token: ayar.token });
+    let pub;
+    // if this call fails we cannot know whether Instagram published anyway: callers must NOT retry such an error
+    try { pub = await graph('POST', `/${ayar.user_id}/media_publish`, { creation_id: c.id, access_token: ayar.token }); }
+    catch (e) { e.yayinBelirsiz = true; e.message += ' — yayınlanmış olabilir, tekrar göndermeden önce hesaba bak'; throw e; }
+    const info = await graph('GET', `/${pub.id}`, { fields: 'permalink,timestamp', access_token: ayar.token }).catch(() => ({ permalink: '(link alınamadı, media ' + pub.id + ')' }));
     fs.mkdirSync(path.dirname(KAYIT), { recursive: true });
     fs.appendFileSync(KAYIT, JSON.stringify({ zaman: new Date().toISOString(), dosya: path.basename(file), media_id: pub.id, link: info.permalink, aciklama }) + '\n');
     console.log('5/5 YAYINDA: ' + info.permalink);
+    return { media_id: pub.id, link: info.permalink, zaman: info.timestamp };
   } finally {
     if (tn) tn.proc.kill();
     s.srv.close();
   }
 }
+
+// Reel results. Instagram fills these in over the first days; reading them is free and changes nothing.
+async function sonuc(mediaId) {
+  const ayar = readAyar(); if (!ayar) throw new Error('kayıtlı token yok');
+  const metrik = 'views,reach,likes,comments,shares,saved,total_interactions';
+  const j = await graph('GET', `/${mediaId}/insights`, { metric: metrik, access_token: ayar.token });
+  const out = {};
+  for (const m of j.data || []) out[m.name] = (m.values && m.values[0] ? m.values[0].value : m.total_value && m.total_value.value) ?? null;
+  return out;
+}
+
+module.exports = { gonder, sonuc, graph, readAyar, me };
+if (require.main !== module) return;
 
 (async () => {
   const [cmd, a1, ...rest] = process.argv.slice(2);

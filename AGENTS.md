@@ -4,6 +4,7 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 
 ## İlk iş
 
+0. Kuyruk kuruluysa önce `node kuyruk/kuyruk.js durum` çalıştır, uyarı varsa kullanıcıya ilk iş olarak söyle (ev bilgisayarında otomasyon sessizce durabilir).
 1. `node kurulum/doktor.js` çalıştır. Komut çalışmıyorsa ya da ✗ varsa `kurulum/KURULUM.md`'yi baştan sona uygula.
 2. Kurulum bittiyse örnek videoyu üret (KURULUM adım 5) ve kullanıcıya izlet. Kurulumun çalıştığının kanıtı budur.
 3. Kanal kimliği yoksa `kanal/KIMLIK-REHBERI.md`'ye geç. Kimlik varsa video üretimi için `uretim/TARIF.md`'ye geç.
@@ -31,6 +32,7 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 | `marka/` | `marka-sesi.js`: açılış sesini kodla üretir, hazır sesleriyle |
 | `denetim/` | `DENETIM.md`, `kareler.sh`, `kare-denetci.md` (denetçi ajanın kuralları) |
 | `instagram/` | `REHBER.md` (Meta kurulumu), `paylas.js` |
+| `kuyruk/` | `BENIOKU.md`, `kuyruk.js`: videolar sıraya girer, zamanlayıcı saati gelince paylaşır, sonuçları çeker |
 | `dersler/` | `HATALAR.md`, `KURGU-DILI.md`, `METIN.md` |
 | `konu/` | Konu radarı: forum ve trend sitelerinden kanala uygun video fikri bulur, isterse otomatik üretir. `BENIOKU.md`, `radar.js` |
 

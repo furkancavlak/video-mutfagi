@@ -15,3 +15,10 @@ __pycache__/
 kanal/*/fikirler.json
 kanal/*/fikirler.md
 kanal/*/fikirler.html
+# posting queue: jobs and run state are per machine
+kuyruk/bekleyen/
+kuyruk/paylasilan/
+kuyruk/hatali/
+kuyruk/iptal/
+kuyruk/durum.json
+kuyruk/.kilit
