@@ -16,7 +16,7 @@ node kurulum/doktor.js
 
 | Araç | Windows (PowerShell) | Mac |
 |---|---|---|
-| Node.js 18+ | `winget install OpenJS.NodeJS.LTS` | `brew install node` |
+| Node.js 22+ (HyperFrames ister) | `winget install OpenJS.NodeJS.LTS` | `brew install node` |
 | ffmpeg | `winget install Gyan.FFmpeg` | `brew install ffmpeg` |
 | Python 3.12 | `winget install Python.Python.3.12` | `brew install python@3.12` |
 | Git | `winget install Git.Git` | Xcode komut satırı araçları ile gelir |
@@ -117,6 +117,15 @@ Ardından paylaşım kuyruğu ve zamanlayıcı: `kuyruk/BENIOKU.md` → Kurulum.
 İsteğe bağlı bir modül. Henüz hazırlanıyor.
 
 ---
+
+## Sunucuya kurmak (Linux, 7/24)
+
+- **Ayrı kullanıcı:** Repo için ayrı bir kullanıcı aç (ör. `useradd -m vmutfak`). Sunucudaki başka uygulamalara dokunma.
+- **Node:** Sunucunun Node'u 22'den eskiyse sistem Node'unu **güncelleme**, başka uygulamalar onu kullanıyor olabilir. nodejs.org'dan Node 22 arşivini indir (SHASUMS256 ile doğrula), yalnız bu kullanıcının `~/.local/node` klasörüne aç ve PATH'e ekle.
+- **Özel repo:** Repo özelse sunucuya GitHub şifresi koyma. Bilgisayarda `git bundle create vm.bundle main` ile paketle, sunucuya kopyala, `git clone vm.bundle` ile aç.
+- **Düşük öncelik:** Sunucuda başka işler de çalışıyorsa ağır işleri (render, Whisper) `nice -n 19` ile çalıştır.
+- **Yapay zekâ:** Konu radarı ve otomatik üretim için sunucuda Claude girişi gerekir. Bilgisayarında `claude setup-token` çalıştır. Çıkan uzun kodu sunucuda bu kullanıcının ortamına `CLAUDE_CODE_OAUTH_TOKEN` olarak koy (`~/.video-mutfagi/claude.env`). Sohbete yapıştırma.
+- **Paylaşım:** `kuyruk/BENIOKU.md` → "Sunucuya kurmak" (klasor yolu, tünel gerekmez).
 
 ## Kurulum bitince ajan kullanıcıya şunu söyler
 

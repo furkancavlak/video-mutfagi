@@ -12,6 +12,8 @@ Her madde aynı biçimde yazılmıştır: **ne oldu**, ardından **→ ne yap**.
   → Repo kendi Python ortamını kurar (`.venv`). Whisper her zaman `.venv` içinden çalıştırılır (bkz. `kurulum/KURULUM.md`).
 - **Klasör adında boşluk ve Türkçe harf vardı** (`CLAUDE PROJELER`, `VİDEO`). Bazı araçlar yolu ikiye böldü.
   → Repodaki betikler araçları kabuk (shell) olmadan çağırır, bu sorun çözüldü. Kendi yazdığın yeni betikte de yolu her zaman tırnak içine al.
+- **Sunucuda HyperFrames "Node.js >= 22 gerekli" dedi.** Repoda "Node 18 yeter" yazıyordu. Bizim bilgisayarda Node 24 olduğu için fark edilmemişti.
+  → Gereken sürüm Node 22. Doktor bunu kontrol eder. Sunucuda sistem Node'u güncellenmez, Node 22 yalnız repo kullanıcısına kurulur.
 - **Temiz kurulum testinde render çöktü** (`ENOENT: mkdtemp`). Repo derin bir klasördeydi. Render'ın geçici klasörü Windows'un 260 karakterlik yol sınırını aştı.
   → Render ara dosyasını artık kısa bir geçici yola yazıyor. Yine de repoyu kısa bir yola klonla. Doktor uzun yolu uyarır.
 - **Windows'taki bir ffmpeg sürümünde `drawtext` filtresi çöktü.**

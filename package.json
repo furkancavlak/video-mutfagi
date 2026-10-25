@@ -4,7 +4,7 @@
   "private": true,
   "description": "Yapay zekâyla sıfırdan dikey video üretim mutfağı: metin, ses, kelimeye kilitli kurgu, denetim, Instagram paylaşımı.",
   "license": "MIT",
-  "engines": { "node": ">=18" },
+  "engines": { "node": ">=22" },
   "dependencies": {
     "gsap": "^3.13.0",
     "hyperframes": "0.8.140"
