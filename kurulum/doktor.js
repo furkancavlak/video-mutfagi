@@ -16,7 +16,7 @@ const satir = (ok, ad, bilgi, cozum, zorunlu = true) => {
 
 console.log('\nZORUNLU\n');
 const nodeMaj = +process.versions.node.split('.')[0];
-satir(nodeMaj >= 22, 'Node.js', 'v' + process.versions.node, 'Node 22 ya da üstü gerekli (HyperFrames ister): https://nodejs.org (LTS). Sunucuda sistem Node'una dokunma; yalnız bu kullanıcıya kur (kurulum/KURULUM.md → Sunucu).');
+satir(nodeMaj >= 22, 'Node.js', 'v' + process.versions.node, "Node 22 ya da üstü gerekli (HyperFrames ister): https://nodejs.org (LTS). Sunucuda sistem Node'una dokunma; yalnız bu kullanıcıya kur (kurulum/KURULUM.md → Sunucu).");
 
 const ff = run('ffmpeg', ['-version']), fp = run('ffprobe', ['-version']);
 satir(ff.ok && fp.ok, 'ffmpeg + ffprobe', ff.ok ? ff.out.split('\n')[0].slice(0, 60) : '',
