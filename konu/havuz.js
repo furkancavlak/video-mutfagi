@@ -61,7 +61,7 @@ function md(ctx, h) {
     'Bir fikri seçmek: `node konu/radar.js sec ' + ctx.kanal + ' <id>` · üretmek: `node konu/radar.js uret ' + ctx.kanal + ' <id>` · reddetmek: `node konu/radar.js reddet ' + ctx.kanal + ' <id>`', ''];
   for (const f of sirala(h.fikirler).filter(f => f.durum !== 'reddedildi')) {
     const d = f.puan_detay || {};
-    s.push(`## ${f.puan.toFixed(1)} · ${f.baslik}`, '', `\`${f.id}\` · durum: **${f.durum}**${f.video ? ` · video: \`${f.video}\`` : ''}`, '',
+    s.push(`## ${(f.puan ?? 0).toFixed(1)} · ${f.baslik}`, '', `\`${f.id}\` · durum: **${f.durum}**${f.video ? ` · video: \`${f.video}\`` : ''}`, '',
       `Puan: uyum ${d.uyum} · merak ${d.merak} · doğrulanabilirlik ${d.dogrulanabilirlik} · tazelik ${d.tazelik} · ilgi ${d.etkilesim}`, '',
       `**Öncül:** ${f.oncul}`, '', `**Kanca:** ${f.kanca}`, '', '**Tırmanış:**');
     (f.tirmanis || []).forEach((t, i) => s.push(`${i + 1}. ${t.olay} _(doğrulanacak: ${t.dogrulanacak_bilgi})_`));
@@ -83,7 +83,7 @@ function html(ctx, h) {
   const R = ctx.kimlik.renkler || {}, kart = [];
   for (const f of sirala(h.fikirler).filter(f => f.durum !== 'reddedildi')) {
     const d = f.puan_detay || {};
-    kart.push(`<article class="k ${f.durum}"><header><b class="p">${f.puan.toFixed(1)}</b><h2>${kac(f.baslik)}</h2></header>
+    kart.push(`<article class="k ${f.durum}"><header><b class="p">${(f.puan ?? 0).toFixed(1)}</b><h2>${kac(f.baslik)}</h2></header>
 <p class="m"><code>${f.id}</code> · <span class="d">${f.durum}</span> · uyum ${d.uyum} · merak ${d.merak} · doğrulanabilirlik ${d.dogrulanabilirlik} · tazelik ${d.tazelik} · ilgi ${d.etkilesim}</p>
 <p><b>Öncül:</b> ${kac(f.oncul)}</p><p><b>Kanca:</b> ${kac(f.kanca)}</p><ol>${(f.tirmanis || []).map(t => `<li>${kac(t.olay)} <i>doğrulanacak: ${kac(t.dogrulanacak_bilgi)}</i></li>`).join('')}</ol>
 <p><b>Kapanış:</b> ${kac(f.kapanis)}</p><p><b>Neden uyar:</b> ${kac(f.neden_uyar)}</p>

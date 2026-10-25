@@ -109,7 +109,7 @@ function dogrulamaSorunlari(d) {
 }
 
 // ---- the run
-async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, yaz = console.log, calistir } = {}) {
+async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir } = {}) {
   const h = H.havuzOku(ctx);
   const fikir = H.fikirBul(h, fikirId);
   if (fikir.durum === 'reddedildi') O.hata('Bu fikir reddedilmiş. Önce seç: node konu/radar.js sec ' + ctx.kanal + ' ' + fikir.id);
@@ -294,7 +294,8 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     }
 
     // 14. hand-off to the posting queue (kuyruk/ is built separately; we only drop the job file)
-    const is = kuyrugaYaz({ video: rel(dir), mp4: rel(mp4), aciklama: video.aciklama_instagram || video.baslik, onayGerekli });
+    // yayinDk: the job is timed N minutes after the video is finished (otherwise the queue picks the next free slot)
+    const is = kuyrugaYaz({ video: rel(dir), mp4: rel(mp4), aciklama: video.aciklama_instagram || video.baslik, onayGerekli, neZaman: typeof neZaman === 'number' ? new Date(Date.now() + neZaman * 60e3).toISOString() : neZaman });
     isaretle('kuyruk', { is: rel(is) });
     kaydet('uretildi', `video hazır, kuyrukta: ${rel(is)}${onayGerekli ? ' (paylaşım için onay bekliyor)' : ' (onaysız, tam otomatik)'}`);
     yaz(`\nHAZIR: ${rel(mp4)}\nKuyruk işi: ${rel(is)}${onayGerekli ? '\nPaylaşılmadan önce videoyu izle ve onayla.' : ''}`);

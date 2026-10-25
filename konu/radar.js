@@ -6,7 +6,10 @@
 //   node konu/radar.js puanla   <kanal>                 score new topics, write ideas (language model)
 //   node konu/radar.js fikirler <kanal> [--hepsi]       list the idea pool (+ kanal/<kanal>/fikirler.md/.html)
 //   node konu/radar.js sec      <kanal> <fikir-id>      mark an idea as chosen   (reddet: rejected)
-//   node konu/radar.js uret     <kanal> <fikir-id> [--onay]   produce a video; without --onay it stops at the first paid step
+//   node konu/radar.js ekle     <kanal> --baslik "..." [--oncul "..."]   put your own idea in the pool (already chosen)
+//   node konu/radar.js uret     <kanal> <fikir-id> [--onay] [--yayin-dk N] [--onaysiz-paylas]
+//                               produce a video; without --onay it stops at the first paid step.
+//                               --yayin-dk N: queue it N minutes after it is finished · --onaysiz-paylas: no extra posting approval
 //   node konu/radar.js calistir <kanal> [--tam-otomatik]      one scheduled round, following konu.json → otomasyon
 //   node konu/radar.js durum    <kanal>                 policy, budget use, pool counts
 //
@@ -25,7 +28,10 @@ function yardim() {
   node konu/radar.js puanla   <kanal>              yeni konuları puanla, fikir yaz (yapay zekâ)
   node konu/radar.js fikirler <kanal> [--hepsi]    fikir havuzunu göster
   node konu/radar.js sec      <kanal> <fikir-id>   fikri seç      (reddet: reddet)
-  node konu/radar.js uret     <kanal> <fikir-id> [--onay]
+  node konu/radar.js ekle     <kanal> --baslik "..." [--oncul "..."]   kendi fikrini havuza koy
+  node konu/radar.js uret     <kanal> <fikir-id> [--onay] [--yayin-dk 10] [--onaysiz-paylas]
+                              --yayin-dk N: video bitince N dk sonrasına kuyruğa koy
+                              --onaysiz-paylas: paylaşım için ayrıca onay bekleme
   node konu/radar.js calistir <kanal> [--tam-otomatik]   zamanlayıcı için tek giriş
   node konu/radar.js durum    <kanal>
 Ayrıntı: konu/BENIOKU.md`);
@@ -36,7 +42,7 @@ function fikirTablosu(ctx, h, hepsi) {
   const liste = H.sirala(h.fikirler).filter(f => hepsi || !['reddedildi', 'uretildi'].includes(f.durum));
   if (!liste.length) { yaz('Havuz boş. Önce: node konu/radar.js topla ' + ctx.kanal + ' && node konu/radar.js puanla ' + ctx.kanal); return; }
   yaz(`\n${'PUAN'.padEnd(5)} ${'ID'.padEnd(11)} ${'DURUM'.padEnd(15)} FİKİR  (kaynak)`);
-  for (const f of liste) yaz(`${f.puan.toFixed(1).padEnd(5)} ${f.id.padEnd(11)} ${f.durum.padEnd(15)} ${f.baslik}  (${[...new Set(f.kaynaklar.map(k => k.kaynak))].join(', ')})`);
+  for (const f of liste) yaz(`${(f.puan ?? 0).toFixed(1).padEnd(5)} ${f.id.padEnd(11)} ${f.durum.padEnd(15)} ${f.baslik}  (${[...new Set(f.kaynaklar.map(k => k.kaynak))].join(', ')})`);
   if ((h.ham_konular || []).length) yaz(`\n+ ${h.ham_konular.length} ham konu (yapay zekâsı kapatılmış kaynaktan), fikirler.md'nin sonunda.`);
   yaz(`\nOkunaklı liste: ${path.relative(process.cwd(), path.join(ctx.dir, 'fikirler.html'))}`);
 }
@@ -120,10 +126,21 @@ Son tur: ${son ? `${son.zaman} (${son.seviye})${son.hata ? ' HATA: ' + son.hata 
     const f = H.durumYap(h, rest[0], komut === 'sec' ? 'secildi' : 'reddedildi', deger('--not') || (komut === 'sec' ? 'seçildi' : 'reddedildi'));
     H.havuzYaz(ctx, h); yaz(`${f.id} → ${f.durum}: ${f.baslik}`);
   }
+  else if (komut === 'ekle') {
+    const H = require('./havuz'), h = H.havuzOku(ctx), baslik = deger('--baslik');
+    if (!baslik) O.hata('fikrin başlığını ver: --baslik "Denizde oksijen biterse 1000 yıl sonra ne olur?"');
+    const f = { baslik, oncul: deger('--oncul') || '', kanca: '', tirmanis: [], kapanis: '', neden_uyar: 'kanal sahibi elle ekledi', durum: 'secildi', puan: 10, puan_detay: { elle: true },
+      kaynaklar: [{ kaynak: 'elle', baslik, url: '' }], olusturma: O.simdi().toISOString() };
+    const r = H.fikirEkle(h, [f]); H.havuzYaz(ctx, h);
+    const son = r.eklenen ? h.fikirler[h.fikirler.length - 1] : H.esiniBul(h, f);
+    yaz(`${r.eklenen ? 'Eklendi' : 'Benzeri zaten var'}: ${son.id} — ${son.baslik}
+Üretmek için: node konu/radar.js uret ${ctx.kanal} ${son.id}`);
+  }
   else if (komut === 'uret') {
     if (!rest[0]) O.hata('fikir kimliğini ver. Örnek: node konu/radar.js uret ' + ctx.kanal + ' f-1a2b3c4d');
     const birak = O.kilitAl(ctx, 'uret ' + rest[0]);
-    try { await require('./uret').uret(ctx, rest[0], { onay: bayrak('--onay'), otomatik: false, onayGerekli: true, yaz }); } finally { birak(); }
+    const dk = deger('--yayin-dk');
+    try { await require('./uret').uret(ctx, rest[0], { onay: bayrak('--onay'), otomatik: false, onayGerekli: !bayrak('--onaysiz-paylas'), neZaman: dk ? +dk : null, yaz }); } finally { birak(); }
   }
   else if (komut === 'calistir') await calistir(ctx);
   else if (komut === 'durum') durum(ctx);
