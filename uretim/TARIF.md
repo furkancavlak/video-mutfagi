@@ -98,5 +98,5 @@ node kuyruk/kuyruk.js ekle videolar/<video>/cikti/<ad>-ucretsiz.mp4 --aciklama "
 
 Hemen paylaşmak için: `node instagram/paylas.js gonder <mp4> --aciklama "..."`.
 
-- **Açıklama:** `video.json` → `aciklama_instagram` alanında hazır durur.
+- **Açıklama:** `video.json` → `aciklama_instagram` alanında hazır durur. Nasıl yazılacağı `dersler/KAPAK-BASLIK.md` → "Instagram Reels". Ses ElevenLabs'in ücretsiz planıyla üretildiyse açıklamaya "Ses: elevenlabs.io" eklenir (planın şartı).
 - **İlk kez paylaşıyorsan:** Önce `instagram/REHBER.md`.
