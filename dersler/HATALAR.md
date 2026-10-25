@@ -12,6 +12,8 @@ Her madde aynı biçimde yazılmıştır: **ne oldu**, ardından **→ ne yap**.
   → Repo kendi Python ortamını kurar (`.venv`). Whisper her zaman `.venv` içinden çalıştırılır (bkz. `kurulum/KURULUM.md`).
 - **Klasör adında boşluk ve Türkçe harf vardı** (`CLAUDE PROJELER`, `VİDEO`). Bazı araçlar yolu ikiye böldü.
   → Repodaki betikler araçları kabuk (shell) olmadan çağırır, bu sorun çözüldü. Kendi yazdığın yeni betikte de yolu her zaman tırnak içine al.
+- **Temiz kurulum testinde render çöktü** (`ENOENT: mkdtemp`). Repo derin bir klasördeydi. Render'ın geçici klasörü Windows'un 260 karakterlik yol sınırını aştı.
+  → Render ara dosyasını artık kısa bir geçici yola yazıyor. Yine de repoyu kısa bir yola klonla. Doktor uzun yolu uyarır.
 - **Windows'taki bir ffmpeg sürümünde `drawtext` filtresi çöktü.**
   → Videoya yazıyı ffmpeg ile değil, HyperFrames sahnesinin içinde yaz.
 - **npm, bazı paketlerin kurulum betiklerini engelledi** ("install-scripts" uyarısı).

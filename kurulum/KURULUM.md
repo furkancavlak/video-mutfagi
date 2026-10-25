@@ -25,6 +25,8 @@ node kurulum/doktor.js
 
 ## Adım 2: Repo ve npm paketleri
 
+Repoyu kısa bir yola klonla, ör. `C:\Users\<ad>\video-mutfagi` ya da Belgeler. Windows 260 karakterden uzun dosya yollarını açamıyor. Repo çok derin bir klasörde durursa render yarıda kalır.
+
 ```
 git clone https://github.com/furkancavlakcom/video-mutfagi
 cd video-mutfagi

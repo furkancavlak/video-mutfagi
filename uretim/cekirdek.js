@@ -155,7 +155,9 @@ function hf(args, cwd) {
 function kareler(hfDir, saniyeler, outDir) { hf(['snapshot', '.', '--at', saniyeler.join(','), '--no-end', '--describe', 'false', '-o', outDir], hfDir); }
 // Full render (one worker: several workers can flicker frame to frame) + narration mux.
 function renderEt(hfDir, mixWav, outMp4) {
-  const ham = path.join(hfDir, '..', path.basename(outMp4, '.mp4') + '-sessiz.mp4');
+  // silent render goes to a short temp path: HyperFrames builds a long transaction folder name next to its output,
+  // which breaks the 260-character Windows path limit when the repo sits in a deep folder
+  const ham = path.join(os.tmpdir(), `vm-${process.pid}-${Date.now()}.mp4`);
   hf(['render', '.', '-f', String(FPS), '--crf', '18', '-w', '1', '-o', ham], hfDir);
   sh('ffmpeg', ['-loglevel', 'error', '-y', '-i', ham, '-i', mixWav, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'slow', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', outMp4]);
   fs.unlinkSync(ham);

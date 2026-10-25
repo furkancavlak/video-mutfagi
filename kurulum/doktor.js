@@ -43,6 +43,8 @@ else {
   satir(model, 'Whisper modeli', model ? 'indirilmiş' : 'henüz yok', 'İlk `python uretim/kelime.py` çalışmasında kendisi indirir (~1,6 GB). Sorun değil.', false);
 }
 
+if (WIN) { const uz = KOK.length; satir(uz <= 110, 'Repo yolu uzunluğu', uz + ' karakter', 'Windows 260 karakterden uzun yolları açamıyor. Repoyu daha kısa bir yere taşı (ör. C:\\Users\\<ad>\\video-mutfagi).', uz > 150); }
+
 console.log('\nİSTEĞE BAĞLI (yalnız o özelliği kullanacaksan)\n');
 const el = path.join(AYAR, 'elevenlabs.txt');
 satir(fs.existsSync(el), 'ElevenLabs anahtarı', fs.existsSync(el) ? 'kayıtlı (doğruluğu ses.js ilk çalışınca denenir)' : '', `Yapay ses için: anahtarı ${el} dosyasına tek satır kaydet. Kendi sesinle anlatacaksan gerek yok.`, false);
