@@ -32,6 +32,11 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 | `denetim/` | `DENETIM.md`, `kareler.sh`, `kare-denetci.md` (denetçi ajanın kuralları) |
 | `instagram/` | `REHBER.md` (Meta kurulumu), `paylas.js` |
 | `dersler/` | `HATALAR.md`, `KURGU-DILI.md`, `METIN.md` |
+| `konu/` | Konu radarı: forum ve trend sitelerinden kanala uygun video fikri bulur, isterse otomatik üretir. `BENIOKU.md`, `radar.js` |
+
+## Konu radarı (isteğe bağlı)
+
+Kullanıcı "konu bul", "ne çeksem", "fikir öner" derse: `konu/BENIOKU.md`. Kısaca `node konu/radar.js topla <kanal>` → `puanla <kanal>` → kullanıcıya `kanal/<kanal>/fikirler.html`'i aç. Otomasyon seviyesi (`kanal/<kanal>/konu.json` → `otomasyon`) ve bütçe sınırları kullanıcıyla birlikte yazılır; tam otomatik paylaşımı kullanıcı açıkça istemeden açma.
 
 ## Bir video klasörü
 

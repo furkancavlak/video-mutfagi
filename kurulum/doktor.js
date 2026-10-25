@@ -59,5 +59,8 @@ satir(cf.ok, 'cloudflared (Instagram için)', cf.ok ? cf.out.split('\n')[0] : ''
 const ig = path.join(AYAR, 'instagram.json');
 satir(fs.existsSync(ig), 'Instagram bağlantısı', fs.existsSync(ig) ? 'kayıtlı (node instagram/paylas.js kontrol)' : '', 'instagram/REHBER.md adımlarını izle.', false);
 
+// topic radar (konu/): optional checks live in konu/doktor.js
+try { require('../konu/doktor')(satir); } catch (e) { console.log('– Konu radarı kontrolü çalışmadı: ' + e.message); }
+
 console.log(eksik ? `\n${eksik} zorunlu parça eksik. Yukarıdaki → satırlarını sırayla yap, sonra doktoru tekrar çalıştır.\n` : '\nZorunlu her şey hazır. Sıradaki: örnek videoyu üret (kurulum/KURULUM.md adım 5).\n');
 process.exit(eksik ? 1 : 0);

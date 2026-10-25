@@ -11,3 +11,7 @@ videolar/*/ucretli/
 videolar/*/ses/tmp/
 videolar/*/ses/zaman.json
 __pycache__/
+# topic radar: live idea pool of each channel (changes every run; run data is under kayit/)
+kanal/*/fikirler.json
+kanal/*/fikirler.md
+kanal/*/fikirler.html

@@ -9,6 +9,11 @@ Bu sayfa yapay zekâ ajanının iş sırasıdır. 🔒 işaretli adımlarda ajan
 - **Kanal kimliği** `kanal/<kanal>/kimlik.json` dosyasında durmalı. Yoksa `kanal/KIMLIK-REHBERI.md` adımlarını izle.
 - **Video klasörü:** `videolar/_sablon/` klasörünü `videolar/<kanal>-v<NN>-<konu>/` adıyla kopyala.
 
+## 0.5. Konu fikri (isteğe bağlı)
+
+- **Konu yoksa:** `node konu/radar.js topla <kanal>` ve `node konu/radar.js puanla <kanal>`. Fikirler `kanal/<kanal>/fikirler.html` dosyasında puanıyla durur. Kullanıcı birini seçer (`sec`).
+- **Otomatik yol:** `node konu/radar.js uret <kanal> <fikir-id>` aşağıdaki 1-7. adımları sırayla yürütür, ilk para kapısında durur, bitince videoyu paylaşım kuyruğuna bırakır. Ayrıntı: `konu/BENIOKU.md`.
+
 ## 1. Konu ve metin 🔒
 
 - **Okunacaklar:** `dersler/METIN.md` ve `dersler/HATALAR.md` §5.

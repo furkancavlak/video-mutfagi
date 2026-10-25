@@ -1,0 +1,56 @@
+{
+  "_aciklama": "Konu radarı ayarları (konu/BENIOKU.md). Hangi sitelerde konu aranır, hangileri yapay zekâya gönderilir, otomasyon ne kadar ileri gider.",
+  "kaynaklar": {
+    "eksi": {
+      "aktif": true,
+      "sayfalar": ["gundem", "debe", "kanal/bilim", "kanal/tarih", "kanal/havacilik", "kanal/teknoloji", "kanal/saglik"],
+      "llm_e_gonder": false,
+      "_not": "Ekşi robots.txt 'ai-input=no' diyor. false iken Ekşi başlıkları yapay zekâya gönderilmez, havuzda ham konu olarak listelenir. true yapmak kanal sahibinin kararıdır."
+    },
+    "reddit": {
+      "aktif": true,
+      "yontem": "rss",
+      "subredditler": ["todayilearned", "askscience", "explainlikeimfive", "space", "Turkey", "AskReddit"],
+      "zaman": "day",
+      "adet": 50,
+      "_not": "rss: herkese açık akış (günde birkaç istek). api: kendi Reddit uygulaman (~/.video-mutfagi/reddit.json), beğeni ve yorum sayısı da gelir."
+    },
+    "vikipedi": { "aktif": true, "diller": ["tr", "en"], "adet": 40 },
+    "gtrends": { "aktif": true, "ulke": "TR" },
+    "x": {
+      "aktif": false,
+      "sorgular": ["(\"ne olur\" OR \"nasıl çalışıyor\" OR \"biliyor muydunuz\") lang:tr -is:retweet"],
+      "adet": 50,
+      "_not": "Yalnız resmi X API (ücretli plan) ve kendi anahtarınla. Tarayıcıyla otomatik giriş hesabı kapattırabilir, kullanılmaz."
+    }
+  },
+  "on_eleme": {
+    "anahtar_kelimeler": ["oksijen", "uzay", "gezegen", "güneş", "ay", "yıldız", "kara delik", "atom", "element", "vücut", "beyin", "kalp", "kan", "uyku", "virüs", "bakteri", "hayvan", "deniz", "okyanus", "volkan", "deprem", "yanardağ", "buz", "sıcaklık", "elektrik", "uçak", "roket", "nükleer", "radyasyon", "kimya", "fizik", "biyoloji", "evrim", "dinozor", "icat", "deney", "rekor", "en derin", "en yüksek", "en büyük", "nasıl", "neden", "ne olur", "olursa", "bilim", "space", "planet", "oxygen", "body", "brain", "ocean", "volcano", "physics", "chemistry", "experiment", "nuclear", "asteroid", "TIL", "why", "how", "what happens", "what would", "eli5"],
+    "yasak_kelimeler": ["seçim", "parti", "milletvekili", "cumhurbaşkanı", "bakan", "maç", "transfer", "derbi", "galatasaray", "fenerbahçe", "beşiktaş", "trabzonspor", "dizi", "magazin", "ünlü", "sevgilisi", "boşan", "cinayet", "taciz", "tecavüz", "intihar", "öldürül", "savaş", "terör", "baro", "election", "trump", "murder", "suicide", "rape"],
+    "llm_e_en_fazla": 40,
+    "kaynak_basina_en_az": 5
+  },
+  "puan": {
+    "agirlik": { "uyum": 0.3, "merak": 0.25, "dogrulanabilirlik": 0.2, "tazelik": 0.1, "etkilesim": 0.15 },
+    "fikir_en_fazla": 8
+  },
+  "llm": {
+    "yol": "otomatik",
+    "model_puanlama": "claude-opus-5-5",
+    "efor_puanlama": "low",
+    "model_metin": "claude-opus-5-5",
+    "efor_metin": "high",
+    "_not": "yol: otomatik | claude-cli (Claude aboneliği, claude -p) | api (ANTHROPIC_API_KEY, kullandıkça öde)"
+  },
+  "otomasyon": {
+    "seviye": "fikir",
+    "_seviyeler": "kapali: zamanlayıcı hiçbir şey yapmaz | fikir: yalnız konu toplar ve puanlar | uret: eşiği geçen fikirden video üretir, paylaşım için insan onayı bekler | tam: üretir ve onaysız kuyruğa koyar (tam_otomatik: true + --tam-otomatik ister)",
+    "tam_otomatik": false,
+    "esik": { "puan": 8.0, "etkilesim_min": 0.3, "kaynak_metrik": {} },
+    "gunluk_en_fazla_video": 1,
+    "katman": "ucretli",
+    "butce": { "video_basi_kredi": 50, "gunluk_kredi": 0, "aylik_kredi": 0, "gunluk_karakter": 0, "aylik_karakter": 0 },
+    "_butce_not": "0 = harcama izni yok. Otomasyon (uret/tam) ancak buraya sıfırdan büyük sınır yazılınca para harcar.",
+    "denetim_esik": 7
+  }
+}
