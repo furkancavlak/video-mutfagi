@@ -13,11 +13,12 @@ const K = require('./cekirdek');
 
 const { dir, video, kimlik, ad } = K.videoYukle(process.argv[2]);
 const arg = n => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : null; };
-const sahneFile = path.join(dir, 'sahneler.js');
-if (!fs.existsSync(sahneFile)) K.fail('sahneler.js yok. Ücretsiz kurgu için bu dosyayı yaz (örnek: videolar/oxygbio-v01-ucak/sahneler.js).');
+// a video either has its own scene code (sahneler.js) or names a data-driven template (video.json → "sablon")
+const sahneFile = video.sablon ? path.join(__dirname, 'sablonlar', video.sablon + '.js') : path.join(dir, 'sahneler.js');
+if (!fs.existsSync(sahneFile)) K.fail(video.sablon ? `şablon yok: uretim/sablonlar/${video.sablon}.js` : 'sahneler.js yok. Ücretsiz kurgu için bu dosyayı yaz (örnek: videolar/oxygbio-v01-ucak/sahneler.js) ya da video.json dosyasına bir şablon yaz ("sablon": "simulasyon").');
 
 const T = K.zamanlama(dir), C = K.palet(kimlik), { rnd, r2 } = K.tohum(5);
-const S = require(sahneFile)({ C, T, at: K.at, f: K.f1, r2, rnd, W: K.W, H: K.H });
+const S = require(sahneFile)({ C, T, at: K.at, f: K.f1, r2, rnd, W: K.W, H: K.H, dir });
 const cap = K.altyazi(T, video, C), mk = K.marka(T, kimlik, C);
 
 const cikti = path.join(dir, 'cikti'), hfDir = path.join(cikti, 'hf-ucretsiz');

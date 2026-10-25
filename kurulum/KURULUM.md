@@ -32,7 +32,10 @@ git clone https://github.com/furkancavlakcom/video-mutfagi
 cd video-mutfagi
 npm install
 npx hyperframes browser ensure
+node kurulum/gizli-tara.js kur
 ```
+
+- `gizli-tara.js kur`, her commit'ten önce değişiklikleri tarar. İçinde anahtar ya da token gibi bir şey görürse commit'i durdurur.
 
 - `browser ensure`, video çizerken kullanılan Chrome'u bir kez indirir (~150 MB).
 - npm "install-scripts" uyarısı verebilir. Sorun değil: doktor gereken her şeyi ayrıca dener.

@@ -11,7 +11,7 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 
 ## Değişmez kurallar
 
-1. **Gizli bilgi sohbete ve repoya girmez.** Şifre hiç istenmez. Anahtarlar (ElevenLabs, Instagram) kullanıcının masaüstüne koyduğu bir txt'den okunur, `~/.video-mutfagi/` içine taşınır, txt silinir. Anahtarı hiçbir zaman ekrana yazdırma.
+1. **Gizli bilgi sohbete ve repoya girmez.** Kurulumda `node kurulum/gizli-tara.js kur` ile commit kilidini kur. Şifre hiç istenmez. Anahtarlar (ElevenLabs, Instagram) kullanıcının masaüstüne koyduğu bir txt'den okunur, `~/.video-mutfagi/` içine taşınır, txt silinir. Anahtarı hiçbir zaman ekrana yazdırma.
 2. **Para harcayan her adım önce fiyatını gösterir.** ElevenLabs karakteri ve Higgsfield kredisi bunlara girer. `ses.js` ve `ucretli.js` önce `--onay` olmadan çalıştırılır, maliyet kullanıcıya söylenir. Kullanıcı "evet" demeden `--onay` verilmez. Bütçe `ucretli.json` → `butce` alanındadır, aşılmaz.
 3. **Onay kapıları.** Sıra: metin → ses → (yeni görünümse) 20-30 sn demo → video → paylaşım. Her kapıda kullanıcıya **sonucu** göster: dinlet, izlet, karesini göster. Yazılı plan ya da seçenek listesi okutma.
 4. **Her render'dan sonra denetim** (`denetim/DENETIM.md`). Kullanıcı videoyu denetlenmiş ve düzeltilmiş hâliyle görür.
@@ -52,6 +52,10 @@ videolar/<kanal>-v01-<konu>/
   ucretli/        üretilen resim ve klipler (repoya girmez)
   cikti/          kareler ve videolar (repoya girmez)
 ```
+
+## Hazır şablonla ücretsiz video (kod yazmadan)
+
+`video.json` → `"sablon": "simulasyon"` yazılırsa sahne kodu gerekmez. Sahneyi `uretim/sablonlar/simulasyon.js` çizer: gökyüzü, kıyı ve deniz kesiti, oksijen göstergeleri, zaman cetveli. Videoya özel bilgi `simulasyon.json` dosyasına yazılır: hangi kelimede hangi yıl, kamera nereye gider, oksijen yüzde kaç, ne değişir. Alanların listesi şablon dosyasının başında yazıyor.
 
 ## Yeni sahne kodu yazarken
 

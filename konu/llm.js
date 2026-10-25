@@ -57,6 +57,12 @@ function cliCalistir(istem, { model, efor, araclar = [], dizinler = [], zamanAsi
   for (const d of dizinler) args.push('--add-dir', d);
   const env = { ...process.env, BEYIN_V3_SKIP: '1' };
   delete env.ANTHROPIC_API_KEY;              // the CLI route means "use the subscription", never a stray API key
+  // headless machines (servers) log in with a long-lived token from `claude setup-token`, kept outside the repo
+  const tokF = path.join(require('os').homedir(), '.video-mutfagi', 'claude.env');
+  if (!env.CLAUDE_CODE_OAUTH_TOKEN && fs.existsSync(tokF)) {
+    const m = fs.readFileSync(tokF, 'utf8').match(/CLAUDE_CODE_OAUTH_TOKEN=(\S+)/);
+    if (m) env.CLAUDE_CODE_OAUTH_TOKEN = m[1];
+  }
   return new Promise((coz, reddet) => {
     const p = spawn(bin, args, { cwd: calismaDizini(), env, windowsHide: true });
     let out = '', err = '';
