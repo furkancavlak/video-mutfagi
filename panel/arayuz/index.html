@@ -14,25 +14,49 @@
   <div class="logo"><span class="logo-i">▶</span>Video Mutfağı</div>
   <nav class="sekmeler" id="sekmeler">
     <button data-s="bugun" class="on">Bugün</button>
+    <button data-s="fikirler">Fikirler</button>
+    <button data-s="uretim">Üretim</button>
     <button data-s="sira">Sıra</button>
     <button data-s="takvim">Takvim</button>
-    <button data-s="videolar">Videolar</button>
     <button data-s="sonuclar">Sonuçlar</button>
   </nav>
-  <div class="saglik" id="saglik"></div>
+  <button class="isler-dugme" id="isler-dugme" title="Arka planda çalışan işler"><span id="isler-say">0</span> iş</button>
 </header>
 
 <main>
   <section id="s-bugun" class="sayfa on">
-    <div class="izgara-bugun">
-      <article class="tahta" id="siradaki"></article>
-      <article class="tahta" id="son"></article>
+    <div class="makineler" id="makineler"></div>
+    <h2 class="bolum">Senden bekleyenler</h2>
+    <div id="bekleyenler" class="liste"></div>
+  </section>
+
+  <section id="s-fikirler" class="sayfa">
+    <div class="baslik-satir"><h1>Fikirler</h1>
+      <select id="kanal-sec" class="sec" aria-label="Kanal"></select>
+      <div class="secici" id="fikir-filtre"><button data-f="acik" class="on">Açık</button><button data-f="hepsi">Hepsi</button></div>
+      <span class="bosluk"></span>
+      <button class="dugme" data-is="topla">Yeni konu topla</button>
+      <button class="dugme" data-is="puanla">Puanla</button>
+      <button class="dugme sari" id="fikir-ekle-dugme">+ Kendi fikrim</button>
     </div>
-    <div class="hazir" id="hazir"></div>
+    <form id="fikir-ekle" class="kart form-kart" hidden>
+      <input id="fe-baslik" placeholder="Soru: Ormanlarda oksijen biterse 1000 yıl sonra ne olur?" required>
+      <input id="fe-oncul" placeholder="Öncül (isteğe bağlı): ne oluyor, neden sürüyor">
+      <button class="dugme sari">Ekle</button>
+    </form>
+    <div id="fikir-liste" class="liste"></div>
+  </section>
+
+  <section id="s-uretim" class="sayfa">
+    <div class="baslik-satir"><h1>Üretim</h1><span class="say" id="uretim-say"></span></div>
+    <div id="uretim-liste" class="liste"></div>
   </section>
 
   <section id="s-sira" class="sayfa">
-    <div class="baslik-satir"><h1>Sıra</h1><span class="say" id="sira-say"></span></div>
+    <div class="baslik-satir"><h1>Sıra</h1>
+      <div class="secici" id="makine-sec"></div>
+    </div>
+    <div id="sira-saglik" class="saglik-satir"></div>
     <div id="sira-liste" class="liste"></div>
   </section>
 
@@ -43,36 +67,22 @@
     <div id="takvim" class="takvim"></div>
   </section>
 
-  <section id="s-videolar" class="sayfa">
-    <div class="baslik-satir"><h1>Videolar</h1><span class="say" id="video-say"></span></div>
-    <div id="video-izgara" class="video-izgara"></div>
-  </section>
-
   <section id="s-sonuclar" class="sayfa">
     <div class="baslik-satir"><h1>Sonuçlar</h1>
-      <div class="secici" id="metrik">
-        <button data-m="views" class="on">İzlenme</button><button data-m="reach">Erişim</button><button data-m="likes">Beğeni</button><button data-m="shares">Paylaşım</button><button data-m="saved">Kayıt</button>
-      </div>
-      <button class="dugme ince" id="yenile">↻</button>
+      <div class="secici" id="metrik"><button data-m="views" class="on">İzlenme</button><button data-m="reach">Erişim</button><button data-m="likes">Beğeni</button><button data-m="shares">Paylaşım</button><button data-m="saved">Kayıt</button></div>
+      <button class="dugme ince" id="yenile" title="Instagram'dan yeniden çek">↻</button>
     </div>
-    <article class="tahta genis" id="sonuclar"></article>
+    <article class="tahta" id="ders"></article>
+    <div class="kart" id="sonuclar"></div>
   </section>
 </main>
 
-<dialog id="pencere">
-  <form method="dialog" id="ekle-form">
-    <div class="p-ust"><h2>Sıraya ekle</h2><button value="kapat" class="kapat" aria-label="Kapat">✕</button></div>
-    <video id="p-video" controls playsinline preload="metadata"></video>
-    <label>Açıklama<textarea id="p-aciklama" rows="4"></textarea></label>
-    <div class="p-satir">
-      <label>Zaman<input type="datetime-local" id="p-zaman"></label>
-      <label class="kutu"><input type="checkbox" id="p-onay"> Önce ben onaylayayım</label>
-    </div>
-    <p class="ipucu" id="p-ipucu"></p>
-    <div class="p-alt"><button value="kapat" class="dugme ince">Vazgeç</button><button value="ekle" class="dugme sari" id="p-ekle">Sıraya ekle</button></div>
-  </form>
-</dialog>
+<aside class="cekmece" id="cekmece" hidden>
+  <div class="cekmece-ust"><h2>Arka plandaki işler</h2><button class="kapat" id="cekmece-kapat" aria-label="Kapat">✕</button></div>
+  <div id="is-liste"></div>
+</aside>
 
+<dialog id="pencere"><div id="pencere-ic"></div></dialog>
 <div id="bildirim" class="bildirim" role="status"></div>
 <script src="panel.js"></script>
 </body>

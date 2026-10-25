@@ -27,6 +27,8 @@ Kod bilmen gerekmez. Bu repoyu, Furkan Cavlak kanalında kendi videolarını nas
 
    > Şu konuda bir video yapalım: …
 
+Yapay zekâsız işler (sıra, takvim, fikir seçme, sonuçlar) için tarayıcıda bir kontrol paneli de var: `node panel/panel.js` ([panel/BENIOKU.md](panel/BENIOKU.md)).
+
 Ajanın okuduğu talimatlar `AGENTS.md` dosyasında. Kurulum adımları `kurulum/KURULUM.md` dosyasında.
 
 ## Ne bedava, ne ücretli
