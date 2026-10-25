@@ -4,7 +4,9 @@
 //   node instagram/paylas.js kaydet <token-dosyasi>     save + verify a token (file is read, never printed)
 //   node instagram/paylas.js kontrol                    show which account is connected
 //   node instagram/paylas.js yenile                     refresh the long-lived token (60 days)
-//   node instagram/paylas.js gonder <video.mp4> [--aciklama "..."] [--kuru]
+//   node instagram/paylas.js gonder <video.mp4> [--aciklama "..."] [--kuru] [--hazirla]
+//     --kuru     only checks the tunnel; nothing is sent to Instagram
+//     --hazirla  Instagram downloads and processes the video, but it is NOT published
 //
 // Instagram fetches Reels from a public URL, so `gonder` serves the file from this computer
 // through a temporary Cloudflare quick tunnel (no account needed) only while Instagram downloads it.
@@ -74,7 +76,7 @@ async function waitReachable(url) {
   throw new Error('tünel adresi dışarıdan açılmadı: ' + url);
 }
 
-async function gonder(file, aciklama, kuru) {
+async function gonder(file, aciklama, kuru, hazirla) {
   if (!fs.existsSync(file)) fail('video yok: ' + file);
   const ayar = readAyar();
   if (!kuru && !ayar) fail('önce token kaydet: node instagram/paylas.js kaydet <dosya>');
@@ -102,6 +104,7 @@ async function gonder(file, aciklama, kuru) {
       if (st.status_code === 'ERROR' || st.status_code === 'EXPIRED') throw new Error('Instagram videoyu kabul etmedi: ' + (st.status || st.status_code));
     }
     if (st.status_code !== 'FINISHED') throw new Error('Instagram 7,5 dk içinde işlemeyi bitirmedi');
+    if (hazirla) { console.log(`HAZIRLANDI, PAYLAŞILMADI: Instagram videoyu kabul etti (konteyner ${c.id}). Yayınlanmadı; 24 saat içinde kendiliğinden silinir.`); return; }
     console.log('4/5 Paylaşılıyor…');
     const pub = await graph('POST', `/${ayar.user_id}/media_publish`, { creation_id: c.id, access_token: ayar.token });
     const info = await graph('GET', `/${pub.id}`, { fields: 'permalink,timestamp', access_token: ayar.token });
@@ -134,7 +137,7 @@ async function gonder(file, aciklama, kuru) {
     console.log(`Token yenilendi, ${Math.round(r.expires_in / 86400)} gün geçerli.`);
   } else if (cmd === 'gonder') {
     const i = rest.indexOf('--aciklama');
-    await gonder(a1, i >= 0 ? rest[i + 1] : '', rest.includes('--kuru'));
+    await gonder(a1, i >= 0 ? rest[i + 1] : '', rest.includes('--kuru'), rest.includes('--hazirla'));
   } else {
     console.log('Kullanım: kaydet <token-dosyasi> | kontrol | yenile | gonder <video.mp4> [--aciklama "..."] [--kuru]');
   }
