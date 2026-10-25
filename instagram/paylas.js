@@ -1,0 +1,141 @@
+#!/usr/bin/env node
+// Instagram Reels publisher — official Instagram API (Instagram Login). No dependencies, Node 18+.
+//
+//   node instagram/paylas.js kaydet <token-dosyasi>     save + verify a token (file is read, never printed)
+//   node instagram/paylas.js kontrol                    show which account is connected
+//   node instagram/paylas.js yenile                     refresh the long-lived token (60 days)
+//   node instagram/paylas.js gonder <video.mp4> [--aciklama "..."] [--kuru]
+//
+// Instagram fetches Reels from a public URL, so `gonder` serves the file from this computer
+// through a temporary Cloudflare quick tunnel (no account needed) only while Instagram downloads it.
+const fs = require('fs'), path = require('path'), os = require('os'), http = require('http');
+const { spawn } = require('child_process');
+
+const API = 'https://graph.instagram.com/' + (process.env.IG_API_VERSION || 'v23.0');
+const AYAR_DIR = path.join(os.homedir(), '.video-mutfagi');
+const AYAR = path.join(AYAR_DIR, 'instagram.json');
+const KAYIT = path.join(__dirname, '..', 'kayit', 'paylasimlar.jsonl');
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fail = msg => { console.error('HATA: ' + msg); process.exit(1); };
+const readAyar = () => { try { return JSON.parse(fs.readFileSync(AYAR, 'utf8')) } catch (e) { return null } };
+const writeAyar = a => { fs.mkdirSync(AYAR_DIR, { recursive: true }); fs.writeFileSync(AYAR, JSON.stringify(a, null, 2)); };
+
+async function graph(method, p, params = {}) {
+  const url = new URL(API + p);
+  const opts = { method };
+  if (method === 'GET') for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  else opts.body = new URLSearchParams(params);
+  const r = await fetch(url, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error(`${method} ${p}: ${j.error ? j.error.message + ' (kod ' + j.error.code + ')' : r.status}`);
+  return j;
+}
+
+async function me(token) {
+  return graph('GET', '/me', { fields: 'user_id,username,account_type,media_count', access_token: token });
+}
+
+// --- local file server with Range support (Instagram's fetcher may request byte ranges)
+function serve(file) {
+  const size = fs.statSync(file).size;
+  const name = '/' + encodeURIComponent(path.basename(file).replace(/[^a-zA-Z0-9._-]/g, '_'));
+  const hits = [];
+  const srv = http.createServer((req, res) => {
+    hits.push(`${req.method} ${req.headers.range || 'full'}`);
+    if (req.url.split('?')[0] !== name) { res.writeHead(404); return res.end(); }
+    const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
+    let start = 0, end = size - 1, code = 200;
+    if (m) { start = m[1] ? +m[1] : size - +m[2]; end = m[1] && m[2] ? +m[2] : size - 1; code = 206; }
+    res.writeHead(code, { 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1,
+      ...(code === 206 ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}) });
+    if (req.method === 'HEAD') return res.end();
+    fs.createReadStream(file, { start, end }).pipe(res);
+  });
+  return new Promise(ok => srv.listen(0, '127.0.0.1', () => ok({ srv, port: srv.address().port, name, hits })));
+}
+
+function tunnel(port) {
+  return new Promise((ok, no) => {
+    const p = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${port}`], { windowsHide: true });
+    let buf = '';
+    const t = setTimeout(() => { p.kill(); no(new Error('tünel 60 sn içinde açılmadı')) }, 60e3);
+    const on = d => { buf += d; const m = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/.exec(buf); if (m) { clearTimeout(t); ok({ proc: p, url: m[0] }); } };
+    p.stdout.on('data', on); p.stderr.on('data', on);
+    p.on('error', e => { clearTimeout(t); no(new Error('cloudflared bulunamadı: ' + e.message)) });
+  });
+}
+
+async function waitReachable(url) {
+  for (let i = 0; i < 30; i++) {
+    try { const r = await fetch(url, { method: 'HEAD' }); if (r.ok) return; } catch (e) {}
+    await sleep(2000);
+  }
+  throw new Error('tünel adresi dışarıdan açılmadı: ' + url);
+}
+
+async function gonder(file, aciklama, kuru) {
+  if (!fs.existsSync(file)) fail('video yok: ' + file);
+  const ayar = readAyar();
+  if (!kuru && !ayar) fail('önce token kaydet: node instagram/paylas.js kaydet <dosya>');
+  const s = await serve(file);
+  let tn;
+  try {
+    console.log('1/5 Video internete geçici olarak açılıyor…');
+    tn = await tunnel(s.port);
+    const videoUrl = tn.url + s.name;
+    await waitReachable(videoUrl);
+    console.log('    adres hazır');
+    if (kuru) {
+      const r = await fetch(videoUrl, { headers: { Range: 'bytes=0-1023' } });
+      console.log(`KURU KOŞU: dışarıdan erişim ${r.status}, ${(await r.arrayBuffer()).byteLength} bayt. Instagram'a bir şey gönderilmedi.`);
+      return;
+    }
+    console.log('2/5 Instagram\'a bildiriliyor…');
+    const c = await graph('POST', `/${ayar.user_id}/media`, { media_type: 'REELS', video_url: videoUrl, caption: aciklama || '', share_to_feed: 'true', access_token: ayar.token });
+    console.log('3/5 Instagram videoyu indirip işliyor (1-5 dk)…');
+    let st;
+    for (let i = 0; i < 90; i++) {
+      await sleep(5000);
+      st = await graph('GET', `/${c.id}`, { fields: 'status_code,status', access_token: ayar.token });
+      if (st.status_code === 'FINISHED') break;
+      if (st.status_code === 'ERROR' || st.status_code === 'EXPIRED') throw new Error('Instagram videoyu kabul etmedi: ' + (st.status || st.status_code));
+    }
+    if (st.status_code !== 'FINISHED') throw new Error('Instagram 7,5 dk içinde işlemeyi bitirmedi');
+    console.log('4/5 Paylaşılıyor…');
+    const pub = await graph('POST', `/${ayar.user_id}/media_publish`, { creation_id: c.id, access_token: ayar.token });
+    const info = await graph('GET', `/${pub.id}`, { fields: 'permalink,timestamp', access_token: ayar.token });
+    fs.mkdirSync(path.dirname(KAYIT), { recursive: true });
+    fs.appendFileSync(KAYIT, JSON.stringify({ zaman: new Date().toISOString(), dosya: path.basename(file), media_id: pub.id, link: info.permalink, aciklama }) + '\n');
+    console.log('5/5 YAYINDA: ' + info.permalink);
+  } finally {
+    if (tn) tn.proc.kill();
+    s.srv.close();
+  }
+}
+
+(async () => {
+  const [cmd, a1, ...rest] = process.argv.slice(2);
+  if (cmd === 'kaydet') {
+    if (!a1 || !fs.existsSync(a1)) fail('token dosyası yok');
+    const token = fs.readFileSync(a1, 'utf8').trim();
+    const m = await me(token);
+    writeAyar({ token, user_id: m.user_id, username: m.username, kaydedildi: new Date().toISOString() });
+    console.log(`Bağlandı: @${m.username} (${m.account_type}, ${m.media_count} gönderi). Token ${AYAR} içinde.`);
+  } else if (cmd === 'kontrol') {
+    const a = readAyar(); if (!a) fail('kayıtlı token yok');
+    const m = await me(a.token);
+    console.log(`Bağlı hesap: @${m.username} (${m.account_type}, ${m.media_count} gönderi)`);
+  } else if (cmd === 'yenile') {
+    const a = readAyar(); if (!a) fail('kayıtlı token yok');
+    const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(a.token)}`).then(r => r.json());
+    if (!r.access_token) fail('yenilenemedi: ' + JSON.stringify(r.error || r));
+    writeAyar(Object.assign(a, { token: r.access_token, yenilendi: new Date().toISOString() }));
+    console.log(`Token yenilendi, ${Math.round(r.expires_in / 86400)} gün geçerli.`);
+  } else if (cmd === 'gonder') {
+    const i = rest.indexOf('--aciklama');
+    await gonder(a1, i >= 0 ? rest[i + 1] : '', rest.includes('--kuru'));
+  } else {
+    console.log('Kullanım: kaydet <token-dosyasi> | kontrol | yenile | gonder <video.mp4> [--aciklama "..."] [--kuru]');
+  }
+})().catch(e => fail(e.message));
