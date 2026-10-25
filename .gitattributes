@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.mp3 binary
+*.woff2 binary
+*.png binary
+*.mp4 binary
+*.cmd text eol=crlf
