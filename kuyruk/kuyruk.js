@@ -189,7 +189,7 @@ async function sonuclar() {
 // --- scheduler: every 15 min. every 5 min. Windows: Task Scheduler (runs a missed run as soon as the PC is on); Linux/Mac: cron.
 function zamanlayiciVarMi() {
   if (WIN) return spawnSync('schtasks', ['/Query', '/TN', GOREV], { encoding: 'utf8' }).status === 0;
-  const r = spawnSync('crontab', ['-l'], { encoding: 'utf8' }); return r.status === 0 && r.stdout.includes('kuyruk/kuyruk.js calistir');
+  const r = spawnSync('crontab', ['-l'], { encoding: 'utf8' }); return r.status === 0 && r.stdout.includes('kuyruk/kuyruk.js');
 }
 function zamanlayici(alt) {
   const node = process.execPath, betik = path.join(__dirname, 'kuyruk.js');
@@ -205,14 +205,14 @@ Register-ScheduledTask -TaskName '${GOREV}' -Action $a -Trigger $t -Settings $s 
     } else {
       const satir = `*/5 * * * * cd "${KOK}" && "${node}" "${betik}" calistir >> "${LOG}" 2>&1`;
       const eski = spawnSync('crontab', ['-l'], { encoding: 'utf8' }).stdout || '';
-      const r = spawnSync('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js calistir')).concat(satir).join('\n') + '\n', encoding: 'utf8' });
+      const r = spawnSync('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js')).concat(satir).join('\n') + '\n', encoding: 'utf8' });
       if (r.status !== 0) fail('crontab yazılamadı: ' + r.stderr);
     }
     console.log(`Zamanlayıcı kuruldu: her 5 dakikada bir "calistir" çalışır. Kayıt: ${path.relative(KOK, LOG)}`);
     if (!/sunucu/i.test(ayar().makine_turu || '')) console.log('Ev bilgisayarı: paylaşım saatinde bilgisayar AÇIK ve UYANIK olmalı. Kapalıysa video açılınca, gecikmeli paylaşılır. Her gün `node kuyruk/kuyruk.js durum` ile bak.');
   } else if (alt === 'kaldir') {
     if (WIN) spawnSync('schtasks', ['/Delete', '/TN', GOREV, '/F']);
-    else { const eski = spawnSync('crontab', ['-l'], { encoding: 'utf8' }).stdout || ''; spawnSync('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js calistir')).join('\n') + '\n' }); }
+    else { const eski = spawnSync('crontab', ['-l'], { encoding: 'utf8' }).stdout || ''; spawnSync('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js')).join('\n') + '\n' }); }
     console.log('Zamanlayıcı kaldırıldı. Kuyruktaki videolar duruyor, artık kendiliğinden paylaşılmayacak.');
   } else console.log(zamanlayiciVarMi() ? 'Zamanlayıcı kurulu.' : 'Zamanlayıcı KURULU DEĞİL: kuyruk kendiliğinden paylaşmaz. Kur: node kuyruk/kuyruk.js zamanlayici kur');
 }
