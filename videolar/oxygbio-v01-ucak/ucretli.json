@@ -1,0 +1,49 @@
+{
+  "_aciklama": "ÜCRETLİ katman tarifi (Higgsfield). Ses, altyazı ve marka ekranları ücretsiz sürümle aynıdır; değişen yalnız görüntüdür. Önce 'gorsel' adımı (ucuz), resimlere bakılır, sonra 'klip' adımı.",
+  "butce": 50,
+  "gorsel_modeli": { "model": "gpt_image_2_5", "aspect_ratio": "9:16", "resolution": "2k", "quality": "medium" },
+  "klip_modeli": { "model": "seedance_2_0_mini", "aspect_ratio": "9:16", "resolution": "720p", "generate_audio": "false" },
+  "stil": "STYLE: stylized 3D animated feature film look, soft rounded shapes, warm cream and pale sky-blue palette with small coral accents, bright soft daylight, clean composition, gentle comedic tone. AVOID: any text, letters, numbers, signs, logos, watermarks, dark or gloomy lighting.",
+  "klip_eki": "Keep the same stylized 3D animated film look, soft daylight. No text, no letters.",
+  "gorseller": [
+    { "ad": "a-kabin", "istem": "SCENE: inside a passenger airliner cabin at cruising altitude, one-point perspective looking straight down the center aisle. Rows of blue-grey seats on both sides, oval windows with bright blue sky and white clouds. In the far end of the aisle a flight attendant pushes a shiny aluminum drinks trolley toward camera. FOREGROUND left: a cheerful middle-aged Turkish man with a mustache in a mustard sweater sits in the aisle seat, holding a small tulip-shaped glass of red tea on a saucer. Overhead lockers, reading lights." },
+    { "ad": "b-pencere", "istem": "SCENE: close-up of a single oval airplane cabin window seen from inside, filling most of the frame, cream plastic frame and window blind pulled halfway up, bright blue sky and fluffy white clouds outside, sunlight. Part of a blue-grey seat headrest at the bottom edge." },
+    { "ad": "c-acik", "referans": ["a-kabin"], "istem": "SCENE: same airplane cabin and same art style as the reference image, but the ENTIRE right wall of the cabin is simply gone: the right side opens straight onto bright blue sky and clouds at high altitude, ragged edge of the floor, the seats on the left side are still full of calm passengers. The mustached man in the mustard sweater sits in the left aisle seat looking at the open sky with a deadpan expression. Wide shot." },
+    { "ad": "d-amca", "referans": ["a-kabin"], "istem": "SCENE: medium close-up of the same mustached Turkish man in the mustard sweater from the reference image, seated in his blue-grey airplane seat, holding a tulip-shaped glass of red tea on a saucer near his chest, looking at camera with a puzzled raised eyebrow. Window with sky behind him." },
+    { "ad": "e-dis", "istem": "SCENE: exterior view of a white twin-engine passenger airliner gliding silently above a sea of white clouds, seen from slightly below and to the side, engines quiet with no exhaust, cabin windows dark, bright blue sky, long gentle descent angle. The plane is small in the upper middle of the frame with lots of sky." },
+    { "ad": "f-kokpit", "istem": "SCENE: inside an airliner cockpit, completely empty, two pilot seats with nobody in them, a pilot's captain hat with gold trim lying alone on the left seat, yokes and instrument panels with soft glowing screens (no readable text), big windshield showing bright blue sky and clouds." },
+    { "ad": "h-araba", "istem": "SCENE: a shiny aluminum airline drinks trolley standing perfectly intact and upright in the middle of grey powder dunes, surrounded by scattered broken airplane fuselage pieces and a detached wing half buried in the fine grey dust, soft daylight from a pale sky, a little sparkle of sunlight on the trolley's metal, comedic heroic framing low angle." },
+    { "ad": "g-toz", "referans": ["e-dis", "h-araba"], "istem": "SCENE: a vast empty pale grey powdery landscape like fine flour or ash dunes stretching to the horizon (same grey powder as the second reference image), no water, no plants, absolutely NO people, NO characters, NO animals. Pale washed-out sky. In the upper middle of the sky the same white airliner with orange tail from the first reference image is diving toward the powder at a steep angle, no smoke, no fire. Wide empty composition." }
+  ],
+  "klipler": [
+    { "ad": "a-kabin", "gorsel": "a-kabin", "sure": 7, "istem": "Slow steady camera push forward down the aisle. The flight attendant pushes the shiny trolley toward camera, the mustached man happily sips his tea. Calm, normal flight, passengers relaxed." },
+    { "ad": "b-pencere", "gorsel": "b-pencere", "sure": 5, "istem": "Static camera. Suddenly the window pane crumbles into fine white dust that gets sucked outward into the sky, the window blind snaps up, a few white paper napkins fly out through the open hole into the clouds." },
+    { "ad": "d-amca", "gorsel": "d-amca", "sure": 5, "istem": "Static camera. The man looks down at himself in confusion, then his whole body quietly crumbles into a soft pile of dark grey powder on the seat; his mustard sweater collapses empty onto the seat; the red tea in his glass turns into vapor and drifts away and the empty glass drops onto the sweater. Comedic and gentle, not scary, no blood." },
+    { "ad": "e-dis", "gorsel": "e-dis", "sure": 5, "istem": "The airliner glides silently and slowly descends over the clouds, engines not spinning, no smoke; the camera follows it smoothly." },
+    { "ad": "g-toz", "gorsel": "g-toz", "sure": 5, "istem": "Static wide camera. The airliner dives into the grey powder dunes and breaks apart into a few big pieces, a huge soft cloud of pale grey dust bursts up and rolls outward. Absolutely no fire, no flames, no dark smoke." }
+  ],
+  "_kurgu_aciklama": "Her parça bir öncekinin bittiği yerden 'kadar' anına sürer. klip: o klip 'baslat' anına kadar ilk karesinde bekler, 'yavas' kat yavaşlar (ara kare üretilir), bitince son karesinde bekler. gorsel: tek resim. gecis: iki resim 'an' anında çözülerek geçer. itme: parça boyunca yavaş yakınlaşma (1 = yok), 'odak' yakınlaşmanın merkezi. Zaman ifadeleri: satir:N, satir-sonu:N, kelime:söz@N (N. satırın başından sonraki ilk 'söz'), anons:N, sting:N, son; sonuna +0.3 / -0.2 eklenebilir. Satırlar 0'dan sayılır.",
+  "kurgu": [
+    { "kadar": "satir:1", "klip": "a-kabin", "baslat": 0, "yavas": 1.044, "itme": 1 },
+    { "kadar": "satir-sonu:1+0.1", "klip": "b-pencere", "baslat": "kelime:pıt@1-0.35", "itme": 1.06 },
+    { "kadar": "satir-sonu:2+0.3", "gecis": ["a-kabin", "c-acik"], "an": "kelime:kalmamıştır@2-0.1", "itme": 1.05 },
+    { "kadar": "satir-sonu:3+0.15", "klip": "d-amca", "baslat": "kelime:gidince@3-0.6", "yavas": 1.25, "itme": 1.05 },
+    { "kadar": "anons:1", "klip": "e-dis", "baslat": "satir-sonu:3+1.15", "yavas": 2, "itme": 1.04 },
+    { "kadar": "satir-sonu:5+0.3", "gorsel": "f-kokpit", "itme": 1.08, "odak": "22% 68%" },
+    { "kadar": "satir-sonu:6+0.15", "klip": "g-toz", "baslat": "kelime:çakılıyor@6-4.25", "yavas": 2.5, "itme": 1.16, "odak": "50% 70%" },
+    { "kadar": "son", "gorsel": "h-araba", "itme": 1.08 }
+  ],
+  "_etiket_aciklama": "Bilgi etiketleri: rakam söylendiği kelimede gelir; sonraki etiket gelince öncekisi kalkar. 'ust' piksel cinsinden (varsayılan 300); kahraman nesneyle çakışıyorsa 1360'a indir ya da daha geç bir kelimeye kaydır.",
+  "etiketler": [
+    { "metin": "PENCERE: <span>AKRİLİK</span>", "bas": "kelime:akrilik@1", "bit": "kelime:pıt@1" },
+    { "metin": "ÜÇTE BİRİ <span>OKSİJEN</span>", "bas": "kelime:üçte@1", "bit": "kelime:pıt@1" },
+    { "metin": "VÜCUT: <span>%65 OKSİJEN</span>", "bas": "kelime:vücudunun@3", "bit": "kelime:elindeki@3" },
+    { "metin": "GERİYE: <span>C · H · N</span>", "bas": "kelime:torba@3", "bit": "kelime:elindeki@3" },
+    { "metin": "SU: <span>%89 OKSİJEN</span>", "bas": "kelime:suyun@3", "bit": "satir-sonu:3" },
+    { "metin": "GÖVDE: <span>ALÜMİNYUM</span>", "bas": "kelime:gövde@4", "bit": "kelime:yani@4" },
+    { "metin": "MOTORLAR: <span>SÖNÜK</span>", "bas": "kelime:motorlar@4", "bit": "satir-sonu:4" },
+    { "metin": "YERKABUĞU: <span>%46 OKSİJEN</span>", "bas": "kelime:yarısı@6", "bit": "kelime:çakılıyor@6-0.2" },
+    { "metin": "YANGIN: <span>YOK</span>", "bas": "kelime:yanmıyor@6", "bit": "satir-sonu:6" },
+    { "metin": "TEK SAĞ KALAN: <span>İKRAM ARABASI</span>", "bas": "kelime:ikram@7+0.2", "bit": "sting:1-0.4", "ust": 1360 }
+  ]
+}

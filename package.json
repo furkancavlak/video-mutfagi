@@ -1,0 +1,12 @@
+{
+  "name": "video-mutfagi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Yapay zekâyla sıfırdan dikey video üretim mutfağı: metin, ses, kelimeye kilitli kurgu, denetim, Instagram paylaşımı.",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "gsap": "^3.13.0",
+    "hyperframes": "0.8.140"
+  }
+}

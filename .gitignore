@@ -1,5 +1,13 @@
 node_modules/
+.venv/
 kayit/
-*.mp4
-*.env
 ayarlar/
+*.env
+*.mp4
+*.wav
+# per-video generated output and paid media (large; example media is in the GitHub release)
+videolar/*/cikti/
+videolar/*/ucretli/
+videolar/*/ses/tmp/
+videolar/*/ses/zaman.json
+__pycache__/

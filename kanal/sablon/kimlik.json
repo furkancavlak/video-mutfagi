@@ -1,0 +1,49 @@
+{
+  "_aciklama": "Kanal kimliği şablonu. kanal/KIMLIK-REHBERI.md'deki sırayla doldur, kanal/<kanal-adi>/kimlik.json olarak kaydet. Dolu örnek: kanal/oxygbio/kimlik.json",
+  "hesap": "@kanal_adi",
+  "konu": "Kanalın konusu, biraz geniş tut.",
+  "karakter": "Ekranda sabit karakter var mı? Yoksa 'yok' yaz.",
+  "ton": "Komedi / ciddi / karışık; şakalar neye dayanıyor?",
+  "kufur": "Yok / hafif / açık; nerede kullanılır?",
+  "dogruluk": "Her bilgi yayından önce kaynaktan doğrulanır; metnin altında bilgi kontrol tablosu olur.",
+  "anlaticilar": [
+    {
+      "ad": "anlatici-1",
+      "elevenlabs_voice": "SES_ID",
+      "not": "kendi sesinle anlatacaksan bu alanı boş bırak"
+    }
+  ],
+  "tts": {
+    "model": "eleven_v3",
+    "language_code": "tr",
+    "voice_settings": {
+      "stability": 0,
+      "similarity_boost": 0.75,
+      "style": 0.6,
+      "speed": 1.1
+    }
+  },
+  "marka": {
+    "logo": [
+      "LOGO",
+      "İKİ"
+    ],
+    "etiket": "KÖŞE ETİKETİ",
+    "cta": [
+      "KAPANIŞ SORUSU?",
+      "YORUMA YAZ"
+    ],
+    "ses": "7-hizlanan-kayis",
+    "yukselis": 0.85
+  },
+  "renkler": {
+    "paper": "#F4EEDF",
+    "ink": "#1F2A30",
+    "coral": "#E8553A",
+    "o2": "#1FA9BE"
+  },
+  "gorsel": {
+    "ucretsiz": "kodla animasyon (sahneler.js)",
+    "ucretli": "Higgsfield, video başına en fazla N kredi (ucretli.json)"
+  }
+}

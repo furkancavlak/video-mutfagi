@@ -1,0 +1,55 @@
+{
+  "_aciklama": "Kanal kimliği: her videoda aynı kalan her şey. Sıfırdan doldurmak için kanal/sablon/kimlik.json'u kopyala ve kanal/KIMLIK-REHBERI.md'deki sırayla doldur.",
+  "hesap": "@oxygbio",
+  "konu": "Geniş 'ne olurdu / nasıl çalışıyor' merak kanalı. İlk seri: 'Evrendeki bütün oksijen yok olursa X'te ne olur?'",
+  "karakter": "Ekranda sabit karakter yok; yıldız konunun kendisi.",
+  "ton": "Komedi + bilgi: her şaka gerçek bir bilgiye dayanır. Öncül sürer (oksijen gidiyor ve geri gelmiyor), olaylar tırmanır.",
+  "kufur": "Açık ama ünlem olarak (hassiktir, amına koyayım, lan) ve olayın ORTASINDA tepki olarak; başa/sona eklenmez; kişiye/gruba hakaret yok.",
+  "dogruluk": "Her bilgi yayından önce kaynaktan doğrulanır; metnin altında bilgi kontrol tablosu olur. Uydurma rakam yok.",
+  "anlaticilar": [
+    {
+      "ad": "yasli-dayi",
+      "elevenlabs_voice": "mF7tIc9VLrznhGooGjaT",
+      "not": "paylaşılan ses: yaşlı, tok, sokak ağzı"
+    },
+    {
+      "ad": "cizgi-film",
+      "elevenlabs_voice": "DUnzBkwtjRWXPr6wRbmL",
+      "not": "paylaşılan ses: çizgi film karakteri"
+    }
+  ],
+  "anlatici_kurali": "İki anlatıcı videodan videoya dönüşümlü; hangisinin daha iyi gittiği ölçülür.",
+  "tts": {
+    "model": "eleven_v3",
+    "language_code": "tr",
+    "voice_settings": {
+      "stability": 0,
+      "similarity_boost": 0.75,
+      "style": 0.6,
+      "speed": 1.1
+    }
+  },
+  "marka": {
+    "logo": [
+      "OXYG",
+      "BIO"
+    ],
+    "etiket": "NE OLURDU?",
+    "cta": [
+      "SIRADAKİ YER NE OLSUN?",
+      "YORUMA YAZ"
+    ],
+    "ses": "7-hizlanan-kayis",
+    "yukselis": 0.85
+  },
+  "renkler": {
+    "paper": "#F4EEDF",
+    "ink": "#1F2A30",
+    "coral": "#E8553A",
+    "o2": "#1FA9BE"
+  },
+  "gorsel": {
+    "ucretsiz": "kodla animasyon (sahneler.js)",
+    "ucretli": "Higgsfield görsel + kısa klip, video başına en fazla 50 kredi (ucretli.json)"
+  }
+}

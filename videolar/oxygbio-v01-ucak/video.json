@@ -1,0 +1,52 @@
+{
+  "_aciklama": "Bir videonun tarifi. satirlar sırayla seslendirilir; ilk satır kanca (marka sesi ondan sonra vurur), son satır kapanış (kapanış marka ekranı ondan sonra).",
+  "kanal": "../../kanal/oxygbio/kimlik.json",
+  "baslik": "Evrendeki bütün oksijen yok olursa uçakta ne olur?",
+  "anlaticilar": {
+    "dayi": "mF7tIc9VLrznhGooGjaT",
+    "kaptan": "DUnzBkwtjRWXPr6wRbmL"
+  },
+  "anons_rolleri": [
+    "kaptan"
+  ],
+  "hiz": 1.15,
+  "duzeltme": {
+    "yerde": "yer de",
+    "içinde": "için de"
+  },
+  "satirlar": [
+    {
+      "rol": "dayi",
+      "metin": "[excited] Lan, on bir bin metredesin, ikram arabası geliyor… [dramatic pause] ve evrendeki bütün oksijen bir anda yok oluyor."
+    },
+    {
+      "rol": "dayi",
+      "metin": "İlk giden pencere. Uçak camı aslında cam değil, akrilik; üçte biri oksijen. [shouting] Pıt, toz oldu! Hassiktir, kabinle gökyüzü arasında artık hiçbir şey yok."
+    },
+    {
+      "rol": "kaptan",
+      "metin": "[cheerfully] Sayın yolcularımız, sağ tarafımızda… [pause] sağ tarafımız kalmamıştır."
+    },
+    {
+      "rol": "dayi",
+      "metin": "Sonra sıra sende. Vücudunun üçte ikisi oksijen. O gidince geriye bir torba karbon, hidrojen, azot kalıyor. [shouting] Elindeki çay bile buhar gibi uçtu amına koyayım! Suyun ağırlığının onda dokuzu oksijen."
+    },
+    {
+      "rol": "dayi",
+      "metin": "Peki uçak? Gövde alüminyum, onda oksijen yok denecek kadar az. Yani uçak duruyor, içindeki herkes gitti. Motorlar sönük, bomboş bir uçak aşağı süzülüyor."
+    },
+    {
+      "rol": "kaptan",
+      "metin": "[calm] Kaptanınız konuşuyor… daha doğrusu… [pause] konuşuyordu."
+    },
+    {
+      "rol": "dayi",
+      "metin": "Düşer mi? Düşer. Parçalanır mı? Parçalanır. [shouting] Ama siktir, düşeceği yer de kalmadı! Yerkabuğunun yarısı oksijen. Uçak toza dönmüş bir dünyaya çakılıyor, yanmıyor bile. Ateş için de oksijen lazım."
+    },
+    {
+      "rol": "dayi",
+      "metin": "[laughs] Peki enkazdan sağlam çıkan tek şey ne? İkram arabası. O da alüminyum."
+    }
+  ],
+  "aciklama_instagram": "Evrendeki bütün oksijen bir anda yok olsa, uçakta ne olurdu? ✈️💨\n\nSıradaki yer ne olsun? Yoruma yaz 👇\n\n#bilim #neolurdu #oksijen #uçak"
+}

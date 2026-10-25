@@ -1,0 +1,26 @@
+{
+  "_aciklama": "Bu klasörü videolar/<kanal>-v<NN>-<konu>/ olarak kopyala. Satırlar sırayla seslendirilir; ilk satır kanca (marka sesi ondan sonra vurur), son satır kapanış. Rol adları anlaticilar'daki anahtarlarla aynı olmalı.",
+  "kanal": "../../kanal/KANAL_ADI/kimlik.json",
+  "baslik": "Videonun sorusu",
+  "anlaticilar": {
+    "anlatici": "SES_ID"
+  },
+  "anons_rolleri": [],
+  "hiz": 1.15,
+  "duzeltme": {},
+  "satirlar": [
+    {
+      "rol": "anlatici",
+      "metin": "[excited] Kanca cümlesi: durumu kur, merakı aç."
+    },
+    {
+      "rol": "anlatici",
+      "metin": "İlk sonuç, bir gerçek bilgiyle."
+    },
+    {
+      "rol": "anlatici",
+      "metin": "Ters köşe kapanış."
+    }
+  ],
+  "aciklama_instagram": "Instagram açıklaması #etiket"
+}
