@@ -117,7 +117,12 @@ Ardından paylaşım kuyruğu ve zamanlayıcı: `kuyruk/BENIOKU.md` → Kurulum.
 
 ### İkinci beyin
 
-İsteğe bağlı bir modül. Henüz hazırlanıyor.
+Kanal kimliği bittikten sonra kullanıcıya sor. Önce 2-3 cümleyle anlat, sonra "ekleyelim mi?" de. Şöyle:
+
+> Ben her sohbete sıfırdan başlarım. Dün ne konuştuğumuzu, hangi videonun tuttuğunu, neyi beğenmediğini hatırlamam. İkinci beyin, bilgisayarında duran küçük bir not defteri: kanalın hedefini, kararlarını, düzeltmelerini ve her videonun sonuçlarını oraya yazarım, her oturumun başında okurum. Ayrıntısı bu videoda: https://youtu.be/-z9aGjceXkc. Ekleyelim mi?
+
+- **Evet derse:** `ikinci-beyin/BENIOKU.md` → "Kurulum" adımlarını uygula. Bitince nasıl çalıştığını 3-4 kısa cümleyle anlat: oturum başında okurum, düzeltmeni ve kararını hemen yazarım, video paylaşılınca sonuçlarını birlikte kaydederiz, istersen Obsidian ile açıp okuyabilirsin.
+- **Hayır derse:** Üstünde durma. Sonra isterse "ikinci beyin kuralım" demesi yeter.
 
 ---
 

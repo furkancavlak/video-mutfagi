@@ -64,6 +64,12 @@ Kurulum bu videoyu senin bilgisayarında yeniden üretir. Kurulumun çalıştı�
 
 Repodaki komutların çoğu bu hataları zaten engelliyor.
 
+## İkinci beyin (isteğe bağlı)
+
+Yapay zekâ her sohbete sıfırdan başlar. İkinci beyin, bilgisayarında duran küçük bir not defteri. Ajan içine kanalın hedefini, kararlarını, düzeltmelerini ve her videonun sonuçlarını yazar, her oturumun başında okur. Aynı şeyi iki kez söylemen gerekmez. Kurulumda ajan sana sorar. İstersen Obsidian ile açıp okuyabilirsin.
+
+Ayrıntısı bu videoda: https://youtu.be/-z9aGjceXkc · Modül: `ikinci-beyin/BENIOKU.md`
+
 ## Senin sonuçların
 
 Bu sistemle bir video yayınladın ve izlendiyse Discussions'a yaz: kaç izlenme aldı, ne işe yaradı, ne yaramadı. En çok bunu duymak istiyoruz.

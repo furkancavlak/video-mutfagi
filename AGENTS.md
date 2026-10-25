@@ -4,10 +4,11 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 
 ## İlk iş
 
-0. Kuyruk kuruluysa önce `node kuyruk/kuyruk.js durum` çalıştır, uyarı varsa kullanıcıya ilk iş olarak söyle (ev bilgisayarında otomasyon sessizce durabilir).
-1. `node kurulum/doktor.js` çalıştır. Komut çalışmıyorsa ya da ✗ varsa `kurulum/KURULUM.md`'yi baştan sona uygula.
-2. Kurulum bittiyse örnek videoyu üret (KURULUM adım 5) ve kullanıcıya izlet. Kurulumun çalıştığının kanıtı budur.
-3. Kanal kimliği yoksa `kanal/KIMLIK-REHBERI.md`'ye geç. Kimlik varsa video üretimi için `uretim/TARIF.md`'ye geç.
+0. **İkinci beyin kuruluysa** (`ayarlar/ikinci-beyin.json` varsa) önce `node ikinci-beyin/beyin.js ozet` çalıştır ve oku. Oradaki kurallara ve kararlara uy. Bağlamda `<ikinci-beyin>` bloğu zaten varsa (Claude Code kancası) tekrar çalıştırma. Kullanıcı "selam" bile dese ilk cevapta kısaca söyle: son durum, sıradaki iş, bekleyen karar.
+1. Kuyruk kuruluysa önce `node kuyruk/kuyruk.js durum` çalıştır, uyarı varsa kullanıcıya ilk iş olarak söyle (ev bilgisayarında otomasyon sessizce durabilir).
+2. `node kurulum/doktor.js` çalıştır. Komut çalışmıyorsa ya da ✗ varsa `kurulum/KURULUM.md`'yi baştan sona uygula.
+3. Kurulum bittiyse örnek videoyu üret (KURULUM adım 5) ve kullanıcıya izlet. Kurulumun çalıştığının kanıtı budur.
+4. Kanal kimliği yoksa `kanal/KIMLIK-REHBERI.md`'ye geç. Kimlik varsa video üretimi için `uretim/TARIF.md`'ye geç.
 
 ## Değişmez kurallar
 
@@ -35,6 +36,17 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 | `kuyruk/` | `BENIOKU.md`, `kuyruk.js`: videolar sıraya girer, zamanlayıcı saati gelince paylaşır, sonuçları çeker |
 | `dersler/` | `HATALAR.md`, `KURGU-DILI.md`, `METIN.md` |
 | `konu/` | Konu radarı: forum ve trend sitelerinden kanala uygun video fikri bulur, isterse otomatik üretir. `BENIOKU.md`, `radar.js` |
+| `ikinci-beyin/` | Kanalın hafızası: profil, kararlar, düzeltmeler, video sonuçları. `BENIOKU.md`, `beyin.js`, `sablon/` |
+
+## İkinci beyin (isteğe bağlı)
+
+Kurulumda kanal kimliğinden sonra kullanıcıya önerilir (`kurulum/KURULUM.md` → "İkinci beyin"). Kuruluysa:
+
+- **Düzeltme gelince** ("bunu böyle yapma", "şöyle istiyorum") sormadan yaz: `node ikinci-beyin/beyin.js kural "..." --neden "..."`.
+- **Karar gelince** yaz: `karar "..." --neden "..."`. Bir referansın stilinden ölçülebilir kural çıkınca: `stil "..." --neden "..."`.
+- **Video paylaşılınca** `node ikinci-beyin/beyin.js video-kaydet videolar/<video>` çalıştır. 1 gün ve 7 gün sonra `node kuyruk/kuyruk.js sonuclar` çalıştır, notlar kendiliğinden güncellenir. Sayıları kullanıcıya göster, birlikte "ne tuttu, ne tutmadı" yaz (`--tuttu "..." --tutmadi "..."`). Genel bir ders çıkarsa kural ya da karar olarak da yaz.
+- **Oturum biterken** kasadaki `son-durum.md`'yi 3-5 satırla yeniden yaz: ne yapıldı, sıradaki iş, bekleyen karar.
+- Tahmini gerçek gibi yazma ("tahmin:" diye başlat). Gizli bilgi yazma. Ayrıntı: `ikinci-beyin/BENIOKU.md`.
 
 ## Konu radarı (isteğe bağlı)
 
