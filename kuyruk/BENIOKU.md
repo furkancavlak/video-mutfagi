@@ -1,6 +1,6 @@
 # Paylaşım kuyruğu
 
-Instagram'ın API'sinde "şu saatte yayınla" diye bir ayar yok. Planlama yalnız uygulamanın içinde, elle yapılabiliyor. Bu yüzden videoları biz tutuyoruz. Bilgisayardaki bir zamanlayıcı her 15 dakikada bir kuyruğa bakar ve saati gelen videoyu paylaşır.
+Instagram'ın API'sinde "şu saatte yayınla" diye bir ayar yok. Planlama yalnız uygulamanın içinde, elle yapılabiliyor. Bu yüzden videoları biz tutuyoruz. Bilgisayardaki bir zamanlayıcı her 5 dakikada bir kuyruğa bakar ve saati gelen videoyu paylaşır.
 
 ## Nasıl çalışır
 
@@ -24,7 +24,7 @@ node kuyruk/kuyruk.js zamanlayici kur | kaldir | durum
 1. `kuyruk/ayar-ornek.json` dosyasını `ayarlar/kuyruk.json` olarak kopyala. Kullanıcıya iki şey sor ve dosyaya yaz:
    - hangi saatlerde paylaşılsın,
    - günde en fazla kaç video olsun.
-2. Zamanlayıcıyı kurmadan önce kullanıcıya ne olacağını söyle ve onay al: "Bilgisayarına her 15 dakikada bir çalışan bir görev ekleyeceğim. Kuyrukta saati gelen video varsa Instagram'a paylaşır." Onay gelince:
+2. Zamanlayıcıyı kurmadan önce kullanıcıya ne olacağını söyle ve onay al: "Bilgisayarına her 5 dakikada bir çalışan bir görev ekleyeceğim. Kuyrukta saati gelen video varsa Instagram'a paylaşır." Onay gelince:
 
    ```
    node kuyruk/kuyruk.js zamanlayici kur

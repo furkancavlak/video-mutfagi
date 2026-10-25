@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Posting queue. Instagram's API has no "publish at" option, so we keep the videos ourselves and a scheduler
-// (Windows Task Scheduler, cron, or a server) runs `calistir` every 15 minutes; whatever is due gets posted.
+// (Windows Task Scheduler, cron, or a server) runs `calistir` every 5 minutes; whatever is due gets posted.
 //
 //   node kuyruk/kuyruk.js ekle <video.mp4> --aciklama "..." [--zaman "2026-10-27 19:00"] [--onay-gerekli]
 //   node kuyruk/kuyruk.js liste                   what is waiting, when it goes, what needs approval
@@ -186,7 +186,7 @@ async function sonuclar() {
   }
 }
 
-// --- scheduler: every 15 min. Windows: Task Scheduler (runs a missed run as soon as the PC is on); Linux/Mac: cron.
+// --- scheduler: every 15 min. every 5 min. Windows: Task Scheduler (runs a missed run as soon as the PC is on); Linux/Mac: cron.
 function zamanlayiciVarMi() {
   if (WIN) return spawnSync('schtasks', ['/Query', '/TN', GOREV], { encoding: 'utf8' }).status === 0;
   const r = spawnSync('crontab', ['-l'], { encoding: 'utf8' }); return r.status === 0 && r.stdout.includes('kuyruk/kuyruk.js calistir');
@@ -197,18 +197,18 @@ function zamanlayici(alt) {
     fs.mkdirSync(path.dirname(LOG), { recursive: true });
     if (WIN) {
       const ps = `$a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c ""${node}"" ""${betik}"" calistir >> ""${LOG}"" 2>&1' -WorkingDirectory '${KOK}';
-$t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 15);
+$t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5);
 $s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -MultipleInstances IgnoreNew;
 Register-ScheduledTask -TaskName '${GOREV}' -Action $a -Trigger $t -Settings $s -Description 'video-mutfagi: zamani gelen videoyu Instagram''a paylasir' -Force | Out-Null`;
       const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8' });
       if (r.status !== 0) fail('zamanlayıcı kurulamadı: ' + (r.stderr || r.stdout).trim().slice(0, 400));
     } else {
-      const satir = `*/15 * * * * cd "${KOK}" && "${node}" "${betik}" calistir >> "${LOG}" 2>&1`;
+      const satir = `*/5 * * * * cd "${KOK}" && "${node}" "${betik}" calistir >> "${LOG}" 2>&1`;
       const eski = spawnSync('crontab', ['-l'], { encoding: 'utf8' }).stdout || '';
       const r = spawnSync('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js calistir')).concat(satir).join('\n') + '\n', encoding: 'utf8' });
       if (r.status !== 0) fail('crontab yazılamadı: ' + r.stderr);
     }
-    console.log(`Zamanlayıcı kuruldu: her 15 dakikada bir "calistir" çalışır. Kayıt: ${path.relative(KOK, LOG)}`);
+    console.log(`Zamanlayıcı kuruldu: her 5 dakikada bir "calistir" çalışır. Kayıt: ${path.relative(KOK, LOG)}`);
     if (!/sunucu/i.test(ayar().makine_turu || '')) console.log('Ev bilgisayarı: paylaşım saatinde bilgisayar AÇIK ve UYANIK olmalı. Kapalıysa video açılınca, gecikmeli paylaşılır. Her gün `node kuyruk/kuyruk.js durum` ile bak.');
   } else if (alt === 'kaldir') {
     if (WIN) spawnSync('schtasks', ['/Delete', '/TN', GOREV, '/F']);
