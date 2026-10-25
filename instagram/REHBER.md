@@ -71,11 +71,24 @@ node instagram/paylas.js gonder video.mp4 --aciklama "..."
 
 Her paylaşım `kayit/paylasimlar.jsonl` dosyasına yazılır.
 
+## Ev interneti mi, sunucu mu?
+
+Instagram videoyu senin verdiğin adresten **~40 saniye içinde** indirmek zorunda. Yetişmezse tek kelimelik bir hata verir: "ERROR".
+
+- **Bilgisayardan (tünel ile):** Yükleme hızın düşükse (Türkiye'de ev hatlarında sık görülür, saniyede ~250 KB) video **~6 MB'ı geçmemeli**. Hız ölçmek için önce `--hazirla` ile dene. Hata mesajı Instagram'ın ne kadarını alabildiğini yazar.
+- **Sunucudan (önerilen):** Videoyu sunucuda herkese açık bir adrese koy ve şöyle gönder:
+
+  ```
+  node instagram/paylas.js gonder video.mp4 --adres https://alan-adin/video.mp4 --aciklama "..."
+  ```
+
+  Tünel kullanılmaz, boyut sorun olmaz, bilgisayarının açık olması gerekmez. Paylaşımdan sonra dosyayı sunucudan sil.
+
 ## Bilmen gerekenler
 
 - **Paylaşım sınırı:** 24 saatte en fazla 100 paylaşım. Ama yeni bir hesapta ilk haftalarda **günde 1** paylaşımı geçme.
 - **Silme:** API gönderi silemez. Silme ve arşivleme elle yapılır.
 - **İstatistik:** Hesabı profesyonele geçirmeden önce atılmış gönderilerin istatistiği gelmez.
 - **Anahtar süresi:** Anahtar 60 gün geçerlidir. Süre dolmadan yenile: `node instagram/paylas.js yenile`.
-- **Bilgisayar açık olmalı:** Video paylaşım sırasında bu bilgisayardan sunulur, bilgisayar kapalıyken paylaşım yapılamaz.
+- **Bilgisayar açık olmalı:** Tünel yolunda video paylaşım sırasında bu bilgisayardan sunulur, bilgisayar kapalıyken paylaşım yapılamaz. Sunucu yolunda bu şart yok.
 - **AI etiketi:** Gerçekçi yapay zekâ sesi ya da görüntüsü kullanıyorsan paylaşırken Instagram'ın AI etiketini aç.

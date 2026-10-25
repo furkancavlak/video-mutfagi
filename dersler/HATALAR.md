@@ -36,6 +36,10 @@ Her madde aynı biçimde yazılmıştır: **ne oldu**, ardından **→ ne yap**.
   → Hesabın Business ya da Creator olması şart. Profesyonele geçmeden önce atılmış gönderilerin istatistiği API'den gelmez.
 - **API ile gönderi silmeye çalıştık.**
   → API silme yapamaz. Eski gönderiler elle arşivlenir.
+- **Instagram videoyu reddetti ("ERROR"), açıklama vermedi.** Asıl sebep ev internetinin yükleme hızıydı. Instagram videoyu bilgisayardan geçici tünelle çekerken ~40 saniyede kesiyor. Saniyede ~250 KB yükleme hızıyla bu sürede ~9 MB gider; 23-37 MB'lık videolar yarıda kaldı. Aynı gün çok tünel açınca Cloudflare de geçici adres vermeyi bir süre kesti.
+  → Kalıcı çözüm: Paylaşımı hızlı internetli bir sunucudan yap. Video sunucuda herkese açık bir adreste durur, `--adres https://...` ile o adres verilir, tünel kullanılmaz.
+  → Bilgisayardan paylaşacaksan videoyu ~6 MB'a sığdır. 720p ve iki geçişli kodlamada görüntü farkı neredeyse yok.
+  → Betik artık hatada Instagram'ın videoyu ne kadar çekebildiğini yazıyor ("YARIDA KESİLDİ 9.6 MB 38 sn").
 - **Yeni bir hesaptan ilk gün çok paylaşım yapmak** spam işaretine yol açabilir.
   → İlk haftalarda günde en fazla 1 paylaşım yap. Gerçekçi yapay zekâ sesi ya da görüntüsü kullandıysan Instagram'ın "AI etiketi"ni aç.
 

@@ -7,6 +7,7 @@
 //   node instagram/paylas.js gonder <video.mp4> [--aciklama "..."] [--kuru] [--hazirla]
 //     --kuru     only checks the tunnel; nothing is sent to Instagram
 //     --hazirla  Instagram downloads and processes the video, but it is NOT published
+//     --adres    the file is already at a public https address (server); skips the tunnel
 //
 // Instagram fetches Reels from a public URL, so `gonder` serves the file from this computer
 // through a temporary Cloudflare quick tunnel (no account needed) only while Instagram downloads it.
@@ -28,7 +29,16 @@ async function graph(method, p, params = {}) {
   const opts = { method };
   if (method === 'GET') for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   else opts.body = new URLSearchParams(params);
-  const r = await fetch(url, opts);
+  // GETs (status polls) survive dropped connections, e.g. while a slow upload line is busy serving the video.
+  // POSTs are never retried: a retried publish could post twice.
+  let r;
+  for (let i = 0; ; i++) {
+    try { r = await fetch(url, { ...opts, signal: AbortSignal.timeout(60000) }); break; }
+    catch (e) {
+      if (method !== 'GET' || i >= 8) throw new Error(`${method} ${p}: bağlantı koptu (${(e.cause && e.cause.code) || e.name})`);
+      await sleep(5000 * Math.min(i + 1, 4));
+    }
+  }
   const j = await r.json().catch(() => ({}));
   if (!r.ok || j.error) throw new Error(`${method} ${p}: ${j.error ? j.error.message + ' (kod ' + j.error.code + ')' : r.status}`);
   return j;
@@ -52,6 +62,8 @@ function serve(file) {
     res.writeHead(code, { 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1,
       ...(code === 206 ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}) });
     if (req.method === 'HEAD') return res.end();
+    const t0 = Date.now(), i = hits.length - 1;
+    res.on('close', () => { hits[i] += ` → ${res.writableFinished ? 'tamam' : 'YARIDA KESİLDİ'} ${((res.socket && res.socket.bytesWritten) / 1048576 || 0).toFixed(1)} MB ${((Date.now() - t0) / 1000).toFixed(0)} sn`; });
     fs.createReadStream(file, { start, end }).pipe(res);
   });
   return new Promise(ok => srv.listen(0, '127.0.0.1', () => ok({ srv, port: srv.address().port, name, hits })));
@@ -62,7 +74,13 @@ function tunnel(port) {
     const p = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${port}`], { windowsHide: true });
     let buf = '';
     const t = setTimeout(() => { p.kill(); no(new Error('tünel 60 sn içinde açılmadı')) }, 60e3);
-    const on = d => { buf += d; const m = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/.exec(buf); if (m) { clearTimeout(t); ok({ proc: p, url: m[0] }); } };
+    // the real address is a random multi-word subdomain; api.trycloudflare.com only appears in error messages (e.g. 429 rate limit)
+    const on = d => {
+      buf += d;
+      if (/429|Too Many Requests/i.test(buf)) { clearTimeout(t); p.kill(); return no(new Error('Cloudflare şu an yeni geçici adres vermiyor (kısa sürede çok deneme). 10-15 dk sonra tekrar dene.')); }
+      const m = /https:\/\/(?!api\.)[a-z0-9]+(?:-[a-z0-9]+)+\.trycloudflare\.com/.exec(buf);
+      if (m) { clearTimeout(t); ok({ proc: p, url: m[0] }); }
+    };
     p.stdout.on('data', on); p.stderr.on('data', on);
     p.on('error', e => { clearTimeout(t); no(new Error('cloudflared bulunamadı: ' + e.message)) });
   });
@@ -76,16 +94,20 @@ async function waitReachable(url) {
   throw new Error('tünel adresi dışarıdan açılmadı: ' + url);
 }
 
-async function gonder(file, aciklama, kuru, hazirla) {
-  if (!fs.existsSync(file)) fail('video yok: ' + file);
+// adres: the video already sits at a public https address (e.g. on a server) -> no local server, no tunnel
+async function gonder(file, aciklama, kuru, hazirla, adres) {
+  if (!adres && !fs.existsSync(file)) fail('video yok: ' + file);
   const ayar = readAyar();
   if (!kuru && !ayar) fail('önce token kaydet: node instagram/paylas.js kaydet <dosya>');
-  const s = await serve(file);
+  const s = adres ? { hits: [], srv: { close() {} } } : await serve(file);
   let tn;
   try {
-    console.log('1/5 Video internete geçici olarak açılıyor…');
-    tn = await tunnel(s.port);
-    const videoUrl = tn.url + s.name;
+    let videoUrl = adres;
+    if (!adres) {
+      console.log('1/5 Video internete geçici olarak açılıyor…');
+      tn = await tunnel(s.port);
+      videoUrl = tn.url + s.name;
+    } else console.log('1/5 Video şu adresten verilecek: ' + adres);
     await waitReachable(videoUrl);
     console.log('    adres hazır');
     if (kuru) {
@@ -101,7 +123,7 @@ async function gonder(file, aciklama, kuru, hazirla) {
       await sleep(5000);
       st = await graph('GET', `/${c.id}`, { fields: 'status_code,status', access_token: ayar.token });
       if (st.status_code === 'FINISHED') break;
-      if (st.status_code === 'ERROR' || st.status_code === 'EXPIRED') throw new Error('Instagram videoyu kabul etmedi: ' + (st.status || st.status_code));
+      if (st.status_code === 'ERROR' || st.status_code === 'EXPIRED') throw new Error('Instagram videoyu kabul etmedi: ' + (st.status || st.status_code) + ` | videoya gelen istekler (${s.hits.length}): ` + (s.hits.slice(0, 8).join(', ') || 'HİÇ — Instagram adrese ulaşamadı'));
     }
     if (st.status_code !== 'FINISHED') throw new Error('Instagram 7,5 dk içinde işlemeyi bitirmedi');
     if (hazirla) { console.log(`HAZIRLANDI, PAYLAŞILMADI: Instagram videoyu kabul etti (konteyner ${c.id}). Yayınlanmadı; 24 saat içinde kendiliğinden silinir.`); return; }
@@ -137,8 +159,9 @@ async function gonder(file, aciklama, kuru, hazirla) {
     console.log(`Token yenilendi, ${Math.round(r.expires_in / 86400)} gün geçerli.`);
   } else if (cmd === 'gonder') {
     const i = rest.indexOf('--aciklama');
-    await gonder(a1, i >= 0 ? rest[i + 1] : '', rest.includes('--kuru'), rest.includes('--hazirla'));
+    const j = rest.indexOf('--adres');
+    await gonder(a1, i >= 0 ? rest[i + 1] : '', rest.includes('--kuru'), rest.includes('--hazirla'), j >= 0 ? rest[j + 1] : null);
   } else {
-    console.log('Kullanım: kaydet <token-dosyasi> | kontrol | yenile | gonder <video.mp4> [--aciklama "..."] [--kuru]');
+    console.log('Kullanım: kaydet <token-dosyasi> | kontrol | yenile | gonder <video.mp4> [--aciklama "..."] [--kuru] [--hazirla] [--adres https://...]');
   }
 })().catch(e => fail(e.message));
