@@ -35,10 +35,15 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 | `kuyruk/` | `BENIOKU.md`, `kuyruk.js`: videolar sıraya girer, zamanlayıcı saati gelince paylaşır, sonuçları çeker |
 | `dersler/` | `HATALAR.md`, `KURGU-DILI.md`, `METIN.md` |
 | `konu/` | Konu radarı: forum ve trend sitelerinden kanala uygun video fikri bulur, isterse otomatik üretir. `BENIOKU.md`, `radar.js` |
+| `kesit/` | Uzun yatay videodan dikey kısa: tanıtım (cevaptan önce kesilir) ya da en iyi an. `BENIOKU.md`, `kesit.js` |
 
 ## Konu radarı (isteğe bağlı)
 
 Kullanıcı "konu bul", "ne çeksem", "fikir öner" derse: `konu/BENIOKU.md`. Kısaca `node konu/radar.js topla <kanal>` → `puanla <kanal>` → kullanıcıya `kanal/<kanal>/fikirler.html`'i aç. Otomasyon seviyesi (`kanal/<kanal>/konu.json` → `otomasyon`) ve bütçe sınırları kullanıcıyla birlikte yazılır; tam otomatik paylaşımı kullanıcı açıkça istemeden açma.
+
+## Uzun videodan dikey kesit (isteğe bağlı)
+
+Kullanıcı "uzun videomdan kısa çıkar", "tanıtım reels'i", "en iyi anı kes" derse: `kesit/BENIOKU.md`. Kısaca `node kesit/kesit.js yazi <uzun.mp4>` → `sec <uzun.mp4>` → `yap <uzun.mp4> --aday 1 --kare` (karelere bak) → `yap <uzun.mp4> --aday 1`. Çıktılar uzun videonun yanındaki `<ad>-kesit/` klasörüne gider, repoya değil. Kullanıcıya videoyu izlet. Kuyruğa yalnız o isterse ekle (komutu `yap` yazar).
 
 ## Bir video klasörü
 
