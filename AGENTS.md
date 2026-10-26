@@ -39,6 +39,7 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 | `konu/` | Konu radarı: forum ve trend sitelerinden kanala uygun video fikri bulur, isterse otomatik üretir. `BENIOKU.md`, `radar.js` |
 | `ikinci-beyin/` | Kanalın hafızası: profil, kararlar, düzeltmeler, video sonuçları. `BENIOKU.md`, `beyin.js`, `sablon/` |
 | `kesit/` | Uzun yatay videodan dikey kısa: tanıtım (cevaptan önce kesilir) ya da en iyi an. `BENIOKU.md`, `kesit.js` |
+| `stil/` | Stil kopyalama: bir kanalın kurgu dilini (kesme, zoom, geçiş, altyazı, renk, ses) videolarından ölçer, bizim videoyu onunla karşılaştırır. `BENIOKU.md`, `olc.js` |
 
 ## İkinci beyin (isteğe bağlı)
 
@@ -57,6 +58,10 @@ Kullanıcı "konu bul", "ne çeksem", "fikir öner" derse: `konu/BENIOKU.md`. K�
 ## Uzun videodan dikey kesit (isteğe bağlı)
 
 Kullanıcı "uzun videomdan kısa çıkar", "tanıtım reels'i", "en iyi anı kes" derse: `kesit/BENIOKU.md`. Kısaca `node kesit/kesit.js yazi <uzun.mp4>` → `sec <uzun.mp4>` → `yap <uzun.mp4> --aday 1 --kare` (karelere bak) → `yap <uzun.mp4> --aday 1`. Çıktılar uzun videonun yanındaki `<ad>-kesit/` klasörüne gider, repoya değil. Kullanıcıya videoyu izlet. Kuyruğa yalnız o isterse ekle (komutu `yap` yazar).
+
+## Stil kopyalama (isteğe bağlı)
+
+Kullanıcı "şu kanal gibi kurgula", "editörümün stilini kopyala", "bu videolar gibi olsun" derse: `stil/BENIOKU.md`. Kısaca: aynı kanaldan 5+ videoyu en yüksek çözünürlükte `stil/<ad>/ornekler/` içine koy → `node stil/olc.js <ad>` → uyarı varsa (düşük çözünürlük, kare hızı dönüştürülmüş) daha iyi kopya bul ve yeniden ölç → `stil/<ad>/kareler/` sayfalarını aç, sayıları gözle doğrula → `stil/<ad>/kurallar.md`'yi yaz (SABİT / SIK / ARA SIRA + felsefe ve vuruş tablosu) → render'dan sonra `node stil/olc.js karsilastir <ad> <video.mp4>`. Gözle ölçme, ölçerek bul. Referans kopya değildir (kural 8).
 
 ## Bir video klasörü
 

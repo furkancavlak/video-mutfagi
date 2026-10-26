@@ -14,6 +14,7 @@ Fiyatlar sık değişir. Para harcamadan önce aracın kendi sayfasına bak. Rep
 | HyperFrames | Kodla animasyonu videoya çevirir | Bedava, açık kaynak |
 | GSAP | Animasyonların zamanlaması | Bedava, ticari kullanım dahil |
 | ffmpeg | Ses ve videoyu keser, birleştirir, sıkıştırır | Bedava, açık kaynak |
+| yt-dlp | Stil kopyalamada örnek videoyu en yüksek çözünürlükte indirir (isteğe bağlı) | Bedava, açık kaynak |
 | faster-whisper | Sesteki her kelimenin zamanını bulur | Bedava, senin bilgisayarında çalışır |
 | Node.js | Repodaki betikleri çalıştırır | Bedava |
 | Python | Whisper'ı çalıştırır | Bedava |
@@ -67,6 +68,11 @@ Repoyu kuran, metni yazan, sahneyi kodlayan ve videoyu denetleyen yardımcı. Re
 - **Ne:** Ses ve videoyu keser, birleştirir, ses seviyesini ayarlar, sıkıştırır.
 - **Durum:** Bedava, açık kaynak (LGPL; bazı derlemeleri GPL).
 - **Bağlantı:** https://ffmpeg.org/legal.html
+
+### yt-dlp (isteğe bağlı)
+- **Ne:** Stil kopyalamada (`stil/`) ölçülecek örnek videoları en yüksek çözünürlükte, kendi kare hızında indirir: `yt-dlp -f "bv*+ba/b" <link>`. Videolar yalnız ölçüm içindir, paylaşılmaz; platformun kullanım şartlarına uy.
+- **Durum:** Bedava, açık kaynak (Unlicense).
+- **Bağlantı:** https://github.com/yt-dlp/yt-dlp
 
 ### faster-whisper (Whisper)
 - **Ne:** Seste hangi kelimenin hangi saniyede söylendiğini bulur. Animasyon bu zamanlara kilitlenir.

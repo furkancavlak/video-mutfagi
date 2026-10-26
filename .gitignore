@@ -25,3 +25,7 @@ kuyruk/.kilit
 # second brain: the user's own notes and numbers (default vault) and the local Claude Code hook
 ikinci-beyin/kasa/
 .claude/settings.local.json
+# style copying: sample videos, contact sheets and comparison frames (copies of someone else's videos)
+stil/*/ornekler/
+stil/*/kareler/
+stil/*/karsilastirma/
