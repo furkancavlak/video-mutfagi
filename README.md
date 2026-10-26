@@ -16,7 +16,7 @@ Kod bilmen gerekmez. Bu repoyu, Furkan Cavlak kanalında kendi videolarını nas
 1. Bir yapay zekâ kodlama aracı aç: Claude Code, Codex ya da benzeri. Masaüstü uygulaması ya da VS Code eklentisi olabilir.
 2. Şunu yaz:
 
-   > https://github.com/furkancavlakcom/video-mutfagi reposunu kur ve örnek videoyu çıkar.
+   > https://github.com/furkancavlak/video-mutfagi reposunu kur ve örnek videoyu çıkar.
 
 3. Ajan kurulumu yapar. Senden yalnız tarayıcıda yapılacak işleri (hesap açma, giriş) ve onayları ister. Sonunda örnek videoyu açıp sana izletir.
 4. Sonra şunu yaz:
@@ -59,6 +59,8 @@ Ayrıntılar, bağlantılar ve kontrol tarihi: `ARACLAR.md`.
 Her videonun iki yolu var. **Ücretsiz** yolda görüntü kodla çizilir. **Ücretli** yolda yapay zekâ görselleri ve kısa klipleri kullanılır. Örnek videonun iki hâli de repoda, ikisini izleyip karşılaştırabilirsin.
 
 ## Örnek: "Evrendeki bütün oksijen yok olursa uçakta ne olur?"
+
+Bu sistemle ürettiğimiz videolar Instagram'da [@oxygbio](https://www.instagram.com/oxygbio/) hesabında.
 
 `videolar/oxygbio-v01-ucak/` klasöründe her adımın çıktısı duruyor:
 - metin ve bilgi kontrol tablosu,

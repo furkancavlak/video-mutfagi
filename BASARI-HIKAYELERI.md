@@ -6,7 +6,7 @@ Bu sistemle bir video yaptın ve izlendi mi? Bize yaz. Kaç izlenme aldığını
 
 GitHub Discussions, **"Başarı hikâyeleri"** bölümü:
 
-https://github.com/furkancavlakcom/video-mutfagi/discussions
+https://github.com/furkancavlak/video-mutfagi/discussions
 
 1. GitHub'a giriş yap (hesap bedava).
 2. Bağlantıyı aç, **New discussion** düğmesine bas.

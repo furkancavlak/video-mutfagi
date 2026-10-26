@@ -1,6 +1,6 @@
 // Polite HTTP for collectors: honest User-Agent, one request at a time per host with a minimum gap,
 // timeouts, a single retry on network/5xx errors, robots.txt check for HTML pages, and tiny XML/HTML helpers.
-const UA = 'video-mutfagi-konu-radari/0.1 (+https://github.com/furkancavlakcom/video-mutfagi; acik kaynak konu radari)';
+const UA = 'video-mutfagi-konu-radari/0.1 (+https://github.com/furkancavlak/video-mutfagi; acik kaynak konu radari)';
 
 class KaynakHatasi extends Error {
   constructor(kaynak, mesaj, engel = false) { super(mesaj); this.name = 'KaynakHatasi'; this.kaynak = kaynak; this.engel = engel; }

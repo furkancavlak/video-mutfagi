@@ -30,7 +30,7 @@ node kurulum/doktor.js
 Repoyu kısa bir yola klonla, ör. `C:\Users\<ad>\video-mutfagi` ya da Belgeler. Windows 260 karakterden uzun dosya yollarını açamıyor. Repo çok derin bir klasörde durursa render yarıda kalır.
 
 ```
-git clone https://github.com/furkancavlakcom/video-mutfagi
+git clone https://github.com/furkancavlak/video-mutfagi
 cd video-mutfagi
 npm install
 npx hyperframes browser ensure
