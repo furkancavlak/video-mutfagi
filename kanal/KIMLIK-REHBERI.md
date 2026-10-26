@@ -9,7 +9,7 @@ Ajan aşağıdaki sırayı kullanıcıyla birlikte yürütür. Her adımda kulla
 ## 1. Konu ve referans
 
 - **Konu:** Kullanıcıya kanalın konusunu sor. Konuyu biraz geniş tut. Örnek kanal "oksijen biterse" diye başladı ama asıl konusu daha geniş: "ne olurdu / nasıl çalışıyor".
-- **Referans kanal:** Kullanıcıdan sevdiği bir referans kanal iste. Referanstan yalnız şunları al: kalite çıtası, tempo, açılış sesinin yapısı. Konsepti, karakteri ve görüntüsü kopyalanmaz.
+- **Referans kanal:** Kullanıcıdan sevdiği bir referans kanal iste. Referanstan yalnız şunları al: kalite çıtası, tempo, açılış sesinin yapısı. Konsepti, karakteri ve görüntüsü kopyalanmaz. İkinci beyin kuruluysa referanstan çıkan ölçülebilir kuralları yaz: `node ikinci-beyin/beyin.js stil "Bir çekim en fazla 2 sn" --neden "referansta 60 sn'de 34 kesme"`.
 - **Karakter:** Sabit bir karakter olacak mı? Olmak zorunda değil. Örnek kanalda karakter yok, yıldız konunun kendisi.
 
 ## 2. Ton
@@ -53,3 +53,4 @@ Kullanıcıya örnek videonun iki sürümünü de izlet, sonra seçtir. Örnek k
 
 - `kimlik.json` geçerli JSON olmalı. Kontrol: `node -e "require('./kanal/<ad>/kimlik.json')"`.
 - Kullanıcı ses ve açılış sesi seçimini videonun içinde duyarak onaylamış olmalı.
+- Kimlik bitti. Kullanıcıya ikinci beyni öner (`kurulum/KURULUM.md` → "İkinci beyin"). Zaten kuruluysa `kanal.md` dosyasını kimliğe göre güncelle.

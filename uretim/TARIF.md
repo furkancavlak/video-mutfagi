@@ -100,3 +100,14 @@ Hemen paylaşmak için: `node instagram/paylas.js gonder <mp4> --aciklama "..."`
 
 - **Açıklama:** `video.json` → `aciklama_instagram` alanında hazır durur. Nasıl yazılacağı `dersler/KAPAK-BASLIK.md` → "Instagram Reels". Ses ElevenLabs'in ücretsiz planıyla üretildiyse açıklamaya "Ses: elevenlabs.io" eklenir (planın şartı).
 - **İlk kez paylaşıyorsan:** Önce `instagram/REHBER.md`.
+
+## 9. Sonuçları kaydet (ikinci beyin kuruluysa)
+
+```
+node ikinci-beyin/beyin.js video-kaydet videolar/<video>      # paylaşımdan hemen sonra
+node kuyruk/kuyruk.js sonuclar                                # 1 gün ve 7 gün sonra; video notları kendiliğinden güncellenir
+```
+
+- **Sayıları göster:** İzlenme, erişim, paylaşım. Önceki videolarla karşılaştır (`node ikinci-beyin/beyin.js ozet`).
+- **Ne tuttu, ne tutmadı:** Kullanıcıyla birlikte yaz: `video-kaydet videolar/<video> --tuttu "..." --tutmadi "..."`. Yorumun tahminse "tahmin:" diye başlat.
+- **Ders:** Bir sonraki videoyu değiştirecek bir şey çıktıysa kural ya da karar olarak yaz (`ikinci-beyin/BENIOKU.md`).

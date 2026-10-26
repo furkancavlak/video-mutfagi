@@ -59,6 +59,14 @@ satir(cf.ok, 'cloudflared (Instagram için)', cf.ok ? cf.out.split('\n')[0] : ''
 const ig = path.join(AYAR, 'instagram.json');
 satir(fs.existsSync(ig), 'Instagram bağlantısı', fs.existsSync(ig) ? 'kayıtlı (node instagram/paylas.js kontrol)' : '', 'instagram/REHBER.md adımlarını izle.', false);
 
+// second brain (ikinci-beyin/): where the vault is, if set up
+{
+  let yer = null;
+  try { const y = JSON.parse(fs.readFileSync(path.join(KOK, 'ayarlar', 'ikinci-beyin.json'), 'utf8')).yol; if (y) yer = path.resolve(KOK, y); } catch (e) { }
+  const var_ = !!yer && fs.existsSync(path.join(yer, 'BASLA-BURADAN.md'));
+  satir(var_, 'İkinci beyin', var_ ? yer : '', yer ? `Klasör bulunamadı: ${yer}. Yeniden kur: node ikinci-beyin/beyin.js kur` : 'Kanalın hafızası için: ikinci-beyin/BENIOKU.md (node ikinci-beyin/beyin.js kur)', false);
+}
+
 // topic radar (konu/): optional checks live in konu/doktor.js
 try { require('../konu/doktor')(satir); } catch (e) { console.log('– Konu radarı kontrolü çalışmadı: ' + e.message); }
 
