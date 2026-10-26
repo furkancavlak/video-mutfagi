@@ -47,7 +47,7 @@ Yeni video yazmak için yine bir ajan gerekir.
 | Parça | Durum |
 |---|---|
 | Bu repo | Bedava (MIT) |
-| Yapay zekâ kodlama aracı | Claude Code ücretli (Pro, aylık 20 $). Codex ve Gemini'nin ücretsiz kotaları var ama küçük ve sık değişiyor |
+| Yapay zekâ kodlama aracı | Claude Code ücretli (Pro, aylık 20 $). Codex ChatGPT planına bağlı; Google'ın ücretsiz kotası Antigravity CLI'a taşındı ve küçük. Güncel durum: `ARACLAR.md` |
 | Kurgu: kodla animasyon (HyperFrames), ffmpeg, Whisper | Bedava, senin bilgisayarında çalışır |
 | Ses: kendi sesin | Bedava |
 | Ses: yapay (ElevenLabs) | Ücretsiz plan ayda 10.000 kredi verir. Ama **ticari kullanım yok** ve paylaşırken başlığa "elevenlabs.io" yazmak zorunlu. Para kazanan ya da marka tanıtan kanal için ücretli plan gerekir (Starter, aylık 6 $'dan başlar) |

@@ -183,7 +183,7 @@ echo "  Kurulum tamam."
 echo "  Örnek video: $MP4"
 echo "=============================================="
 echo "Sıradaki adımlar README.md dosyasında. Kendi videon için bir yapay zekâ ajanı"
-echo "(Claude Code, Codex ya da Gemini CLI) aç ve \"Kendi kanalım için kimlik kuralım\" yaz."
+echo "(Claude Code, Codex ya da Antigravity CLI) aç ve \"Kendi kanalım için kimlik kuralım\" yaz."
 if [ "$ACMA" = 1 ]; then
   if [ "$SISTEM" = mac ]; then open "$MP4"
   elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$MP4" >/dev/null 2>&1 &
