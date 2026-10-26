@@ -23,7 +23,8 @@ const OLCUM = [                   // Instagram insight name -> Turkish label use
 ];
 const ETIKET = { izlenme: 'İzlenme', erisim: 'Erişim', begeni: 'Beğeni', yorum: 'Yorum', paylasim: 'Paylaşım', kaydetme: 'Kaydetme' };
 
-const fail = m => { console.error('\nHATA: ' + m + '\n'); process.exit(1); };
+// library code throws; only the CLI at the bottom turns it into "HATA" + exit 1 (kuyruk.js and the hook keep running)
+const fail = m => { throw new Error(m); };
 const okuJ = f => JSON.parse(fs.readFileSync(f, 'utf8'));
 const yazJ = (f, j) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(j, null, 2) + '\n'); };
 const oku = f => fs.existsSync(f) ? fs.readFileSync(f, 'utf8').replace(/^﻿/, '') : '';
@@ -52,10 +53,25 @@ function onBilgi(s) {                                   // frontmatter -> { alan
   if (!m) return { alanlar: {}, govde: s };
   const alanlar = {};
   for (const l of m[1].split(/\r?\n/)) { const k = l.match(/^([\w-]+):\s*(.*)$/); if (k) alanlar[k[1]] = k[2].replace(/^"(.*)"$/, '$1'); }
-  return { alanlar, govde: s.slice(m[0].length) };
+  return { alanlar, ham: m[1], govde: s.slice(m[0].length) };
+}
+function fmDigerleri(ham, yonetilen) {                  // raw frontmatter entries the script does not manage (tags: ...), kept as written
+  const out = [];
+  let tut = false;
+  for (const l of String(ham || '').split(/\r?\n/)) {
+    const k = l.match(/^([\w-]+):/);
+    if (k) tut = !yonetilen.has(k[1]);
+    if (tut && l.trim()) out.push(l);
+  }
+  return out;
 }
 const tirnak = v => '"' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 const maddeler = s => yorumsuz(s).split(/\r?\n/).filter(l => /^- \*\*/.test(l.trim())).map(l => l.trim());
+const notSatirlari = s => yorumsuz(s).split(/\r?\n/).map(l => l.trim())   // any written line: "- **X:** y", "- y" or plain text
+  .filter(l => l && !/^#/.test(l) && !/^[-*]\s*$/.test(l) && !/^[-*]\s+\*\*[^*]+:\*\*\s*$/.test(l));
+const tekBosluk = s => String(s).replace(/\s+/g, ' ').trim();
+const esitMetin = s => tekBosluk(s).replace(/[.!]+$/, '').toLocaleLowerCase('tr');
+const maddeMetni = m => (m.match(/^- \*\*[^*]*:\*\*\s*([\s\S]*?)(?:\s*\*\*neden:\*\*[\s\S]*)?$/) || [])[1] || '';
 function bolum(govde, baslik) {                         // bullet lines under "## <baslik>", empty bullets dropped
   const m = govde.match(new RegExp('^## ' + baslik + '\\s*$([\\s\\S]*?)(?=^## |(?![\\s\\S]))', 'm'));
   if (!m) return [];
@@ -111,7 +127,7 @@ function ekleMadde(tur) {
   if (!neden) fail(`--neden gerekli. Nedeni olmayan ${tur}, bir sonraki oturumda yanlış yere uygulanır.`);
   const f = path.join(kasa, dosya), tek = s => s.replace(/\s+/g, ' ');
   const satir = `- **${arg('--tarih') || bugun()} · ${tur}:** ${tek(metin)} **neden:** ${tek(neden)}`;
-  if (maddeler(oku(f)).some(m => m.includes(tek(metin)))) return console.log(`Bu ${tur} zaten yazılı, tekrar eklenmedi.`);
+  if (maddeler(oku(f)).some(m => esitMetin(maddeMetni(m)) === esitMetin(metin))) return console.log(`Bu ${tur} zaten yazılı, tekrar eklenmedi.`);
   const eski = oku(f);
   fs.writeFileSync(f, eski + (eski.endsWith('\n') || !eski ? '' : '\n') + satir + '\n');
   console.log(`${dosya} ← ${satir}`);
@@ -163,7 +179,7 @@ function videoKaydet(klasorArg, se = {}) {
 
   // posting + numbers: queue first, then manual flags (--izlenme ...) win; earlier manual values are kept
   const f = path.join(kasa, 'videolar', ad + '.md');
-  const eski = oku(f), { alanlar: eskiAlan, govde: eskiGovde } = onBilgi(eski);
+  const eski = oku(f), { alanlar: eskiAlan, ham: eskiHam, govde: eskiGovde } = onBilgi(eski);
   const isler = se.isler || kuyrukIsleri(klasor);
   const paylasilan = isler.filter(j => j.yer === 'paylasilan').sort((a, b) => new Date(b.paylasildi) - new Date(a.paylasildi))[0];
   const bekleyen = isler.find(j => j.yer === 'bekleyen'), hatali = isler.find(j => j.yer === 'hatali');
@@ -175,7 +191,10 @@ function videoKaydet(klasorArg, se = {}) {
   const durum = paylasilan ? 'paylaşıldı' : link || paylasimTarihi ? 'paylaşıldı (elle)' : bekleyen ? `kuyrukta, paylaşım zamanı ${bekleyen.ne_zaman ? new Date(bekleyen.ne_zaman).toLocaleString('tr-TR') : 'atanmadı'}` : hatali ? 'kuyrukta hata verdi (kuyruk/hatali/)' : 'henüz paylaşılmadı';
 
   // result history: keep earlier rows, one row per measurement day
-  const satirlar = (eskiGovde.match(/<!-- otomatik:bas[\s\S]*?<!-- otomatik:son -->/) || [''])[0].split(/\r?\n/).filter(l => /^\| \d{4}-\d\d-\d\d /.test(l));
+  // (markers lost by hand-editing: pick the old rows up from anywhere in the note; they have 7 columns)
+  const OTO = /<!-- otomatik:bas[\s\S]*?<!-- otomatik:son -->/, otoVar = OTO.test(eskiGovde);
+  const satirlar = (otoVar ? eskiGovde.match(OTO)[0] : eskiGovde).split(/\r?\n/).map(l => l.trim())
+    .filter(l => /^\| \d{4}-\d\d-\d\d /.test(l) && (otoVar || l.split('|').length === 9)).filter((l, i, a) => a.indexOf(l) === i);
   const anahtarlar = Object.keys(ETIKET);
   if (Object.keys(olcum).length) {
     const i = satirlar.findIndex(l => l.startsWith(`| ${olcumTarihi} `));
@@ -200,17 +219,27 @@ function videoKaydet(klasorArg, se = {}) {
     '<!-- otomatik:son -->',
   ].filter(x => x !== null).join('\n');
 
+  const YONETILEN = new Set(['tur', 'klasor', 'kanal', 'baslik', 'durum', 'paylasildi', 'link', ...anahtarlar, 'olusturuldu', 'guncellendi']);
   const fm = ['---', 'tur: video', `klasor: ${klasor}`, hesap && `kanal: ${tirnak(hesap)}`, `baslik: ${tirnak(baslik)}`, `durum: ${tirnak(durum.split(',')[0])}`,
     paylasimTarihi && `paylasildi: ${paylasimTarihi}`, link && `link: ${link}`,
     ...anahtarlar.filter(k => sonDeger[k] && sonDeger[k] !== '-').map(k => `${k}: ${sonDeger[k].replace(/\./g, '')}`),
+    ...fmDigerleri(eskiHam, YONETILEN),                  // keys the user added (tags: ...) stay
     `olusturuldu: ${eskiAlan.olusturuldu || bugun()}`, `guncellendi: ${bugun()}`, '---'].filter(Boolean).join('\n');
 
+  // never drop what the user wrote: replace only the automatic block; if its markers are gone, put a fresh block
+  // under the first "# " heading (or on top) and keep the whole old body
   let govde;
-  if (/<!-- otomatik:bas[\s\S]*?<!-- otomatik:son -->/.test(eskiGovde)) govde = eskiGovde.replace(/<!-- otomatik:bas[\s\S]*?<!-- otomatik:son -->/, () => blok);
-  else govde = `\n# ${baslik}\n\n${blok}\n\n## Ne tuttu\n\n<!-- İzleyici neyi sevdi? Sayıya ya da yoruma dayanarak yaz. Tahminse "tahmin:" diye başlat. -->\n\n## Ne tutmadı\n\n<!-- Nerede kaybettik? Genel bir ders çıkarsa kurallar.md ya da kararlar.md'ye de yaz. -->\n\n## Notlar\n`;
+  if (otoVar) govde = eskiGovde.replace(OTO, () => blok);
+  else if (yarimBlok(eskiGovde)) govde = yarimBlok(eskiGovde)(blok);
+  else if (eskiGovde.trim()) {
+    const h = eskiGovde.match(/^# .*$/m);
+    govde = h ? eskiGovde.slice(0, h.index + h[0].length) + '\n\n' + blok + eskiGovde.slice(h.index + h[0].length).replace(/^\s*/, '\n\n')
+      : `\n# ${baslik}\n\n${blok}\n\n${eskiGovde.replace(/^\s+/, '')}`;
+  } else govde = `\n# ${baslik}\n\n${blok}\n\n## Ne tuttu\n\n<!-- İzleyici neyi sevdi? Sayıya ya da yoruma dayanarak yaz. Tahminse "tahmin:" diye başlat. -->\n\n## Ne tutmadı\n\n<!-- Nerede kaybettik? Genel bir ders çıkarsa kurallar.md ya da kararlar.md'ye de yaz. -->\n\n## Notlar\n`;
   for (const [bayrak, bas] of [['--tuttu', 'Ne tuttu'], ['--tutmadi', 'Ne tutmadı']]) {
     const not = arg(bayrak);
     if (!not || bolum(govde, bas).includes(not.trim())) continue;
+    if (!new RegExp('^## ' + bas + '\\s*$', 'm').test(govde)) { govde = govde.replace(/\s*$/, '') + `\n\n## ${bas}\n\n- ${not.trim()}\n`; continue; }
     govde = govde.replace(new RegExp('(^## ' + bas + '\\s*$[\\s\\S]*?)(?=^## |(?![\\s\\S]))', 'm'), (m) => m.replace(/\s*$/, '') + `\n- ${not.trim()}\n\n`);
   }
   fs.mkdirSync(path.dirname(f), { recursive: true });
@@ -220,6 +249,19 @@ function videoKaydet(klasorArg, se = {}) {
   if (!bolum(govde, 'Ne tuttu').length && !bolum(govde, 'Ne tutmadı').length && Object.keys(olcum).length)
     yaz('  Sıradaki: kullanıcıyla "ne tuttu, ne tutmadı" bölümlerini yaz (--tuttu "..." --tutmadi "..." ya da dosyayı düzenle).');
   return f;
+}
+
+// One marker deleted by hand: replace only the lines this command wrote next to the remaining marker (its numbers were
+// already picked up above); everything else in the note stays. Returns null when there is no lone marker.
+function yarimBlok(govde) {
+  const L = govde.split('\n'), uret = l => /^(<!-- otomatik:(bas|son)\b.*-->|- \*\*(Klasör|Kanca|Süre|Görüntü|Durum):\*\*.*|\| Ölçüm günü \|.*|\|---\|.*|\| \d{4}-\d\d-\d\d \|.*|Henüz sonuç sayısı yok\..*|\s*)$/.test(l.trim());
+  const b = L.findIndex(l => l.trim().startsWith('<!-- otomatik:bas')), s = L.findIndex(l => l.trim() === '<!-- otomatik:son -->');
+  if (b < 0 && s < 0) return null;
+  let i = b >= 0 ? b : s, j = i;
+  if (b >= 0) while (j + 1 < L.length && uret(L[j + 1])) j++; else while (i > 0 && uret(L[i - 1])) i--;
+  while (i < j && !L[i].trim()) i++;
+  while (j > i && !L[j].trim()) j--;
+  return blok => [...L.slice(0, i), blok, ...L.slice(j + 1)].join('\n');
 }
 
 // Called by kuyruk.js after "sonuclar": refresh the notes of posted videos. Silent and harmless when no vault.
@@ -246,17 +288,21 @@ function videoNotlari(kasa) {
 
 function ozet() {
   const kanca = process.argv.includes('--kanca');
-  const kasa = kasaYolu(!kanca);
+  let kasa;
+  try { kasa = kasaYolu(!kanca); } catch (e) {                // hook: a broken settings file must not break the session
+    if (!kanca) throw e;
+    return console.log(`<ikinci-beyin>\nUYARI: ikinci beyin okunamadı (${e.message}). Kullanıcıya söyle, ayarlar/ikinci-beyin.json dosyasını birlikte düzeltin.\n</ikinci-beyin>`);
+  }
   if (!kuruluMu(kasa)) { if (kanca) return; fail('ikinci beyin klasörü bulunamadı: ' + kasa + '  (node ikinci-beyin/beyin.js kur)'); }
   const n = Math.max(1, Number(arg('--n')) || 5), out = [];
   const bas = (b, l) => { if (l.length) out.push('', `## ${b}`, ...l); };
   const sonN = (l, k) => (l.length > k ? [`(${l.length - k} eski kayıt dosyada)`] : []).concat(l.slice(-k));
   const etkin = f => maddeler(oku(path.join(kasa, f))).filter(m => !m.startsWith('- ~~'));
 
-  const profil = maddeler(onBilgi(oku(path.join(kasa, 'kanal.md'))).govde).filter(m => !/:\*\*\s*$/.test(m));
+  const profil = notSatirlari(onBilgi(oku(path.join(kasa, 'kanal.md'))).govde);
   bas('Kanal', profil.length ? profil : ['(Profil boş. Kullanıcıyla kanal.md dosyasını doldur: hesap, konu, hedef.)']);
-  if (profil.length && !profil.some(m => m.startsWith('- **Hedef:'))) out.push('- (Hedef yazılmamış. Kullanıcıya kanalın hedefini sor, kanal.md\'ye yaz.)');
-  bas('Son durum', maddeler(onBilgi(oku(path.join(kasa, 'son-durum.md'))).govde).filter(m => !/:\*\*\s*$/.test(m)));
+  if (profil.length && !profil.some(m => /^([-*]\s+)?(\*\*)?hedef\b/i.test(m))) out.push('- (Hedef yazılmamış. Kullanıcıya kanalın hedefini sor, kanal.md\'ye yaz.)');
+  bas('Son durum', notSatirlari(onBilgi(oku(path.join(kasa, 'son-durum.md'))).govde));
   bas('Kurallar (kullanıcının düzeltmeleri, hepsine uy)', sonN(etkin('kurallar.md'), 3 * n));
   bas('Kararlar (son)', sonN(etkin('kararlar.md'), n));
   bas('Stil kuralları', sonN(etkin('stil.md'), 2 * n));
@@ -321,7 +367,7 @@ function kancaKomut(alt) {
 }
 
 // ---------------------------------------------------------------- cli
-if (require.main === module) {
+if (require.main === module) try {
   const k = process.argv[2];
   if (k === 'kur') kur();
   else if (k === 'ozet') ozet();
@@ -333,6 +379,6 @@ if (require.main === module) {
     console.log(fs.readFileSync(__filename, 'utf8').split('\n').slice(4, 11).map(l => l.replace(/^\/\/ ?/, '')).join('\n'));
     if (k) process.exit(1);
   }
-}
+} catch (e) { console.error('\nHATA: ' + e.message + '\n'); process.exit(1); }
 
 module.exports = { videoKaydet, kuyruktanKaydet, kasaYolu, isKlasoru };
