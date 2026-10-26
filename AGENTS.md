@@ -4,10 +4,11 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 
 ## İlk iş
 
-0. Kuyruk kuruluysa önce `node kuyruk/kuyruk.js durum` çalıştır, uyarı varsa kullanıcıya ilk iş olarak söyle (ev bilgisayarında otomasyon sessizce durabilir).
-1. `node kurulum/doktor.js` çalıştır. Komut çalışmıyorsa ya da ✗ varsa `kurulum/KURULUM.md`'yi baştan sona uygula.
-2. Kurulum bittiyse örnek videoyu üret (KURULUM adım 5) ve kullanıcıya izlet. Kurulumun çalıştığının kanıtı budur.
-3. Kanal kimliği yoksa `kanal/KIMLIK-REHBERI.md`'ye geç. Kimlik varsa video üretimi için `uretim/TARIF.md`'ye geç.
+0. **İkinci beyin kuruluysa** (`ayarlar/ikinci-beyin.json` varsa) önce `node ikinci-beyin/beyin.js ozet` çalıştır ve oku. Oradaki kurallara ve kararlara uy. Bağlamda `<ikinci-beyin>` bloğu zaten varsa (Claude Code kancası) tekrar çalıştırma. Kullanıcı "selam" bile dese ilk cevapta kısaca söyle: son durum, sıradaki iş, bekleyen karar.
+1. Kuyruk kuruluysa önce `node kuyruk/kuyruk.js durum` çalıştır, uyarı varsa kullanıcıya ilk iş olarak söyle (ev bilgisayarında otomasyon sessizce durabilir).
+2. `node kurulum/doktor.js` çalıştır. Komut çalışmıyorsa ya da ✗ varsa `kurulum/KURULUM.md`'yi baştan sona uygula.
+3. Kurulum bittiyse örnek videoyu üret (KURULUM adım 5) ve kullanıcıya izlet. Kurulumun çalıştığının kanıtı budur.
+4. Kanal kimliği yoksa `kanal/KIMLIK-REHBERI.md`'ye geç. Kimlik varsa video üretimi için `uretim/TARIF.md`'ye geç.
 
 ## Değişmez kurallar
 
@@ -25,7 +26,8 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 
 | Yer | Ne |
 |---|---|
-| `kurulum/` | `KURULUM.md` (adım adım), `doktor.js` (her parçayı dener), `gereksinimler.txt` (sabit Python sürümleri) |
+| `kurulum/` | `KURULUM.md` (adım adım), `doktor.js` (her parçayı dener), `gereksinimler.txt` (sabit Python sürümleri). Ajansız kurulum: kökte `kur.cmd` / `kur.sh` |
+| `ARACLAR.md` | Her aracın ne işe yaradığı, bedava mı ücretli mi, lisans ve kontrol tarihi. Kullanıcı fiyat sorarsa buradan cevap ver, eskiyse resmi sayfaya bak |
 | `kanal/` | Kanal kimlikleri. `KIMLIK-REHBERI.md`, `sablon/`, dolu örnek `oxygbio/` |
 | `videolar/` | Her video bir klasör. `_sablon/` yeni video için. `oxygbio-v01-ucak/` tam örnek |
 | `uretim/` | `TARIF.md` (iş sırası), `ses.js`, `kelime.py`, `mix.js`, `kurgu.js` (ücretsiz), `ucretli.js` (Higgsfield), `cekirdek.js` (ortak) |
@@ -33,12 +35,28 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 | `denetim/` | `DENETIM.md`, `kareler.sh`, `kare-denetci.md` (denetçi ajanın kuralları) |
 | `instagram/` | `REHBER.md` (Meta kurulumu), `paylas.js` |
 | `kuyruk/` | `BENIOKU.md`, `kuyruk.js`: videolar sıraya girer, zamanlayıcı saati gelince paylaşır, sonuçları çeker |
-| `dersler/` | `HATALAR.md`, `KURGU-DILI.md`, `METIN.md` |
+| `dersler/` | `HATALAR.md`, `KURGU-DILI.md`, `METIN.md`, `KAPAK-BASLIK.md` (kapak, başlık, Instagram açıklaması) |
 | `konu/` | Konu radarı: forum ve trend sitelerinden kanala uygun video fikri bulur, isterse otomatik üretir. `BENIOKU.md`, `radar.js` |
+| `ikinci-beyin/` | Kanalın hafızası: profil, kararlar, düzeltmeler, video sonuçları. `BENIOKU.md`, `beyin.js`, `sablon/` |
+| `kesit/` | Uzun yatay videodan dikey kısa: tanıtım (cevaptan önce kesilir) ya da en iyi an. `BENIOKU.md`, `kesit.js` |
+
+## İkinci beyin (isteğe bağlı)
+
+Kurulumda kanal kimliğinden sonra kullanıcıya önerilir (`kurulum/KURULUM.md` → "İkinci beyin"). Kuruluysa:
+
+- **Düzeltme gelince** ("bunu böyle yapma", "şöyle istiyorum") sormadan yaz: `node ikinci-beyin/beyin.js kural "..." --neden "..."`.
+- **Karar gelince** yaz: `karar "..." --neden "..."`. Bir referansın stilinden ölçülebilir kural çıkınca: `stil "..." --neden "..."`.
+- **Video paylaşılınca** `node ikinci-beyin/beyin.js video-kaydet videolar/<video>` çalıştır. 1 gün ve 7 gün sonra `node kuyruk/kuyruk.js sonuclar` çalıştır, notlar kendiliğinden güncellenir. Sayıları kullanıcıya göster, birlikte "ne tuttu, ne tutmadı" yaz (`--tuttu "..." --tutmadi "..."`). Genel bir ders çıkarsa kural ya da karar olarak da yaz.
+- **Oturum biterken** kasadaki `son-durum.md`'yi 3-5 satırla yeniden yaz, `ikinci-beyin/sablon/son-durum.md` biçiminde: `- **Son oturum:** ...`, `- **Sıradaki iş:** ...`, `- **Bekleyen karar:** ...`. Üstteki `guncellendi:` tarihini de bugüne çek.
+- Tahmini gerçek gibi yazma ("tahmin:" diye başlat). Gizli bilgi yazma. Ayrıntı: `ikinci-beyin/BENIOKU.md`.
 
 ## Konu radarı (isteğe bağlı)
 
 Kullanıcı "konu bul", "ne çeksem", "fikir öner" derse: `konu/BENIOKU.md`. Kısaca `node konu/radar.js topla <kanal>` → `puanla <kanal>` → kullanıcıya `kanal/<kanal>/fikirler.html`'i aç. Otomasyon seviyesi (`kanal/<kanal>/konu.json` → `otomasyon`) ve bütçe sınırları kullanıcıyla birlikte yazılır; tam otomatik paylaşımı kullanıcı açıkça istemeden açma.
+
+## Uzun videodan dikey kesit (isteğe bağlı)
+
+Kullanıcı "uzun videomdan kısa çıkar", "tanıtım reels'i", "en iyi anı kes" derse: `kesit/BENIOKU.md`. Kısaca `node kesit/kesit.js yazi <uzun.mp4>` → `sec <uzun.mp4>` → `yap <uzun.mp4> --aday 1 --kare` (karelere bak) → `yap <uzun.mp4> --aday 1`. Çıktılar uzun videonun yanındaki `<ad>-kesit/` klasörüne gider, repoya değil. Kullanıcıya videoyu izlet. Kuyruğa yalnız o isterse ekle (komutu `yap` yazar).
 
 ## Bir video klasörü
 
@@ -55,7 +73,7 @@ videolar/<kanal>-v01-<konu>/
 
 ## Hazır şablonla ücretsiz video (kod yazmadan)
 
-`video.json` → `"sablon": "simulasyon"` yazılırsa sahne kodu gerekmez. Sahneyi `uretim/sablonlar/simulasyon.js` çizer: gökyüzü, kıyı ve deniz kesiti, oksijen göstergeleri, zaman cetveli. Videoya özel bilgi `simulasyon.json` dosyasına yazılır: hangi kelimede hangi yıl, kamera nereye gider, oksijen yüzde kaç, ne değişir. Alanların listesi şablon dosyasının başında yazıyor.
+`video.json` → `"sablon": "simulasyon"` yazılırsa sahne kodu gerekmez. Sahneyi `uretim/sablonlar/simulasyon.js` çizer: gökyüzü, kıyı ve deniz kesiti, oksijen göstergeleri, zaman cetveli. Videoya özel bilgi `simulasyon.json` dosyasına yazılır: hangi kelimede hangi yıl, kamera nereye gider, oksijen yüzde kaç, ne değişir. Metindeki her espri bir **eşyayla** ekranda gösterilir (dolmuş, dilekçe, damga, fabrika, tekne…: adımdaki `esya` alanı; çizimler `uretim/sablonlar/esya.js`'de). Alanların listesi şablon dosyasının başında yazıyor.
 
 ## Yeni sahne kodu yazarken
 
@@ -63,3 +81,7 @@ videolar/<kanal>-v01-<konu>/
 - **Zaman:** Her hareket bir kelimeye bağlanır: `cue('kelime', L[satır])`. Elle saniye yazma.
 - **Çekirdeğe dokunma:** Altyazı, marka ekranları ve köşe etiketi çekirdekten gelir, sahne dosyasında yeniden yazma.
 - **Kare al:** Yazdıktan sonra kareleri al (`--kare`) ve kendin bak. Kullanıcıya göstermeden önce düzelt.
+
+## Kontrol paneli
+
+Kullanıcı "panel", "sıraya bakayım", "takvim" ya da "sonuçlar" derse paneli başlat: `node panel/panel.js` (arka planda çalışır, terminaldeki linki kullanıcıya ver). Ayrıntı: panel/BENIOKU.md. Sunucu kullanan biri için `ayarlar/panel.json` dosyasını panel/ayar-ornek.json'dan birlikte doldurun.

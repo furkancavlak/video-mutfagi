@@ -184,6 +184,11 @@ async function sonuclar() {
       console.log(tarih(j.paylasildi).padEnd(22) + [s.views, s.reach, s.likes, s.comments, s.shares, s.saved].map(v => String(v ?? '-').padStart(7)).join(' ') + '  ' + j.link);
     } catch (e) { console.log(tarih(j.paylasildi).padEnd(22) + 'okunamadı: ' + e.message); }
   }
+  // second brain (optional): copy the fresh numbers into each video's note; does nothing when it is not set up
+  try {
+    const n = require('../ikinci-beyin/beyin.js').kuyruktanKaydet(p.slice(0, 30));
+    if (n) console.log(`\nİkinci beyin: ${n} videonun notu güncellendi. "Ne tuttu, ne tutmadı" bölümlerini kullanıcıyla yaz.`);
+  } catch (e) { console.log('İkinci beyin güncellenemedi: ' + e.message); }
 }
 
 // --- scheduler: every 15 min. every 5 min. Windows: Task Scheduler (runs a missed run as soon as the PC is on); Linux/Mac: cron.

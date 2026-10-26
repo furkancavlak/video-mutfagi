@@ -4,6 +4,8 @@ Kullanıcı kod bilmiyor olabilir. Ajan her adımı kendisi çalıştırır. Kul
 
 Windows'ta denendi. Mac'te komutlar parantez içinde verilmiştir, Mac yolu deneyseldir.
 
+**Ajansız kurulum:** Adım 1-5'i tek seferde yapan betikler var. Windows'ta `kur.cmd` (çift tıkla), Mac/Linux'ta `bash kur.sh`. Ajan da bunları kullanabilir. Ayrıntı en altta: "Tek tık kurulum betikleri".
+
 Her şey hazır mı diye her an şu komutla bakılabilir:
 
 ```
@@ -28,7 +30,7 @@ node kurulum/doktor.js
 Repoyu kısa bir yola klonla, ör. `C:\Users\<ad>\video-mutfagi` ya da Belgeler. Windows 260 karakterden uzun dosya yollarını açamıyor. Repo çok derin bir klasörde durursa render yarıda kalır.
 
 ```
-git clone https://github.com/furkancavlakcom/video-mutfagi
+git clone https://github.com/furkancavlak/video-mutfagi
 cd video-mutfagi
 npm install
 npx hyperframes browser ensure
@@ -84,7 +86,10 @@ node uretim/kurgu.js videolar/oxygbio-v01-ucak --render
 
 ### Yapay ses (ElevenLabs)
 
-1. Kullanıcı elevenlabs.io'da hesap açar. Ücretsiz planın ticari kullanım şartlarını ve aylık karakter sınırını sitede kontrol etsin.
+1. Kullanıcı elevenlabs.io'da hesap açar. Ajan ücretsiz planın şartlarını kullanıcıya açıkça söyler (26.10.2026'da kontrol edildi, `ARACLAR.md`):
+   - Ayda 10.000 kredi. Örnek videonun metni ~1.070 karakter.
+   - **Ticari kullanım yok.** Kanal para kazanıyorsa ya da marka tanıtıyorsa ücretli plan (Starter ve üstü) gerekir.
+   - Ücretsiz planla üretilen ses paylaşılırken başlığa (Instagram'da açıklamaya) "elevenlabs.io" yazılır.
 2. Profile → API Keys bölümünden bir anahtar oluşturur.
 3. Anahtarı **sohbete yapıştırmaz**. Masaüstünde `elevenlabs.txt` adlı bir dosyaya kaydeder.
 4. Ajan dosyayı ev klasörüne taşır, masaüstündeki kopya kalmaz:
@@ -117,13 +122,37 @@ Ardından paylaşım kuyruğu ve zamanlayıcı: `kuyruk/BENIOKU.md` → Kurulum.
 
 ### İkinci beyin
 
-İsteğe bağlı bir modül. Henüz hazırlanıyor.
+Kanal kimliği bittikten sonra kullanıcıya sor. Önce 2-3 cümleyle anlat, sonra "ekleyelim mi?" de. Şöyle:
+
+> Ben her sohbete sıfırdan başlarım. Dün ne konuştuğumuzu, hangi videonun tuttuğunu, neyi beğenmediğini hatırlamam. İkinci beyin, bilgisayarında duran küçük bir not defteri: kanalın hedefini, kararlarını, düzeltmelerini ve her videonun sonuçlarını oraya yazarım, her oturumun başında okurum. Ayrıntısı bu videoda: https://youtu.be/-z9aGjceXkc. Ekleyelim mi?
+
+- **Evet derse:** `ikinci-beyin/BENIOKU.md` → "Kurulum" adımlarını uygula. Bitince nasıl çalıştığını 3-4 kısa cümleyle anlat: oturum başında okurum, düzeltmeni ve kararını hemen yazarım, video paylaşılınca sonuçlarını birlikte kaydederiz, istersen Obsidian ile açıp okuyabilirsin.
+- **Hayır derse:** Üstünde durma. Sonra isterse "ikinci beyin kuralım" demesi yeter.
 
 ---
 
+## Tek tık kurulum betikleri (ajansız)
+
+`kur.cmd` (Windows) ve `kur.sh` (Mac/Linux) yukarıdaki Adım 1-5'i sırayla yapar:
+
+1. Node.js 22+, ffmpeg ve Python 3.12'ye bakar. Eksikleri listeler, kuracağı komutu yazar ve **sorar**. Windows'ta `winget`, Mac'te `brew` kullanır. Linux'ta sistem paketleri sudo istediği için yalnız komutları yazar, kendisi kurmaz.
+2. `npm install` (paketler varsa atlar).
+3. `npx hyperframes browser ensure` (tarayıcı varsa hemen geçer).
+4. `.venv` ve `kurulum/gereksinimler.txt` (doğru sürümler varsa atlar).
+5. Git klonuysa gizli bilgi kilidi (`gizli-tara.js kur`). ZIP ile indirildiyse atlar.
+6. `node kurulum/doktor.js`. Zorunlu bir parça eksikse durur.
+7. Örnek videoyu üretir ve açar. Video zaten varsa yeniden çizmez.
+
+- **Var olanı yeniden kurmaz.** İkinci çalıştırma birkaç saniyede biter.
+- **Hata olunca durur** ve ne yapılacağını Türkçe yazar. Hiçbir şey silmez.
+- **Yönetici izni:** Yalnız winget bir aracı kurarken Windows sorabilir.
+- **winget ile araç kurduktan sonra** Windows yeni araçları ancak yeni pencerede görür. Betik bunu söyler ve durur. Pencereyi kapatıp `kur.cmd`'yi yeniden çalıştırmak yeter.
+- **Seçenekler:** `--kuru` yalnız bakar, hiçbir şeyi değiştirmez. `--acmadan` sonda videoyu açmaz.
+- **Windows'ta denendi** (bu bilgisayarda var olan araçlarla: her adım atlandı ya da tamamlandı, ses karıştırma + render dahil kurulum 97 sn sürdü). Mac ve Linux yolu kuru modda ve sahte araçlarla denendi, gerçek bir Mac'te henüz denenmedi.
+
 ## Sunucuya kurmak (Linux, 7/24)
 
-- **Ayrı kullanıcı:** Repo için ayrı bir kullanıcı aç (ör. `useradd -m vmutfak`). Sunucudaki başka uygulamalara dokunma.
+- **Ayrı kullanıcı:** Repo için ayrı bir kullanıcı aç (ör. `useradd -m videocu`). Sunucudaki başka uygulamalara dokunma.
 - **Node:** Sunucunun Node'u 22'den eskiyse sistem Node'unu **güncelleme**, başka uygulamalar onu kullanıyor olabilir. nodejs.org'dan Node 22 arşivini indir (SHASUMS256 ile doğrula), yalnız bu kullanıcının `~/.local/node` klasörüne aç ve PATH'e ekle.
 - **Özel repo:** Repo özelse sunucuya GitHub şifresi koyma. Bilgisayarda `git bundle create vm.bundle main` ile paketle, sunucuya kopyala, `git clone vm.bundle` ile aç.
 - **Düşük öncelik:** Sunucuda başka işler de çalışıyorsa ağır işleri (render, Whisper) `nice -n 19` ile çalıştır.

@@ -4,6 +4,8 @@
 //
 // Every step is recorded in videolar/<video>/uretim.json, so a rerun continues where the last one stopped.
 // Spend gates: without `onay` the run stops at the first paid step and prints what it would cost.
+// `onay` is true (CLI --onay: every paid step) or { ses: maxKarakter, gorsel: maxKredi, klip: maxKredi } (the panel:
+// only the steps whose price the user saw, up to that price). A stop at a gate leaves uretim.json → bekleyen.
 // Anything that needs a human (failed fact-check, bad stills, low review score, free tier scenes) stops the run
 // and marks the idea "insan-bekliyor" with the reason.
 const fs = require('fs'), path = require('path');
@@ -12,6 +14,7 @@ const O = require('./ortak');
 const LLM = require('./llm');
 const H = require('./havuz');
 const A = require('./otomasyon');
+const ESYA = require('../uretim/sablonlar/esya');
 
 const rel = f => path.relative(O.KOK, f).split(path.sep).join('/');
 const md = f => fs.readFileSync(path.join(O.KOK, f), 'utf8');
@@ -58,6 +61,8 @@ function ifadeCoz(e, Z) {
 // template data (simulasyon.json): unknown word cues fall back to the line, steps are kept in time order
 function simIpucuOnar(S, Z) {
   const notlar = [];
+  // a prop's own word cue that Whisper did not hear: the prop comes with its step instead
+  for (const a of S.adimlar || []) for (const e of [].concat(a.esya || [])) if (e && e.an != null && ifadeCoz(e.an, Z) == null) { notlar.push(`eşya "${e.an}" bulunamadı → adımla birlikte`); delete e.an; }
   for (const a of S.adimlar || []) {
     if (a.an == null || ifadeCoz(a.an, Z) != null) continue;
     const m = String(a.an).match(IFADE), satir = m && m[3] != null ? +m[3] : 0;
@@ -65,6 +70,20 @@ function simIpucuOnar(S, Z) {
     a.an = `satir:${satir}+0.5`;
   }
   S.adimlar = (S.adimlar || []).filter(a => ifadeCoz(a.an, Z) != null).sort((x, y) => ifadeCoz(x.an, Z) - ifadeCoz(y.an, Z));
+  return notlar;
+}
+// props the template does not know are dropped (the step keeps its other fields); returns the notes
+function simEsyaOnar(S) {
+  const notlar = [];
+  for (const a of S.adimlar || []) {
+    if (a.esya == null) continue;
+    const liste = [].concat(a.esya).filter(e => {
+      const ok = e && typeof e === 'object' && ESYA.cozumle({ ...e, tur: e.ad || e.tur });
+      if (!ok) notlar.push(`bilinmeyen eşya "${e && (e.ad || e.tur)}" çıkarıldı`);
+      return ok;
+    });
+    if (!liste.length) delete a.esya; else a.esya = liste.length === 1 ? liste[0] : liste;
+  }
   return notlar;
 }
 function simKontrol(S) {
@@ -75,9 +94,13 @@ function simKontrol(S) {
     if (!a.an) s.push(`adım ${i}: an yok`);
     if (a.yil && cetvel.length && !cetvel.includes(a.yil)) s.push(`adım ${i}: yil "${a.yil}" cetvelde yok`);
     if (a.odak && !['genel', 'gok', 'kiyi', 'yuzey', 'deniz', 'dip'].includes(a.odak)) s.push(`adım ${i}: odak "${a.odak}" geçersiz`);
+    const esya = [].concat(a.esya || []);
+    if (esya.length > 2) s.push(`adım ${i}: en fazla iki eşya`);
+    for (const e of esya) if ([...String((e && e.yazi) || '')].length > 16) s.push(`adım ${i}: eşya yazısı çok uzun, en fazla 16 karakter ("${e.yazi}")`);
     if (a.kahraman) {
       if (!S.kahraman) s.push(`adım ${i}: kahraman adımı var ama en üstte "kahraman" tanımı yok`);
-      if (!['deniz', 'yuzey', 'kiyi', 'balkon', 'kara', 'dip'].includes(a.kahraman.yer)) s.push(`adım ${i}: kahraman yeri "${a.kahraman.yer}" geçersiz`);
+      if (!['deniz', 'yuzey', 'kiyi', 'balkon', 'kara', 'dip', 'esya'].includes(a.kahraman.yer)) s.push(`adım ${i}: kahraman yeri "${a.kahraman.yer}" geçersiz`);
+      if (a.kahraman.yer === 'esya' && !esya.some(e => { const c = e && ESYA.cozumle({ ...e, tur: e.ad || e.tur }); return c && ESYA.ESYA[c.tur].koltuk; })) s.push(`adım ${i}: kahraman eşyada oturuyor ama adımda oturulacak eşya yok (dolmus, tekne, apartman, belediye, fabrika)`);
       if ((a.kahraman.yazi || '').length > 18) s.push(`adım ${i}: kahraman yazısı çok uzun, en fazla 18 karakter ("${a.kahraman.yazi}")`);
     }
   }
@@ -162,7 +185,9 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
   const D = O.okuJson(durumF, { fikir: fikir.id, kanal: ctx.kanal, katman, baslangic: O.simdi().toISOString(), adimlar: {} });
   if (otomatik) D.otomatik = true;      // only runs started by automation are resumed by the scheduler
   const bitti = a => !!D.adimlar[a];
-  const isaretle = (a, ek = {}) => { D.adimlar[a] = { zaman: O.simdi().toISOString(), ...ek }; O.yazJson(durumF, D); };
+  const isaretle = (a, ek = {}) => { D.adimlar[a] = { zaman: O.simdi().toISOString(), ...ek }; if (D.bekleyen && D.bekleyen.adim === a) delete D.bekleyen; O.yazJson(durumF, D); };
+  const izinli = (adim, miktar) => onay === true || (!!onay && typeof onay === 'object' && onay[adim] != null && miktar <= onay[adim]);
+  const bekle = (adim, ek, mesaj) => { D.bekleyen = { adim, ...ek, zaman: O.simdi().toISOString() }; O.yazJson(durumF, D); return new Dur('onay', mesaj); };
   const kaydet = (durum, not) => { const h2 = H.havuzOku(ctx); const f2 = H.fikirBul(h2, fikir.id); f2.video = fikir.video; H.durumYap(h2, fikir.id, durum, not); H.havuzYaz(ctx, h2); };
   kaydet('uretiliyor', bitti('klasor') ? null : `üretim başladı: ${fikir.video}`);
   isaretle('klasor', { yol: fikir.video });
@@ -237,6 +262,8 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       const belge = fs.readFileSync(path.join(O.KOK, 'uretim', 'sablonlar', sablonAd + '.js'), 'utf8').split('\n').filter(l => l.startsWith('//')).map(l => l.replace(/^\/\/ ?/, '')).join('\n');
       const ornekF = path.join(O.KOK, 'uretim', 'sablonlar', sablonAd + '-ornek.json');
       const S = await sor(LLM.istem('simulasyon-yaz', { sablon_belgesi: belge, ornek: fs.existsSync(ornekF) ? fs.readFileSync(ornekF, 'utf8') : '{}', satirlar: video.satirlar.map((x, i) => `${i}: ${x.metin}`).join('\n') }), { is: 'simulasyon-yaz' });
+      const en = simEsyaOnar(S);
+      if (en.length) yaz('Şablon verisi onarıldı: ' + en.join('; '));
       const sk = simKontrol(S);
       if (sk.length) throw new Dur('insan', 'Yapay zekânın yazdığı simulasyon.json tutarsız: ' + sk.join('; '));
       O.yazJson(simF, S);
@@ -252,13 +279,15 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       yaz(`\n💳 SES: ${eksik.length} satır, ~${karakter} ElevenLabs karakteri.`);
       const sesBilgi = node('uretim/ses.js', [dir], { yakala: true });
       if (sesBilgi.cikti) yaz(sesBilgi.cikti.split('\n').map(l => '   ' + l).join('\n'));
+      let krediTahmin = null;
       if (katman === 'ucretli') {
         const U = O.okuJson(ucretliF), klipSn = (U.klipler || []).reduce((a, k) => a + (k.sure || 5), 0);
+        krediTahmin = Math.round(U.gorseller.length * 1.1 + klipSn);
         yaz(`💳 GÖRÜNTÜ (tahmin): ${U.gorseller.length} resim ~${(U.gorseller.length * 1.1).toFixed(0)} kredi + ${(U.klipler || []).length} klip (${klipSn} sn) ~${klipSn} kredi. Video bütçesi: ${U.butce} kredi. Kesin fiyat her adımda Higgsfield'dan alınır.`);
       }
       const izin = A.harcamaIzni(ctx, 'karakter', karakter, { otomatik });
       if (!izin.izin) throw new Dur(otomatik ? 'butce' : 'onay', izin.neden);
-      if (!onay) throw new Dur('onay', `Hiçbir şey harcanmadı. Önce metni oku: ${rel(path.join(dir, 'metin.md'))}\nBeğendiysen devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
+      if (!izinli('ses', karakter)) throw bekle('ses', { karakter, satir: eksik.length, kredi_tahmin: krediTahmin }, `Hiçbir şey harcanmadı. Önce metni oku: ${rel(path.join(dir, 'metin.md'))}\nBeğendiysen devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
       if (karakter) {
         if (!sesBilgi.ok) throw new Dur('insan', 'ses.js çalışmadı (anahtar ya da kota). Çıktı yukarıda.');
         const r = node('uretim/ses.js', [dir, '--onay']);
@@ -302,7 +331,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       if (kredi) {
         const izin = A.harcamaIzni(ctx, 'kredi', kredi, { otomatik });
         if (!izin.izin) throw new Dur(otomatik ? 'butce' : 'onay', izin.neden);
-        if (!onay) throw new Dur('onay', `Hiçbir şey harcanmadı. Devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
+        if (!izinli(adim, kredi)) throw bekle(adim, { kredi, butce: U.butce }, `Hiçbir şey harcanmadı. Devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
         const r = node('uretim/ucretli.js', [dir, adim, '--onay']);
         O.harcamaYaz(ctx, 'kredi', kredi, ad);              // logged even on partial failure: credits may be gone
         if (!r.ok) throw new Dur('insan', `${adim} üretimi başarısız (çıktı yukarıda).`);
@@ -374,4 +403,4 @@ function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null }, kok =
   return f;
 }
 
-module.exports = { uret, kuyrugaYaz, ipuclariniOnar, ifadeCoz, ucretliKontrol, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, kuyrugaYaz, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };

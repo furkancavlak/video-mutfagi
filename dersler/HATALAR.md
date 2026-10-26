@@ -85,6 +85,10 @@ Her madde aynı biçimde yazılmıştır: **ne oldu**, ardından **→ ne yap**.
     → Hareket edecek grubu dıştaki boş bir `<g>`'nin içine koy, hareketi dıştakine ver.
   - Ölçek ya da dönüş yanlış noktanın etrafında oldu.
     → `svgOrigin: 'x y'` kullan.
+  - SVG'de `fromTo` ile küçük bir ölçekten (`scaleY: .05`, `scale: 2.6`) `transformOrigin` vererek büyüttük. GSAP başlangıç noktasını "yumuşatmak" için grubu kaydırdı: tabela suyun ortasında havada kaldı, damga yanlış yere indi.
+    → Bu tür tween'lere `smoothOrigin: false` ekle (`uretim/sablonlar/esya.js` hepsinde böyle).
+  - `fromTo` içinde `opacity: 1` yalnız başlangıç değerlerinde duruyordu (`{x: -900, opacity: 1} → {x: 0}`). Tek kare alınca (`--kare`) dolmuş görünüyordu, tam render'da hiç görünmedi: render önce sona, sonra başa sarıyor ve böyle bir tween görünürlüğü geri getirmiyor.
+    → Görünürlüğü ayrı bir `tl.set(..., {opacity: 1}, t)` ile ya da iki uçta da `opacity` vererek aç. Tam render'dan sonra her eşyanın karesine videonun kendisinden bak.
 
 ## 7. Görüntü (ücretli, Higgsfield)
 

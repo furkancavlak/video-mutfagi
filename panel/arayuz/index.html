@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video Mutfağı · Panel</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231F4A39'/%3E%3Cpath d='M12 9l11 7-11 7z' fill='%23F2D36B'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Caveat:wght@600;700&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="stil.css">
+</head>
+<body>
+<header class="ust">
+  <div class="logo"><span class="logo-i">▶</span>Video Mutfağı</div>
+  <nav class="sekmeler" id="sekmeler">
+    <button data-s="bugun" class="on">Bugün</button>
+    <button data-s="fikirler">Fikirler</button>
+    <button data-s="uretim">Üretim</button>
+    <button data-s="sira">Sıra</button>
+    <button data-s="takvim">Takvim</button>
+    <button data-s="sonuclar">Sonuçlar</button>
+  </nav>
+  <button class="isler-dugme" id="isler-dugme" title="Arka planda çalışan işler"><span id="isler-say">0</span> iş</button>
+</header>
+
+<main>
+  <section id="s-bugun" class="sayfa on">
+    <div class="makineler" id="makineler"></div>
+    <h2 class="bolum">Senden bekleyenler</h2>
+    <div id="bekleyenler" class="liste"></div>
+  </section>
+
+  <section id="s-fikirler" class="sayfa">
+    <div class="baslik-satir"><h1>Fikirler</h1>
+      <select id="kanal-sec" class="sec" aria-label="Kanal"></select>
+      <div class="secici" id="fikir-filtre"><button data-f="acik" class="on">Açık</button><button data-f="hepsi">Hepsi</button></div>
+      <span class="bosluk"></span>
+      <button class="dugme" data-is="topla">Yeni konu topla</button>
+      <button class="dugme" data-is="puanla">Puanla</button>
+      <button class="dugme sari" id="fikir-ekle-dugme">+ Kendi fikrim</button>
+    </div>
+    <form id="fikir-ekle" class="kart form-kart" hidden>
+      <input id="fe-baslik" placeholder="Soru: Ormanlarda oksijen biterse 1000 yıl sonra ne olur?" required>
+      <input id="fe-oncul" placeholder="Öncül (isteğe bağlı): ne oluyor, neden sürüyor">
+      <button class="dugme sari">Ekle</button>
+    </form>
+    <div id="fikir-liste" class="liste"></div>
+  </section>
+
+  <section id="s-uretim" class="sayfa">
+    <div class="baslik-satir"><h1>Üretim</h1><span class="say" id="uretim-say"></span></div>
+    <div id="uretim-liste" class="liste"></div>
+  </section>
+
+  <section id="s-sira" class="sayfa">
+    <div class="baslik-satir"><h1>Sıra</h1>
+      <div class="secici" id="makine-sec"></div>
+    </div>
+    <div id="sira-saglik" class="saglik-satir"></div>
+    <div id="sira-liste" class="liste"></div>
+  </section>
+
+  <section id="s-takvim" class="sayfa">
+    <div class="baslik-satir"><h1>Takvim</h1>
+      <div class="ok-grup"><button class="ok" data-h="-1">‹</button><span id="takvim-ay"></span><button class="ok" data-h="1">›</button></div>
+    </div>
+    <div id="takvim" class="takvim"></div>
+  </section>
+
+  <section id="s-sonuclar" class="sayfa">
+    <div class="baslik-satir"><h1>Sonuçlar</h1>
+      <div class="secici" id="metrik"><button data-m="views" class="on">İzlenme</button><button data-m="reach">Erişim</button><button data-m="likes">Beğeni</button><button data-m="shares">Paylaşım</button><button data-m="saved">Kayıt</button></div>
+      <button class="dugme ince" id="yenile" title="Instagram'dan yeniden çek">↻</button>
+    </div>
+    <article class="tahta" id="ders"></article>
+    <div class="kart" id="sonuclar"></div>
+  </section>
+</main>
+
+<aside class="cekmece" id="cekmece" hidden>
+  <div class="cekmece-ust"><h2>Arka plandaki işler</h2><button class="kapat" id="cekmece-kapat" aria-label="Kapat">✕</button></div>
+  <div id="is-liste"></div>
+</aside>
+
+<dialog id="pencere"><div id="pencere-ic"></div></dialog>
+<div id="bildirim" class="bildirim" role="status"></div>
+<script src="panel.js"></script>
+</body>
+</html>
