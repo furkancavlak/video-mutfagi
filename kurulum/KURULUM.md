@@ -152,7 +152,7 @@ Kanal kimliği bittikten sonra kullanıcıya sor. Önce 2-3 cümleyle anlat, son
 
 ## Sunucuya kurmak (Linux, 7/24)
 
-- **Ayrı kullanıcı:** Repo için ayrı bir kullanıcı aç (ör. `useradd -m vmutfak`). Sunucudaki başka uygulamalara dokunma.
+- **Ayrı kullanıcı:** Repo için ayrı bir kullanıcı aç (ör. `useradd -m videocu`). Sunucudaki başka uygulamalara dokunma.
 - **Node:** Sunucunun Node'u 22'den eskiyse sistem Node'unu **güncelleme**, başka uygulamalar onu kullanıyor olabilir. nodejs.org'dan Node 22 arşivini indir (SHASUMS256 ile doğrula), yalnız bu kullanıcının `~/.local/node` klasörüne aç ve PATH'e ekle.
 - **Özel repo:** Repo özelse sunucuya GitHub şifresi koyma. Bilgisayarda `git bundle create vm.bundle main` ile paketle, sunucuya kopyala, `git clone vm.bundle` ile aç.
 - **Düşük öncelik:** Sunucuda başka işler de çalışıyorsa ağır işleri (render, Whisper) `nice -n 19` ile çalıştır.
