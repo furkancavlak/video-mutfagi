@@ -91,12 +91,16 @@ async function puanla(ctx, adaylar, tur) {
   }).sort((x, y) => y.skor - x.skor);
 }
 
+// model calls of one choice: writers + judges of both generations, plus at most one repair per writer
+const CAGRI = { en_az: ACILAR.length + 2 + 2 * JURI.length, en_cok: 2 * (ACILAR.length + 2) + 2 * JURI.length };
+
 const kaynakAraligi = (a, ctx) => { const r = KS.coz(a.parcalar, ctx.W, ctx.S, ctx.mod); return [Math.min(...r.kesit.map(k => k.v0)), Math.max(...r.kesit.map(k => k.v1))]; };
 
 // W: Whisper words, S: sentences. Returns the best `adet` candidates, best first, plus the whole history.
-async function nesil({ W, S, mod = 'tanitim', adet = 1, not = '', model, yaz = console.log, calistir }) {
+// `ayar`: the channel's konu.json → llm (yol: otomatik | claude-cli | api), as the topic radar uses it.
+async function nesil({ W, S, mod = 'tanitim', adet = 1, not = '', model, ayar = {}, yaz = console.log, calistir }) {
   const ctx = { W, S, mod, not, yaz, metin: S.map(s => `[${s.i}] ${s.a.toFixed(1)}–${s.b.toFixed(1)} sn: ${s.metin}`).join('\n'),
-    sor: (istem, o) => LLM.sor(istem, { model, calistir, ...o }) };
+    sor: (istem, o) => LLM.sor(istem, { ayar, model, calistir, ...o }) };
   const fazla = adet > 1 ? `\nKanal sahibi ${adet} ayrı kısa istiyor: adaylarını videonun FARKLI bölümlerinden seç.` : '';
   const acilar = mod === 'an' ? ACILAR_AN : ACILAR;
 
@@ -123,4 +127,4 @@ async function nesil({ W, S, mod = 'tanitim', adet = 1, not = '', model, yaz = c
   return { secilen: KS.enIyiler(sirali, adet), nesil1: p1, nesil2: p2 };
 }
 
-module.exports = { nesil, kurallar, MOD_TARIFI };
+module.exports = { nesil, kurallar, MOD_TARIFI, CAGRI };

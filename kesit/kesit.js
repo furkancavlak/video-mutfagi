@@ -2,11 +2,11 @@
 // Vertical clips (Reels / Shorts) cut from a long horizontal video.
 //
 //   node kesit/kesit.js yazi  <uzun.mp4>                    Whisper word times -> <iş>/metin.txt (numbered sentences)
-//   node kesit/kesit.js sec   <uzun.mp4> [--mod tanitim|an] [--adet 3] [--llm-yok] [--not "..."]
+//   node kesit/kesit.js sec   <uzun.mp4> [--mod tanitim|an] [--adet 3] [--kanal <ad>] [--llm-yok] [--onay] [--not "..."]
 //                                                            writers + 3 judges, two generations -> <iş>/adaylar.json
 //   node kesit/kesit.js dene  <uzun.mp4> <liste.json>        what a hand-written cut list sounds like (spends nothing)
 //   node kesit/kesit.js yap   <uzun.mp4> [--aday 1] [--cerceve bulanik|kirp] [--odak 0.5] [--yakin 1]
-//                             [--kanal <ad>] [--muzik <dosya>] [--kancasiz] [--kare]
+//                             [--kanal <ad>] [--muzik <dosya>] [--kancasiz] [--kare] [--liste <liste.json>] [--uzerine]
 //                                                            stills (--kare) or the finished 1080x1920 clip
 //   node kesit/kesit.js hepsi <uzun.mp4> [same flags]        yazi + sec + yap (first candidate)
 //
@@ -70,15 +70,32 @@ function kelimeYukle(is) {
 }
 
 // ---- 2. choose the clip
+// Which language model route the choice will take (the channel's konu.json → llm, as for the topic radar).
+// Says how many calls it makes before the first one; the paid API route stops unless --onay is given.
+function llmYolu() {
+  const LLM = require('../konu/llm'), { CAGRI } = require('./secim');
+  const kanal = arg('--kanal'), kf = kanal ? path.join(K.KOK, 'kanal', kanal, 'konu.json') : null;
+  const ayar = (kf && fs.existsSync(kf) && K.okuJson(kf).llm) || {};
+  let yol;
+  try { yol = LLM.yolSec(ayar); } catch (e) { console.log(`\n${e.message}\nYapay zekâsız seçime geçiliyor.`); return null; }
+  const sayi = `${CAGRI.en_az}-${CAGRI.en_cok} yapay zekâ çağrısı`;
+  if (yol === 'api') {
+    console.log(`\nSeçim ${sayi} yapacak, ÜCRETLİ API yolundan (ANTHROPIC_API_KEY, kullandıkça ödenir). Her çağrıya konuşmanın tüm dökümü gider; uzun videoda tutar artar.`);
+    if (!var_('--onay')) K.fail(`ücretli yol onaysız çalışmaz. Onaylıyorsan:\n  node kesit/kesit.js ${argv.map(x => /[\s"]/.test(x) ? q(x) : x).join(' ')} --onay\nÜcretsiz seçim için --llm-yok ekle.`);
+  } else console.log(`\nSeçim ${sayi} yapacak, Claude aboneliğinden (claude -p): ek ücret yok, aboneliğin kullanım sınırından düşer. Birkaç dakika sürer.`);
+  return { yol, ayar };
+}
+
 async function sec(is) {
   const { W, S } = kelimeYukle(is);
   const mod = arg('--mod', 'tanitim'), adet = Math.max(1, +arg('--adet', 1) || 1);
   if (!KS.MODLAR[mod]) K.fail('--mod tanitim ya da an olmalı.');
   let sonuc = null, yontem = 'sezgisel';
-  if (!var_('--llm-yok')) {
+  const yol = var_('--llm-yok') ? null : llmYolu();
+  if (yol) {
     try {
       const { nesil } = require('./secim');
-      sonuc = await nesil({ W, S, mod, adet, not: arg('--not', ''), model: arg('--model') });
+      sonuc = await nesil({ W, S, mod, adet, not: arg('--not', ''), model: arg('--model') || yol.ayar.model_metin, ayar: yol.ayar });
       yontem = 'nesil';
     } catch (e) {
       console.log(`\nYapay zekâyla seçim olmadı (${e.message}).\nYapay zekâsız seçime geçiliyor: cümleler basit işaretlere göre puanlanır (soru, rakam, güçlü kelime).`);
@@ -144,9 +161,9 @@ function ses(is, r, tmp, hedef) {
   const muzik = arg('--muzik'), SONUS = 1.8;            // the music always fades out slowly: never an abrupt stop
   if (muzik) {
     if (!fs.existsSync(muzik)) K.fail('müzik dosyası yok: ' + muzik);
-    // a quiet bed under the voice that comes up on the card, then fades with it
-    const i = inp('-i', path.resolve(muzik));
-    fc.push(`[${i}:a]aresample=${SL.SR},aformat=channel_layouts=stereo,loudnorm=I=-30:TP=-6,atrim=0:${r.sure.toFixed(3)},afade=t=in:d=0.6,` +
+    // a quiet bed under the voice that comes up on the card, then fades with it; looped, so a short track never runs out
+    const i = inp('-stream_loop', '-1', '-i', path.resolve(muzik));
+    fc.push(`[${i}:a]atrim=0:${r.sure.toFixed(3)},aresample=${SL.SR},aformat=channel_layouts=stereo,loudnorm=I=-30:TP=-6,aresample=${SL.SR},afade=t=in:d=0.6,` +
       `volume='1+2.2*clip((t-${(r.son - 0.3).toFixed(2)})/0.6,0,1)':eval=frame,afade=t=out:st=${(r.sure - SONUS).toFixed(3)}:d=${SONUS}[m]`); lab.push('[m]');
   } else {
     const kart = path.join(tmp, 'kart.wav'), giris = 0.4;
@@ -209,7 +226,8 @@ function sayfa(is, a, r, hfDir, kimlik) {
 function yap(is) {
   const { W, S } = kelimeYukle(is);
   let a, n = Math.max(1, +arg('--aday', 1) || 1);
-  if (arg('--liste')) { const j = K.okuJson(path.resolve(arg('--liste'))); a = j.adaylar ? j.adaylar[n - 1] : j; }
+  const liste = arg('--liste');
+  if (liste) { const j = K.okuJson(path.resolve(liste)); a = j.adaylar ? j.adaylar[n - 1] : j; if (a) a.mod = a.mod || j.mod; }
   else {
     const f = path.join(is.dir, 'adaylar.json');
     if (!fs.existsSync(f)) K.fail('aday yok. Önce: node kesit/kesit.js sec ' + q(is.src));
@@ -222,7 +240,10 @@ function yap(is) {
   console.log(KS.deneMetni(r));
   if (r.hata.length) K.fail('kesit listesi geçersiz: ' + r.hata.join('; '));
   const kimlik = arg('--kanal') ? K.okuJson(path.join(K.KOK, 'kanal', arg('--kanal'), 'kimlik.json'), 'kanal kimliği') : null;
-  const kd = path.join(is.dir, `k${n}`), hfDir = path.join(kd, 'hf'), tmp = path.join(kd, 'tmp');
+  // a hand-written list gets its own folder and file name, so it never replaces candidate n's video
+  const ek = liste ? `liste${n}` : `${n}`, mp4 = path.join(is.dir, `${is.ad}-kesit${ek}.mp4`);
+  if (!var_('--kare') && fs.existsSync(mp4) && !var_('--uzerine')) K.fail(`${rel(mp4)} zaten var. Üstüne yazmak için --uzerine ekle (ya da eski videoyu başka bir ada taşı).`);
+  const kd = path.join(is.dir, liste ? `l${n}` : `k${n}`), hfDir = path.join(kd, 'hf'), tmp = path.join(kd, 'tmp');
   fs.mkdirSync(path.join(hfDir, 'assets'), { recursive: true }); fs.mkdirSync(tmp, { recursive: true });
   console.log('\nGörüntü dikeye çevriliyor…');
   resim(is, r, path.join(hfDir, 'assets', 'bg.mp4'));
@@ -236,7 +257,6 @@ function yap(is) {
   console.log('Ses hazırlanıyor…');
   const wav = path.join(kd, 'ses.wav');
   ses(is, r, tmp, wav);
-  const mp4 = path.join(is.dir, `${is.ad}-kesit${n}.mp4`);
   K.renderEt(hfDir, wav, mp4, ENC);
   const aciklama = [soru && a.mod === 'tanitim' ? soru.charAt(0) + soru.slice(1).toLocaleLowerCase('tr') : '', 'Tam video kanalda.'].filter(Boolean).join(' ');
   console.log(`\n${r.sure.toFixed(1)} sn. İzle, sonra karelere bak (denetim/DENETIM.md).`);

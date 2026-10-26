@@ -16,14 +16,18 @@ Yatay, uzun bir videodan Reels / Shorts keser. Sonuç 1080x1920 bir videodur:
 
 ```
 node kesit/kesit.js yazi  <uzun.mp4>                 konuşmayı yazıya döker (Whisper)
-node kesit/kesit.js sec   <uzun.mp4> [--mod an] [--adet 3] [--not "..."] [--llm-yok]
+node kesit/kesit.js sec   <uzun.mp4> [--mod an] [--adet 3] [--not "..."] [--kanal <ad>] [--llm-yok] [--onay]
 node kesit/kesit.js yap   <uzun.mp4> --aday 1 --kare  önce kareler
 node kesit/kesit.js yap   <uzun.mp4> --aday 1         sonra video
 node kesit/kesit.js hepsi <uzun.mp4>                 üçünü arka arkaya yapar
 node kesit/kesit.js dene  <uzun.mp4> liste.json      elle yazılmış listeyi dener
 ```
 
-Hiçbir şey para harcamaz. Repoya da hiçbir şey yazılmaz.
+Kesme, ses ve görüntü ücretsizdir. Yalnız `sec` (ve `hepsi`) yapay zekâya 11-16 çağrı yapar. Komut ilk çağrıdan önce kaç çağrı yapacağını ve hangi yoldan gideceğini yazar:
+- **Claude aboneliği** (`claude -p`): ek ücret yok, aboneliğin kullanım sınırından düşer.
+- **Ücretli API** (`ANTHROPIC_API_KEY`, kullandıkça öde): komut durur. Kullanıcı onaylarsa aynı komut `--onay` ile yeniden çalıştırılır.
+
+Yol `--kanal <ad>` verilince o kanalın `konu.json` → `llm.yol` ayarından gelir (konu radarıyla aynı). `--llm-yok` hiç çağrı yapmaz. Repoya hiçbir şey yazılmaz.
 
 ## Nereye ne yazılır
 
@@ -36,7 +40,7 @@ Her şey uzun videonun yanındaki `<ad>-kesit/` klasörüne yazılır. Başka bi
 | `adaylar.json` | Seçilen kesitler, en iyisi başta. Jürinin notları da burada. |
 | `duzeltme.json` | (isteğe bağlı) Whisper'ın yanlış yazdığı kelimeler: `{"kılahat": "Claude"}`. Yalnız altyazıyı düzeltir. |
 | `k1/kareler/` | `--kare` ile alınan kareler. |
-| `<ad>-kesit1.mp4` | Bitmiş video. |
+| `<ad>-kesit1.mp4` | Bitmiş video (`--aday 1`). Elle listeden yapılan `<ad>-kesitliste1.mp4` olur. Var olan video ezilmez; üstüne yazmak için `--uzerine`. |
 
 ## Kesit nasıl seçilir ("nesil nesil")
 
@@ -52,7 +56,7 @@ Bu yöntem ilk tanıtım kısalarımızda denendi ve onaylandı.
 4. İki yazar puanlı adayları geliştirir. Biri jürinin eleştirdiğini düzeltir. Öteki en iyi açılışla en iyi sonu birleştirir.
 5. Yeni adaylar ve ilk neslin en iyi ikisi aynı jüriye yeniden gider. En yüksek puanlı aday kazanır.
 
-Yapay zekâ olarak `claude -p` kullanılır (kullanıcının Claude aboneliği, `konu/llm.js`). Bir seçim ~15 çağrı yapar, birkaç dakika sürer.
+Yapay zekâ `konu/llm.js` üzerinden çağrılır: Claude aboneliği (`claude -p`) ya da ücretli API (yukarıda). Bir seçim 11-16 çağrı yapar, birkaç dakika sürer.
 
 **Yapay zekâ yoksa** (ya da `--llm-yok` verilirse) basit bir seçici çalışır. Cümleleri soru, rakam ve güçlü kelimelere göre puanlar. Tanıtımı bir soruyla bitirir; sorunun cevabı videoda sonra gelmelidir. Sonucu yapay zekâ kadar iyi değildir. Yine de çalışır.
 
@@ -84,7 +88,7 @@ Altyazı çekirdekten gelir (`uretim/cekirdek.js`). Krem kart üstünde, konuşu
 
 - **Konuşma:** Uzun videonun kendi sesinden kesilir. Kesitlerin arasında 0,22 sn nefes ve yumuşak bir "vuuş" vardır.
 - **Kart müziği:** Kodla üretilen sakin bir akor. Kart başında hafif bir zil çalar. Son 1,8 sn'de yavaşça kısılır, hiç birden kesilmez.
-- **`--muzik <dosya>`:** Kendi müziğin. Konuşmanın altında kısık çalar, kartta yükselir, sonda 1,8 sn'de kısılır.
+- **`--muzik <dosya>`:** Kendi müziğin. Kısaysa başa sarıp tekrar çalar. Konuşmanın altında kısık çalar, kartta yükselir, sonda 1,8 sn'de kısılır.
 - **Ses düzeyi:** -14 LUFS (iki geçişli loudnorm).
 
 Dosya küçük tutulur: libx264 crf 22, en fazla 6 Mbit/sn, AAC 160k. 30 sn'lik video ~10-20 MB olur.
@@ -102,4 +106,4 @@ node kuyruk/kuyruk.js ekle "<video>" --aciklama "..." --onay-gerekli
 - **İlk sürüm reddedildi.** Kısalar 46-67 sn sürüyordu. Cevabı söylüyorlardı. Müzik birden kesiliyordu. Dosyalar 180 MB'tı.
   → Ses 20-25 sn. Cevaptan önce kes. Müzik en az 1,4 sn'de kısılsın. Kodlama küçük.
 - **Whisper bazı sözcükleri böler** ("1 .5", "TL 'lik"). Kod bunları yeniden birleştirir. Yanlış duyduğu sözcükler için `duzeltme.json` yaz.
-- **Kesit sonu bir sonraki kelimeye taşarsa** başka bir kelimenin ilk harfi duyulur. Kesim son kelimeden 0,12 sn sonra biter, ama hiçbir zaman sonraki kelimeye 0,05 sn'den fazla yaklaşmaz.
+- **Kesit sonu bir sonraki kelimeye taşarsa** başka bir kelimenin ilk harfi duyulur. Kesim son kelimeden 0,12 sn sonra biter, sonraki kelimeye 0,05 sn kala durur. Kelimeler bitişikse (aralarında 0,08 sn'den az boşluk) son kelimenin bitişinden 0,03 sn sonra kesilir ve son 0,05 sn yumuşakça kısılır. Yine de bir ses duyulursa o parçayı `"ses"` türüyle bir kelime önce bitir.
