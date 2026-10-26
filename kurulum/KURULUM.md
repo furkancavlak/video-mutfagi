@@ -4,6 +4,8 @@ Kullanıcı kod bilmiyor olabilir. Ajan her adımı kendisi çalıştırır. Kul
 
 Windows'ta denendi. Mac'te komutlar parantez içinde verilmiştir, Mac yolu deneyseldir.
 
+**Ajansız kurulum:** Adım 1-5'i tek seferde yapan betikler var. Windows'ta `kur.cmd` (çift tıkla), Mac/Linux'ta `bash kur.sh`. Ajan da bunları kullanabilir. Ayrıntı en altta: "Tek tık kurulum betikleri".
+
 Her şey hazır mı diye her an şu komutla bakılabilir:
 
 ```
@@ -84,7 +86,10 @@ node uretim/kurgu.js videolar/oxygbio-v01-ucak --render
 
 ### Yapay ses (ElevenLabs)
 
-1. Kullanıcı elevenlabs.io'da hesap açar. Ücretsiz planın ticari kullanım şartlarını ve aylık karakter sınırını sitede kontrol etsin.
+1. Kullanıcı elevenlabs.io'da hesap açar. Ajan ücretsiz planın şartlarını kullanıcıya açıkça söyler (26.10.2026'da kontrol edildi, `ARACLAR.md`):
+   - Ayda 10.000 kredi. Örnek videonun metni ~1.070 karakter.
+   - **Ticari kullanım yok.** Kanal para kazanıyorsa ya da marka tanıtıyorsa ücretli plan (Starter ve üstü) gerekir.
+   - Ücretsiz planla üretilen ses paylaşılırken başlığa (Instagram'da açıklamaya) "elevenlabs.io" yazılır.
 2. Profile → API Keys bölümünden bir anahtar oluşturur.
 3. Anahtarı **sohbete yapıştırmaz**. Masaüstünde `elevenlabs.txt` adlı bir dosyaya kaydeder.
 4. Ajan dosyayı ev klasörüne taşır, masaüstündeki kopya kalmaz:
@@ -120,6 +125,25 @@ Ardından paylaşım kuyruğu ve zamanlayıcı: `kuyruk/BENIOKU.md` → Kurulum.
 İsteğe bağlı bir modül. Henüz hazırlanıyor.
 
 ---
+
+## Tek tık kurulum betikleri (ajansız)
+
+`kur.cmd` (Windows) ve `kur.sh` (Mac/Linux) yukarıdaki Adım 1-5'i sırayla yapar:
+
+1. Node.js 22+, ffmpeg ve Python 3.12'ye bakar. Eksikleri listeler, kuracağı komutu yazar ve **sorar**. Windows'ta `winget`, Mac'te `brew` kullanır. Linux'ta sistem paketleri sudo istediği için yalnız komutları yazar, kendisi kurmaz.
+2. `npm install` (paketler varsa atlar).
+3. `npx hyperframes browser ensure` (tarayıcı varsa hemen geçer).
+4. `.venv` ve `kurulum/gereksinimler.txt` (doğru sürümler varsa atlar).
+5. Git klonuysa gizli bilgi kilidi (`gizli-tara.js kur`). ZIP ile indirildiyse atlar.
+6. `node kurulum/doktor.js`. Zorunlu bir parça eksikse durur.
+7. Örnek videoyu üretir ve açar. Video zaten varsa yeniden çizmez.
+
+- **Var olanı yeniden kurmaz.** İkinci çalıştırma birkaç saniyede biter.
+- **Hata olunca durur** ve ne yapılacağını Türkçe yazar. Hiçbir şey silmez.
+- **Yönetici izni:** Yalnız winget bir aracı kurarken Windows sorabilir.
+- **winget ile araç kurduktan sonra** Windows yeni araçları ancak yeni pencerede görür. Betik bunu söyler ve durur. Pencereyi kapatıp `kur.cmd`'yi yeniden çalıştırmak yeter.
+- **Seçenekler:** `--kuru` yalnız bakar, hiçbir şeyi değiştirmez. `--acmadan` sonda videoyu açmaz.
+- **Windows'ta denendi** (bu bilgisayarda var olan araçlarla: her adım atlandı ya da tamamlandı, ses karıştırma + render dahil kurulum 97 sn sürdü). Mac ve Linux yolu kuru modda ve sahte araçlarla denendi, gerçek bir Mac'te henüz denenmedi.
 
 ## Sunucuya kurmak (Linux, 7/24)
 

@@ -25,7 +25,8 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 
 | Yer | Ne |
 |---|---|
-| `kurulum/` | `KURULUM.md` (adım adım), `doktor.js` (her parçayı dener), `gereksinimler.txt` (sabit Python sürümleri) |
+| `kurulum/` | `KURULUM.md` (adım adım), `doktor.js` (her parçayı dener), `gereksinimler.txt` (sabit Python sürümleri). Ajansız kurulum: kökte `kur.cmd` / `kur.sh` |
+| `ARACLAR.md` | Her aracın ne işe yaradığı, bedava mı ücretli mi, lisans ve kontrol tarihi. Kullanıcı fiyat sorarsa buradan cevap ver, eskiyse resmi sayfaya bak |
 | `kanal/` | Kanal kimlikleri. `KIMLIK-REHBERI.md`, `sablon/`, dolu örnek `oxygbio/` |
 | `videolar/` | Her video bir klasör. `_sablon/` yeni video için. `oxygbio-v01-ucak/` tam örnek |
 | `uretim/` | `TARIF.md` (iş sırası), `ses.js`, `kelime.py`, `mix.js`, `kurgu.js` (ücretsiz), `ucretli.js` (Higgsfield), `cekirdek.js` (ortak) |
@@ -33,7 +34,7 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 | `denetim/` | `DENETIM.md`, `kareler.sh`, `kare-denetci.md` (denetçi ajanın kuralları) |
 | `instagram/` | `REHBER.md` (Meta kurulumu), `paylas.js` |
 | `kuyruk/` | `BENIOKU.md`, `kuyruk.js`: videolar sıraya girer, zamanlayıcı saati gelince paylaşır, sonuçları çeker |
-| `dersler/` | `HATALAR.md`, `KURGU-DILI.md`, `METIN.md` |
+| `dersler/` | `HATALAR.md`, `KURGU-DILI.md`, `METIN.md`, `KAPAK-BASLIK.md` (kapak, başlık, Instagram açıklaması) |
 | `konu/` | Konu radarı: forum ve trend sitelerinden kanala uygun video fikri bulur, isterse otomatik üretir. `BENIOKU.md`, `radar.js` |
 
 ## Konu radarı (isteğe bağlı)
