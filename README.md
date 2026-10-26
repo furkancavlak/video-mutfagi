@@ -91,7 +91,7 @@ Ayrıntısı bu videoda: https://youtu.be/-z9aGjceXkc · Modül: `ikinci-beyin/B
 
 ## Senin sonuçların
 
-Bu sistemle bir video yayınladın mı? [YouTube kanalımıza](https://www.youtube.com/@furkancavlakcom) abone ol ve bu repoyu anlattığımız videonun altına yorum olarak yaz: videonun linki, kaç izlenme aldı, ne işe yaradı, ne yaramadı. En çok bunu duymak istiyoruz. Kısa şablon: `BASARI-HIKAYELERI.md`.
+Bu sistemle bir video yayınladın mı? [YouTube kanalımıza](https://www.youtube.com/@furkancavlak) abone ol ve bu repoyu anlattığımız videonun altına yorum olarak yaz: videonun linki, kaç izlenme aldı, ne işe yaradı, ne yaramadı. En çok bunu duymak istiyoruz. Kısa şablon: `BASARI-HIKAYELERI.md`.
 
 ## Lisans
 

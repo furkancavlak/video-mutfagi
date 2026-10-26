@@ -6,7 +6,7 @@ Bu sistemle bir video yaptın ve izlendi mi? Bize yaz. Kaç izlenme aldığını
 
 YouTube'da, bu repoyu anlattığımız videonun altına yorum olarak.
 
-1. [YouTube kanalımıza](https://www.youtube.com/@furkancavlakcom) abone ol. Yeni dersler ve güncellemeler orada çıkıyor.
+1. [YouTube kanalımıza](https://www.youtube.com/@furkancavlak) abone ol. Yeni dersler ve güncellemeler orada çıkıyor.
 2. Kanalda bu repoyu anlattığımız videoyu aç.
 3. Aşağıdaki şablonu kopyala, doldur, yorum olarak gönder.
 
