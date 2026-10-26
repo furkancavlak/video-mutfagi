@@ -73,7 +73,7 @@ videolar/<kanal>-v01-<konu>/
 
 ## Hazır şablonla ücretsiz video (kod yazmadan)
 
-`video.json` → `"sablon": "simulasyon"` yazılırsa sahne kodu gerekmez. Sahneyi `uretim/sablonlar/simulasyon.js` çizer: gökyüzü, kıyı ve deniz kesiti, oksijen göstergeleri, zaman cetveli. Videoya özel bilgi `simulasyon.json` dosyasına yazılır: hangi kelimede hangi yıl, kamera nereye gider, oksijen yüzde kaç, ne değişir. Alanların listesi şablon dosyasının başında yazıyor.
+`video.json` → `"sablon": "simulasyon"` yazılırsa sahne kodu gerekmez. Sahneyi `uretim/sablonlar/simulasyon.js` çizer: gökyüzü, kıyı ve deniz kesiti, oksijen göstergeleri, zaman cetveli. Videoya özel bilgi `simulasyon.json` dosyasına yazılır: hangi kelimede hangi yıl, kamera nereye gider, oksijen yüzde kaç, ne değişir. Metindeki her espri bir **eşyayla** ekranda gösterilir (dolmuş, dilekçe, damga, fabrika, tekne…: adımdaki `esya` alanı; çizimler `uretim/sablonlar/esya.js`'de). Alanların listesi şablon dosyasının başında yazıyor.
 
 ## Yeni sahne kodu yazarken
 
