@@ -4,6 +4,8 @@
 //
 // Every step is recorded in videolar/<video>/uretim.json, so a rerun continues where the last one stopped.
 // Spend gates: without `onay` the run stops at the first paid step and prints what it would cost.
+// `onay` is true (CLI --onay: every paid step) or { ses: maxKarakter, gorsel: maxKredi, klip: maxKredi } (the panel:
+// only the steps whose price the user saw, up to that price). A stop at a gate leaves uretim.json → bekleyen.
 // Anything that needs a human (failed fact-check, bad stills, low review score, free tier scenes) stops the run
 // and marks the idea "insan-bekliyor" with the reason.
 const fs = require('fs'), path = require('path');
@@ -162,7 +164,9 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
   const D = O.okuJson(durumF, { fikir: fikir.id, kanal: ctx.kanal, katman, baslangic: O.simdi().toISOString(), adimlar: {} });
   if (otomatik) D.otomatik = true;      // only runs started by automation are resumed by the scheduler
   const bitti = a => !!D.adimlar[a];
-  const isaretle = (a, ek = {}) => { D.adimlar[a] = { zaman: O.simdi().toISOString(), ...ek }; O.yazJson(durumF, D); };
+  const isaretle = (a, ek = {}) => { D.adimlar[a] = { zaman: O.simdi().toISOString(), ...ek }; if (D.bekleyen && D.bekleyen.adim === a) delete D.bekleyen; O.yazJson(durumF, D); };
+  const izinli = (adim, miktar) => onay === true || (!!onay && typeof onay === 'object' && onay[adim] != null && miktar <= onay[adim]);
+  const bekle = (adim, ek, mesaj) => { D.bekleyen = { adim, ...ek, zaman: O.simdi().toISOString() }; O.yazJson(durumF, D); return new Dur('onay', mesaj); };
   const kaydet = (durum, not) => { const h2 = H.havuzOku(ctx); const f2 = H.fikirBul(h2, fikir.id); f2.video = fikir.video; H.durumYap(h2, fikir.id, durum, not); H.havuzYaz(ctx, h2); };
   kaydet('uretiliyor', bitti('klasor') ? null : `üretim başladı: ${fikir.video}`);
   isaretle('klasor', { yol: fikir.video });
@@ -252,13 +256,15 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       yaz(`\n💳 SES: ${eksik.length} satır, ~${karakter} ElevenLabs karakteri.`);
       const sesBilgi = node('uretim/ses.js', [dir], { yakala: true });
       if (sesBilgi.cikti) yaz(sesBilgi.cikti.split('\n').map(l => '   ' + l).join('\n'));
+      let krediTahmin = null;
       if (katman === 'ucretli') {
         const U = O.okuJson(ucretliF), klipSn = (U.klipler || []).reduce((a, k) => a + (k.sure || 5), 0);
+        krediTahmin = Math.round(U.gorseller.length * 1.1 + klipSn);
         yaz(`💳 GÖRÜNTÜ (tahmin): ${U.gorseller.length} resim ~${(U.gorseller.length * 1.1).toFixed(0)} kredi + ${(U.klipler || []).length} klip (${klipSn} sn) ~${klipSn} kredi. Video bütçesi: ${U.butce} kredi. Kesin fiyat her adımda Higgsfield'dan alınır.`);
       }
       const izin = A.harcamaIzni(ctx, 'karakter', karakter, { otomatik });
       if (!izin.izin) throw new Dur(otomatik ? 'butce' : 'onay', izin.neden);
-      if (!onay) throw new Dur('onay', `Hiçbir şey harcanmadı. Önce metni oku: ${rel(path.join(dir, 'metin.md'))}\nBeğendiysen devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
+      if (!izinli('ses', karakter)) throw bekle('ses', { karakter, satir: eksik.length, kredi_tahmin: krediTahmin }, `Hiçbir şey harcanmadı. Önce metni oku: ${rel(path.join(dir, 'metin.md'))}\nBeğendiysen devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
       if (karakter) {
         if (!sesBilgi.ok) throw new Dur('insan', 'ses.js çalışmadı (anahtar ya da kota). Çıktı yukarıda.');
         const r = node('uretim/ses.js', [dir, '--onay']);
@@ -302,7 +308,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       if (kredi) {
         const izin = A.harcamaIzni(ctx, 'kredi', kredi, { otomatik });
         if (!izin.izin) throw new Dur(otomatik ? 'butce' : 'onay', izin.neden);
-        if (!onay) throw new Dur('onay', `Hiçbir şey harcanmadı. Devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
+        if (!izinli(adim, kredi)) throw bekle(adim, { kredi, butce: U.butce }, `Hiçbir şey harcanmadı. Devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
         const r = node('uretim/ucretli.js', [dir, adim, '--onay']);
         O.harcamaYaz(ctx, 'kredi', kredi, ad);              // logged even on partial failure: credits may be gone
         if (!r.ok) throw new Dur('insan', `${adim} üretimi başarısız (çıktı yukarıda).`);

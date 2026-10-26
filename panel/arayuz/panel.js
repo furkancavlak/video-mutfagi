@@ -10,6 +10,11 @@ const dosya = p => `/dosya?p=${encodeURIComponent(p)}&k=${encodeURIComponent(ana
 const tarih = (t, o = {}) => new Date(t).toLocaleString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...o });
 const gunTarih = t => new Date(t).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
 const yerel = t => { const d = new Date(t); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+const guvenli = u => /^https?:\/\//i.test(String(u || '')) ? u : null;          // only web links, never javascript: etc.
+// datetime-local "2026-12-01T19:00" -> "2026-12-01T19:00+03:00": the offset travels, so a server in UTC posts at 19:00 here too
+const ofsetli = v => { const d = new Date(v); if (!v || isNaN(d)) return v; const o = -d.getTimezoneOffset(), a = Math.abs(o), p = n => String(n).padStart(2, '0'); return `${String(v).slice(0, 16)}${o < 0 ? '-' : '+'}${p(Math.floor(a / 60))}:${p(a % 60)}`; };
+// how the language model is paid for on this computer (panel.js → yzYolu)
+const yzNot = k => { const y = O && O.yz ? O.yz[k || kanal || O.kanallar[0]] : null; return y === 'api' ? 'Anthropic API ile, kullandıkça ücretli' : y === 'claude-cli' ? 'ücretsiz, Claude aboneliğiyle' : 'yapay zekâ bağlı değil'; };
 const kalan = t => { const ms = new Date(t) - Date.now(); if (ms < 0) return 'geçti'; const g = Math.floor(ms / 864e5), s = Math.floor(ms % 864e5 / 36e5), d = Math.floor(ms % 36e5 / 6e4); return g ? `${g} gün ${s} sa` : s ? `${s} sa ${d} dk` : `${d} dk`; };
 
 async function api(yol, govde) {
@@ -48,11 +53,12 @@ function bekleyenler() {
     for (const j of K.hatali) L.push({ ikon: '!', renk: 'kirmizi', baslik: isAd(j), alt: `${makineAd(m)} · ${j.kontrol_et ? 'paylaşıldı mı belli değil: Instagram hesabına bak' : 'paylaşılamadı: ' + (j.hata || '')}`, islem: '' });
   }
   for (const u of U) {
-    if (u.durum.ses === 'onay') L.push({ ikon: '✎', renk: 'sari', baslik: u.baslik, alt: 'Metin hazır ve doğrulandı. Oku; beğenirsen ses ve video yapılsın.', islem: `<button class="dugme ince" data-metin="${esc(u.metin)}">Metni oku</button>${u.fikir ? `<button class="dugme ince sari" data-uret-onay="${esc(u.ad)}">Onayla ve devam</button>` : ''}` });
+    if (u.kredi && u.fikir) L.push({ ikon: '💳', renk: 'sari', baslik: u.baslik, alt: `Ses hazır. ${KREDI_AD[u.kredi.adim]} Higgsfield kredisi bekliyor: ${sayi(u.kredi.kredi)} kredi.`, islem: `<button class="dugme ince sari" data-kredi-onay="${esc(u.ad)}">Fiyatı gör, onayla</button>` });
+    else if (u.durum.ses === 'onay') L.push({ ikon: '✎', renk: 'sari', baslik: u.baslik, alt: `Metin hazır ve doğrulandı. Oku; beğenirsen ses yapılsın (${sayi(u.ses.karakter)} ElevenLabs karakteri).`, islem: `<button class="dugme ince" data-metin="${esc(u.metin)}">Metni oku</button>${u.fikir ? `<button class="dugme ince sari" data-uret-onay="${esc(u.ad)}">Onayla ve devam</button>` : ''}` });
     else if (u.durum.denetim === 'takildi') L.push({ ikon: u.puan, renk: 'kirmizi', baslik: u.baslik, alt: `Kalite kontrolü ${u.puan}/10 verdi, eşik 7. Rapora bak.`, islem: `<button class="dugme ince" data-rapor="${esc(u.ad)}">Rapor</button>${u.mp4[0] ? `<button class="dugme ince" data-izle="${esc(u.mp4[0].yol)}">İzle</button><button class="dugme ince" data-ekle="${esc(u.ad)}">Yine de sıraya ekle</button>` : ''}` });
     else if (u.mp4.length && !siradaMi(u)) L.push({ ikon: '▶', renk: 'yesil', baslik: u.baslik, alt: 'Video hazır, sırada değil.', islem: `<button class="dugme ince" data-izle="${esc(u.mp4[0].yol)}">İzle</button><button class="dugme ince sari" data-ekle="${esc(u.ad)}">Sıraya ekle</button>` });
   }
-  for (const f of F.filter(f => f.durum === 'secildi' && !f.video)) L.push({ ikon: '★', renk: '', baslik: f.baslik, alt: 'Seçilmiş fikir. Metni yazılsın mı? (ücretsiz)', islem: `<button class="dugme ince sari" data-yaz="${esc(f.id)}" data-kanal="${esc(f.kanal)}">Metnini yaz</button>` });
+  for (const f of F.filter(f => f.durum === 'secildi' && !f.video)) L.push({ ikon: '★', renk: '', baslik: f.baslik, alt: `Seçilmiş fikir. Metni yazılsın mı? (${yzNot(f.kanal)}; ses ve görüntü için ayrıca sorulur)`, islem: `<button class="dugme ince sari" data-yaz="${esc(f.id)}" data-kanal="${esc(f.kanal)}">Metnini yaz</button>` });
   return L;
 }
 const siradaMi = u => ['yerel', 'sunucu'].some(m => { const K = kuyrukOf(m); return K && [...K.kuyruk, ...K.paylasilan].some(j => String(j.mp4 || '').includes(u.ad)); }) || (IG && IG.gonderiler.some(g => u.aciklama && g.aciklama && g.aciklama.slice(0, 40) === u.aciklama.slice(0, 40)));
@@ -71,14 +77,14 @@ function fikirlerCiz() {
   const liste = F.filter(f => f.kanal === kanal && (fikirFiltre === 'hepsi' || !['reddedildi', 'uretildi'].includes(f.durum))).sort((a, b) => (sira[a.durum] - sira[b.durum]) || ((b.puan || 0) - (a.puan || 0)));
   const ETK = { yeni: ['', 'yeni'], secildi: ['yesil', 'seçildi'], uretiliyor: ['sari', 'üretimde'], 'insan-bekliyor': ['sari', 'sana bakıyor'], uretildi: ['yesil', 'üretildi'], reddedildi: ['kirmizi', 'reddedildi'] };
   $('#fikir-liste').innerHTML = liste.length ? liste.map(f => {
-    const [r, y] = ETK[f.durum] || ['', f.durum], d = `data-id="${esc(f.id)}" data-kanal="${esc(f.kanal)}"`;
+    const [r, y] = ETK[f.durum] || ['', f.durum], d = `data-id="${esc(f.id)}" data-kanal="${esc(f.kanal)}"`, yz = `title="Yapay zekâ: ${esc(yzNot(f.kanal))}"`;
     const islem = f.durum === 'yeni' ? `<button class="dugme ince sari" data-fikir="sec" ${d}>Seç</button><button class="dugme ince" data-fikir="reddet" ${d}>Reddet</button>`
-      : f.durum === 'secildi' && !f.video ? `<button class="dugme ince sari" data-yaz="${esc(f.id)}" data-kanal="${esc(f.kanal)}">Metnini yaz</button><button class="dugme ince" data-fikir="reddet" ${d}>Reddet</button>`
+      : f.durum === 'secildi' && !f.video ? `<button class="dugme ince sari" data-yaz="${esc(f.id)}" data-kanal="${esc(f.kanal)}" ${yz}>Metnini yaz</button><button class="dugme ince" data-fikir="reddet" ${d}>Reddet</button>`
       : f.video ? `<button class="dugme ince" data-s="uretim">Üretimde gör</button>`
       : f.durum === 'reddedildi' ? `<button class="dugme ince" data-fikir="sec" ${d}>Geri al</button>` : '';
     return `<div class="satir"><span class="puan">${f.puan != null ? Number(f.puan).toFixed(1) : '–'}</span>
       <div class="ad"><span class="baslik"><span class="etiket ${r}">${esc(y)}</span>${esc(f.baslik)}</span><small title="${esc(f.oncul || f.neden)}">${esc(f.kanca || f.oncul || f.neden || '')}${f.kaynak ? ' · ' + esc(f.kaynak) : ''}</small></div>
-      <div class="islem">${f.link ? `<a class="dugme ince" href="${esc(f.link)}" target="_blank" rel="noopener">Kaynak</a>` : ''}${islem}</div></div>`;
+      <div class="islem">${guvenli(f.link) ? `<a class="dugme ince" href="${esc(guvenli(f.link))}" target="_blank" rel="noopener">Kaynak</a>` : ''}${islem}</div></div>`;
   }).join('') : '<div class="liste-bos">Havuz boş. “Yeni konu topla”, sonra “Puanla”; ya da kendi fikrini ekle.</div>';
 }
 
@@ -96,7 +102,7 @@ function uretimCiz() {
         ${u.metin ? `<button class="dugme ince" data-metin="${esc(u.metin)}">Metin</button>` : ''}
         ${u.rapor ? `<button class="dugme ince" data-rapor="${esc(u.ad)}">Rapor</button>` : ''}
         ${v ? `<button class="dugme ince" data-izle="${esc(v.yol)}">İzle</button><button class="dugme ince" data-ekle="${esc(u.ad)}">Sıraya ekle</button>` : ''}
-        ${u.durum.ses === 'onay' && u.fikir ? `<button class="dugme ince sari" data-uret-onay="${esc(u.ad)}" ${calisiyor ? 'disabled' : ''}>Onayla ve devam</button>` : devam && u.durum.ses === 'tamam' ? `<button class="dugme ince" data-uret="${esc(u.ad)}" ${calisiyor ? 'disabled' : ''}>Devam et</button>` : ''}
+        ${u.kredi && u.fikir ? `<button class="dugme ince sari" data-kredi-onay="${esc(u.ad)}" ${calisiyor ? 'disabled' : ''}>Krediyi onayla</button>` : u.durum.ses === 'onay' && u.fikir ? `<button class="dugme ince sari" data-uret-onay="${esc(u.ad)}" ${calisiyor ? 'disabled' : ''}>Onayla ve devam</button>` : devam && u.durum.ses === 'tamam' ? `<button class="dugme ince" data-uret="${esc(u.ad)}" ${calisiyor ? 'disabled' : ''}>Devam et</button>` : ''}
       </div></div>`;
   }).join('') : '<div class="liste-bos">Henüz üretim yok. Fikirler’den bir fikre “Metnini yaz” de.</div>';
 }
@@ -143,7 +149,7 @@ function takvimCiz() {
     if (i % 7 === 0 && i >= 28 && d.getMonth() !== bas.getMonth()) break;
     const ayni = x => { const e = new Date(x); return e.toDateString() === d.toDateString(); };
     const o = olay.filter(x => x.t && ayni(x.t)).sort((a, b) => String(a.t).localeCompare(String(b.t)));
-    h += `<div class="gun${d.getMonth() !== bas.getMonth() ? ' disari' : ''}${ayni(Date.now()) ? ' bugun' : ''}"><span class="no">${d.getDate()}</span>${o.map(x => `<${x.link ? `a href="${esc(x.link)}" target="_blank" rel="noopener"` : 'div'} class="olay ${x.sinif}" title="${esc(x.tam)}">${esc(new Date(x.t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }))} ${esc(x.ad)}</${x.link ? 'a' : 'div'}>`).join('')}</div>`;
+    h += `<div class="gun${d.getMonth() !== bas.getMonth() ? ' disari' : ''}${ayni(Date.now()) ? ' bugun' : ''}"><span class="no">${d.getDate()}</span>${o.map(x => `<${guvenli(x.link) ? `a href="${esc(guvenli(x.link))}" target="_blank" rel="noopener"` : 'div'} class="olay ${x.sinif}" title="${esc(x.tam)}">${esc(new Date(x.t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }))} ${esc(x.ad)}</${guvenli(x.link) ? 'a' : 'div'}>`).join('')}</div>`;
   }
   $('#takvim').innerHTML = h;
 }
@@ -152,11 +158,11 @@ function takvimCiz() {
 function dersCiz() {
   const son = D[0], dersCalisiyor = J.some(x => x.tur === 'ders' && x.durum === 'calisiyor');
   const guven = g => `<span class="guven" title="güven: ${esc(g)}">${[0, 1, 2].map(i => `<i class="${i < ({ dusuk: 1, orta: 2, yuksek: 3 }[g] || 0) ? 'on' : ''}"></i>`).join('')}</span>`;
-  const ust = `<div class="tahta-ust"><span class="kicker">Ne öğrendik${son ? ' · ' + son.video + ' video' : ''}</span><span class="sag">${son ? esc(gunTarih(son.zaman)) : ''}<button class="dugme ince" data-is="ders" ${dersCalisiyor ? 'disabled' : ''}>${dersCalisiyor ? 'çıkarılıyor…' : son ? 'Yeniden çıkar' : 'Dersleri çıkar'}</button></span></div>`;
+  const ust = `<div class="tahta-ust"><span class="kicker">Ne öğrendik${son ? ' · ' + son.video + ' video' : ''}</span><span class="sag">${son ? esc(gunTarih(son.zaman)) : ''}<button class="dugme ince" data-is="ders" title="Yapay zekâ: ${esc(yzNot())}" ${dersCalisiyor ? 'disabled' : ''}>${dersCalisiyor ? 'çıkarılıyor…' : son ? 'Yeniden çıkar' : 'Dersleri çıkar'}</button></span></div>`;
   if (!son || !son.dersler.length) { $('#ders').innerHTML = ust + `<h2>${gonderiler().length ? 'Henüz ders çıkarılmadı.' : 'Önce rakamlar gelsin.'}</h2>`; return; }
   const [a, ...digerleri] = son.dersler;
   $('#ders').innerHTML = ust + `<h2>${esc(a.kural)}${guven(a.guven)}</h2><div class="kanit">${esc(a.kanit)}</div>${a.dene ? `<span class="dene">dene → ${esc(a.dene)}</span>` : ''}
-    <div style="margin-top:12px"><button class="dugme ince sari" data-ders-kaydet="0">İkinci beyne kaydet</button></div>
+    <div style="margin-top:12px"><button class="dugme ince sari" data-ders-kaydet="0">Kaydet</button></div>
     ${digerleri.length ? `<div class="diger">${digerleri.map((d, i) => `<div>${esc(d.kural)}${guven(d.guven)} <button class="dugme ince" data-ders-kaydet="${i + 1}">Kaydet</button></div>`).join('')}</div>` : ''}`;
 }
 function sonuclarCiz() {
@@ -164,13 +170,13 @@ function sonuclarCiz() {
   const g = [...gonderiler()].sort((a, b) => String(b.zaman).localeCompare(String(a.zaman)));
   const tepe = Math.max(1, ...g.map(x => x[metrik] || 0)), ad = $(`#metrik [data-m="${metrik}"]`).textContent.toLocaleLowerCase('tr');
   $('#sonuclar').innerHTML = g.length ? `<div class="ince-yazi" style="margin-bottom:12px">${g.length} video · toplam ${sayi(g.reduce((a, b) => a + (b[metrik] || 0), 0))} ${esc(ad)}${IG && IG.zaman ? ' · güncellendi ' + esc(tarih(IG.zaman, { weekday: undefined })) : ''}</div>
-    <div class="cubuklar">${g.map(x => `<div class="cubuk"><div class="ad"><a href="${esc(x.link)}" target="_blank" rel="noopener">${esc(x.baslik || 'Video')}</a><small>${esc(gunTarih(x.zaman))}</small></div><div class="ray"><b style="width:${((x[metrik] || 0) / tepe * 100).toFixed(1)}%"></b></div><div class="deger">${sayi(x[metrik])}</div></div>`).join('')}</div>`
+    <div class="cubuklar">${g.map(x => `<div class="cubuk"><div class="ad"><a href="${esc(guvenli(x.link) || '#')}" target="_blank" rel="noopener">${esc(x.baslik || 'Video')}</a><small>${esc(gunTarih(x.zaman))}</small></div><div class="ray"><b style="width:${((x[metrik] || 0) / tepe * 100).toFixed(1)}%"></b></div><div class="deger">${sayi(x[metrik])}</div></div>`).join('')}</div>`
     : `<div class="liste-bos">${IG === null ? 'Instagram’dan rakamlar geliyor…' : 'Henüz paylaşılmış video yok.'}</div>`;
   dersCiz();
 }
 
 // ---------------- Background jobs drawer
-const IS_AD = { topla: 'Konu toplama', puanla: 'Puanlama', uret: 'Üretim', 'uret-onay': 'Üretim (onaylı)', sonuclar: 'Rakam çekme', ders: 'Ders çıkarma' };
+const IS_AD = { topla: 'Konu toplama', puanla: 'Puanlama', uret: 'Üretim', 'uret-ses': 'Üretim (ses onaylı)', 'uret-kredi': 'Üretim (kredi onaylı)', sonuclar: 'Rakam çekme', ders: 'Ders çıkarma' };
 function islerCiz() {
   const calisan = J.filter(x => x.durum === 'calisiyor').length;
   $('#isler-say').textContent = calisan || J.length; $('#isler-dugme').classList.toggle('aktif', !!calisan);
@@ -219,15 +225,27 @@ function ekleGoster(ad) {
     <div class="p-alt"><button class="dugme" data-kapat>Vazgeç</button><button class="dugme sari" id="e-ekle">Sıraya ekle</button></div>`);
   $('#e-ekle').onclick = async () => {
     const m = $('#e-makine') ? $('#e-makine').value : 'yerel', b = $('#e-ekle'); b.disabled = true; b.textContent = m === 'sunucu' ? 'Sunucuya gönderiliyor…' : 'Ekleniyor…';
-    try { await api('kuyruk/ekle', { makine: m, mp4: $('#e-video').value, aciklama: $('#e-aciklama').value, zaman: $('#e-zaman').value, onay_gerekli: $('#e-onay').checked }); $('#pencere').close(); bildir('Sıraya eklendi ✓'); makine = m; await yukle(); sekme('sira'); }
+    try { await api('kuyruk/ekle', { makine: m, mp4: $('#e-video').value, aciklama: $('#e-aciklama').value, zaman: ofsetli($('#e-zaman').value), onay_gerekli: $('#e-onay').checked }); $('#pencere').close(); bildir('Sıraya eklendi ✓'); makine = m; await yukle(); sekme('sira'); }
     catch (e) { bildir(e.message, true); b.disabled = false; b.textContent = 'Sıraya ekle'; }
   };
 }
+const KREDI_AD = { gorsel: 'Resimler:', klip: 'Klipler:' };
+// what comes after the voice, per tier, so the dialog never promises something the run will not keep
+const sonraNe = u => u.katman === 'ucretli'
+  ? `Sonra kelime zamanları gelir. Ardından resim ve klipler Higgsfield kredisi harcar${u.ses.kredi_tahmin ? ` (tahmin ~${sayi(u.ses.kredi_tahmin)} kredi)` : ''}: <b>bu onay onları kapsamaz</b>. O adıma gelince iş durur, panel kesin fiyatı gösterip ayrıca sorar.`
+  : u.katman === 'sablon' ? 'Sonra kelime zamanları, hazır şablonla video ve kalite kontrolü kendiliğinden gelir. Bu katman Higgsfield kredisi harcamaz.'
+  : 'Sonra kelime zamanları ve ses karışımı gelir. Bu katmanda görüntüyü sahne kodu çizer, Higgsfield kredisi harcanmaz.';
 function uretOnayGoster(ad) {
   const u = U.find(x => x.ad === ad);
-  pencere(pUst('Onayla ve devam') + `<p>Şimdi <b>ses</b> üretilecek. Bu adım ElevenLabs karakteri harcar (bir video ~1.000-1.500). Sonra kelime zamanları, video ve kalite kontrolü kendiliğinden gelir. Higgsfield harcanmaz.</p>
-    <p class="ince-yazi">${esc(u.baslik)}</p><div class="p-alt"><button class="dugme" data-kapat>Vazgeç</button>${u.metin ? `<button class="dugme" data-metin="${esc(u.metin)}">Önce metni oku</button>` : ''}<button class="dugme sari" id="o-evet">Onayla, başlat</button></div>`);
-  $('#o-evet').onclick = () => { $('#pencere').close(); isBaslat('uret-onay', { kanal: u.kanal, id: u.fikir }); };
+  pencere(pUst('Onayla ve devam') + `<p>Şimdi <b>ses</b> üretilecek: ${sayi(u.ses.satir)} satır, <b>${sayi(u.ses.karakter)} ElevenLabs karakteri</b>. Metin bundan uzunsa iş durur ve yeniden sorar.</p><p>${sonraNe(u)}</p>
+    <p class="ince-yazi">${esc(u.baslik)}</p><div class="p-alt"><button class="dugme" data-kapat>Vazgeç</button>${u.metin ? `<button class="dugme" data-metin="${esc(u.metin)}">Önce metni oku</button>` : ''}<button class="dugme sari" id="o-evet">Onayla: ${sayi(u.ses.karakter)} karakter</button></div>`);
+  $('#o-evet').onclick = () => { $('#pencere').close(); isBaslat('uret-ses', { kanal: u.kanal, id: u.fikir, karakter: u.ses.karakter }); };
+}
+function krediOnayGoster(ad) {
+  const u = U.find(x => x.ad === ad), k = u.kredi;
+  pencere(pUst('Higgsfield kredisi') + `<p>${KREDI_AD[k.adim]} bu adım <b>${sayi(k.kredi)} Higgsfield kredisi</b> harcar${k.butce ? ` (bu videonun bütçesi ${sayi(k.butce)} kredi)` : ''}. Fiyat Higgsfield'dan alındı. Onay yalnız bu adımı, en fazla bu fiyata kapsar.${k.adim === 'gorsel' ? ' Klipler için ayrıca sorulur.' : ''}</p>
+    <p class="ince-yazi">${esc(u.baslik)}</p><div class="p-alt"><button class="dugme" data-kapat>Vazgeç</button><button class="dugme sari" id="k-evet">Onayla: ${sayi(k.kredi)} kredi</button></div>`);
+  $('#k-evet').onclick = () => { $('#pencere').close(); isBaslat('uret-kredi', { kanal: u.kanal, id: u.fikir, adim: k.adim, kredi: k.kredi }); };
 }
 
 // ---------------- Loading
@@ -260,12 +278,13 @@ document.addEventListener('click', e => {
   else if (d.yaz) isBaslat('uret', { kanal: d.kanal, id: d.yaz });
   else if (d.uret) { const u = U.find(x => x.ad === d.uret); isBaslat('uret', { kanal: u.kanal, id: u.fikir }); }
   else if (d.uretOnay) uretOnayGoster(d.uretOnay);
+  else if (d.krediOnay) krediOnayGoster(d.krediOnay);
   else if (d.metin) metinGoster(d.metin).catch(err => bildir(err.message, true));
   else if (d.rapor) raporGoster(d.rapor).catch(err => bildir(err.message, true));
   else if (d.izle) videoGoster(d.izle);
   else if (d.ekle) ekleGoster(d.ekle);
-  else if (d.is) isBaslat(d.is, { kanal: d.is === 'topla' || d.is === 'puanla' ? kanal : undefined });
-  else if (d.dersKaydet !== undefined) { const x = D[0].dersler[+d.dersKaydet]; islem('ders-kaydet', { kanal: kanal || O.kanallar[0], ...x }, 'İkinci beyne kaydedildi ✓'); }
+  else if (d.is) isBaslat(d.is, { kanal: ['topla', 'puanla', 'ders'].includes(d.is) ? kanal || O.kanallar[0] : undefined });
+  else if (d.dersKaydet !== undefined) { const x = D[0].dersler[+d.dersKaydet]; islem('ders-kaydet', { kanal: D[0].kanal || kanal || O.kanallar[0], ...x }, 'Ders kaydedildi ✓'); }
   else if (d.m) { metrik = d.m; sonuclarCiz(); }
   else if (d.h) { ayKaydir += +d.h; takvimCiz(); }
   else if (d.f) { fikirFiltre = d.f; fikirlerCiz(); }
@@ -276,7 +295,7 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.dataset.zaman && t.value) islem('kuyruk/zaman', { id: t.dataset.zaman, makine: t.dataset.makine, zaman: t.value }, 'Saat değişti');
+  if (t.dataset.zaman && t.value) islem('kuyruk/zaman', { id: t.dataset.zaman, makine: t.dataset.makine, zaman: ofsetli(t.value) }, 'Saat değişti');
   if (t.id === 'kanal-sec') { kanal = t.value; fikirlerCiz(); }
 });
 $('#fikir-ekle').addEventListener('submit', e => { e.preventDefault(); islem('fikir', { is: 'ekle', kanal, baslik: $('#fe-baslik').value, oncul: $('#fe-oncul').value }, 'Fikir eklendi').then(() => { $('#fikir-ekle').reset(); $('#fikir-ekle').hidden = true; }); });
