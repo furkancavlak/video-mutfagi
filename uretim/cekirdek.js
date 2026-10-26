@@ -157,12 +157,14 @@ function hf(args, cwd) {
 // Stills at given seconds for a quick look before a full render.
 function kareler(hfDir, saniyeler, outDir) { hf(['snapshot', '.', '--at', saniyeler.join(','), '--no-end', '--describe', 'false', '-o', outDir], hfDir); }
 // Full render (one worker: several workers can flicker frame to frame) + narration mux.
-function renderEt(hfDir, mixWav, outMp4) {
+// `kodlama` overrides the final encode (kesit/ uses a smaller one for short teasers).
+const KODLAMA = ['-c:v', 'libx264', '-preset', 'slow', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k'];
+function renderEt(hfDir, mixWav, outMp4, kodlama = KODLAMA) {
   // silent render goes to a short temp path: HyperFrames builds a long transaction folder name next to its output,
   // which breaks the 260-character Windows path limit when the repo sits in a deep folder
   const ham = path.join(os.tmpdir(), `vm-${process.pid}-${Date.now()}.mp4`);
   hf(['render', '.', '-f', String(FPS), '--crf', '18', '-w', '1', '-o', ham], hfDir);
-  sh('ffmpeg', ['-loglevel', 'error', '-y', '-i', ham, '-i', mixWav, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'slow', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', outMp4]);
+  sh('ffmpeg', ['-loglevel', 'error', '-y', '-i', ham, '-i', mixWav, '-map', '0:v', '-map', '1:a', ...kodlama, '-shortest', '-movflags', '+faststart', outMp4]);
   fs.unlinkSync(ham);
   console.log(`\nHAZIR: ${outMp4} (${(fs.statSync(outMp4).size / 1048576).toFixed(1)} MB)`);
 }
