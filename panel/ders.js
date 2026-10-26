@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 // Lessons from results: puts each posted video's numbers next to how it was made (hook, length, tier, hour)
 // and asks the language model for 1-3 short, checkable lessons. Writes kayit/dersler.json (newest first).
-// Free: Instagram numbers are read-only, the model runs on the user's Claude subscription (konu/llm.js).
+// Instagram numbers are read-only; the model runs on the user's Claude subscription, or on the pay-as-you-go API when
+// konu/llm.js picks that route (no Claude Code CLI, ANTHROPIC_API_KEY set).
 //
-//   node panel/ders.js [--kok <repo>]
+//   node panel/ders.js [--kanal <ad>] [--kok <repo>]     model settings come from kanal/<ad>/konu.json → llm
 const fs = require('fs'), path = require('path');
 const arg = n => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : null; };
 const KOK = arg('--kok') ? path.resolve(arg('--kok')) : path.join(__dirname, '..');
 const LLM = require(path.join(KOK, 'konu', 'llm.js'));
 const okuJ = (f, v = null) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return v; } };
+const kanallar = () => fs.readdirSync(path.join(KOK, 'kanal')).filter(k => fs.existsSync(path.join(KOK, 'kanal', k, 'konu.json')));
 
 (async () => {
+  const kanal = arg('--kanal') || kanallar()[0];
+  if (!kanal || !kanallar().includes(kanal)) throw new Error(`kanal/${kanal}/konu.json yok.`);
   const ig = okuJ(path.join(KOK, 'kayit', 'panel-instagram.json'));
   if (!ig || !ig.gonderiler || !ig.gonderiler.length) throw new Error('Önce Sonuçlar sayfasında rakamları çek (↻).');
   // match each post to its video folder by caption, so we know how it was made
@@ -29,8 +33,8 @@ const okuJ = (f, v = null) => { try { return JSON.parse(fs.readFileSync(f, 'utf8
   });
   const istem = fs.readFileSync(path.join(__dirname, 'istem-ders.md'), 'utf8').replace('{{veri}}', JSON.stringify(satirlar, null, 1));
   console.log(`${satirlar.length} video inceleniyor…`);
-  const j = await LLM.sor(istem, { is: 'ders', efor: 'medium', ayar: (okuJ(path.join(KOK, 'kanal', 'oxygbio', 'konu.json'), {}) || {}).llm || {} });
-  const kayit = { zaman: new Date().toISOString(), video: satirlar.length, dersler: (j.dersler || []).slice(0, 3) };
+  const j = await LLM.sor(istem, { is: 'ders', efor: 'medium', ayar: (okuJ(path.join(KOK, 'kanal', kanal, 'konu.json'), {}) || {}).llm || {} });
+  const kayit = { zaman: new Date().toISOString(), kanal, video: satirlar.length, dersler: (j.dersler || []).slice(0, 3) };
   const f = path.join(KOK, 'kayit', 'dersler.json');
   fs.writeFileSync(f, JSON.stringify([kayit, ...(okuJ(f, []) || [])].slice(0, 30), null, 1));
   for (const d of kayit.dersler) console.log(`• ${d.kural}  (${d.guven})\n  ${d.kanit}`);

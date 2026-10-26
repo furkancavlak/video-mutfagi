@@ -9,7 +9,8 @@
 //
 // Listens on 127.0.0.1 only; every API call carries a random key made at start (it is in the printed link).
 // The panel never posts and never spends by itself: queue changes go through kuyruk/kuyruk.js, production through
-// konu/radar.js, and the one step that spends (voice) needs an explicit "Onayla ve devam" click.
+// konu/radar.js and panel/uret-adim.js. Each paid step (voice, then each Higgsfield step) stops first, shows its price
+// and runs only after its own approval click, up to that price.
 // Server: ayarlar/panel.json → "sunucu" (copy panel/ayar-ornek.json). Reached with your own `ssh`.
 const http = require('http'), fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
 const { spawnSync, spawn } = require('child_process');
@@ -36,8 +37,17 @@ const nodeCalistir = (betik, args, sure = 120e3) => {
   if (r.status !== 0) throw new Error(cikti.replace(/^[\s\S]*HATA:\s*/m, '').slice(0, 400) || 'komut başarısız');
   return cikti;
 };
-// "2026-10-27T19:00" from the browser -> the "YYYY-MM-DD HH:MM" kuyruk.js expects
-const zamanMetni = z => { const m = String(z || '').match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/); if (!m) throw new Error('zaman anlaşılmadı'); return `${m[1]} ${m[2]}`; };
+// "2026-10-27T19:00+03:00" from the browser -> the same, always with the UTC offset, so a server in another time zone
+// (often UTC) posts at the moment the user picked. Without an offset this computer's own is used.
+const iki = n => String(n).padStart(2, '0');
+const zamanMetni = z => {
+  const m = String(z || '').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})?$/);
+  if (!m) throw new Error('zaman anlaşılmadı');
+  let o = m[6];
+  if (!o) { const dk = -new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]).getTimezoneOffset(); o = `${dk < 0 ? '-' : '+'}${iki(Math.floor(Math.abs(dk) / 60))}:${iki(Math.abs(dk) % 60)}`; }
+  else if (o !== 'Z' && !o.includes(':')) o = o.slice(0, 3) + ':' + o.slice(3);
+  return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}${o}`;
+};
 
 // ---------- the posting queue on this machine
 function saglik() {
@@ -68,8 +78,7 @@ function kuyrukOzet() {
 function zamanDegistir(id, zaman) {
   const f = path.join(KUYRUK, 'bekleyen', String(id) + '.json');
   if (!/^[\w.-]+$/.test(String(id)) || !fs.existsSync(f)) throw new Error('kuyrukta böyle bir iş yok');
-  const [g, s] = zamanMetni(zaman).split(' '), [y, a, d] = g.split('-').map(Number), [h, m] = s.split(':').map(Number);
-  const t = new Date(y, a - 1, d, h, m);
+  const t = new Date(zamanMetni(zaman));
   if (t < Date.now()) throw new Error('geçmiş bir saat seçilemez');
   const { sonraki_deneme, ...j } = okuJ(f);
   fs.writeFileSync(f, JSON.stringify({ ...j, ne_zaman: t.toISOString() }, null, 2));
@@ -119,15 +128,19 @@ function uretimler() {
     const cikti = path.join(dir, 'cikti'), mp4ler = fs.existsSync(cikti) ? fs.readdirSync(cikti).filter(f => f.endsWith('.mp4')) : [];
     const sayfalar = fs.existsSync(path.join(cikti, 'denetim')) ? fs.readdirSync(path.join(cikti, 'denetim')).filter(f => /^sayfa-\d+\.jpg$/.test(f)).map(f => `videolar/${ad}/cikti/denetim/${f}`) : [];
     const fikir = fk.find(f => f.video === `videolar/${ad}`) || null;
+    // what the next paid step would spend (konu/uret.js writes it when it stops at a gate); voice falls back to the script
+    const B = U.bekleyen || null, sesYok = (video.satirlar || []).filter((x, i) => !fs.existsSync(path.join(dir, 'ses', `${iki(i + 1)}-${x.rol}.mp3`)));
+    const ses = B && B.adim === 'ses' ? { karakter: B.karakter, satir: B.satir, kredi_tahmin: B.kredi_tahmin } : { karakter: sesYok.reduce((a, x) => a + String(x.metin || '').length, 0), satir: sesYok.length, kredi_tahmin: null };
+    const kredi = B && (B.adim === 'gorsel' || B.adim === 'klip') ? { adim: B.adim, kredi: B.kredi, butce: B.butce } : null;
     const durum = {
       metin: A.metin || fs.existsSync(path.join(dir, 'metin.md')) ? 'tamam' : 'bekliyor',
       ses: A.ses ? 'tamam' : A.metin ? 'onay' : 'bekliyor',
-      kurgu: A.render || mp4ler.length ? 'tamam' : 'bekliyor',
+      kurgu: A.render || mp4ler.length ? 'tamam' : kredi ? 'onay' : 'bekliyor',
       denetim: A.denetim ? (A.denetim.puan >= 7 ? 'tamam' : 'takildi') : 'bekliyor',
       kuyruk: A.kuyruk ? 'tamam' : 'bekliyor',
     };
     out.push({
-      ad, kanal: U.kanal || (video.kanal || '').split('/').slice(-2, -1)[0] || null, fikir: U.fikir || (fikir && fikir.id), katman: U.katman || (video.sablon ? 'sablon' : null),
+      ad, kanal: U.kanal || (video.kanal || '').split('/').slice(-2, -1)[0] || null, fikir: U.fikir || (fikir && fikir.id), katman: U.katman || (video.sablon ? 'sablon' : null), ses, kredi,
       baslik: video.baslik || (fikir && fikir.baslik) || ad, aciklama: video.aciklama_instagram || '', puan: A.denetim ? A.denetim.puan : null, durum,
       metin: fs.existsSync(path.join(dir, 'metin.md')) ? `videolar/${ad}/metin.md` : null,
       rapor: fs.existsSync(path.join(cikti, 'denetim', 'rapor.md')) ? `videolar/${ad}/cikti/denetim/rapor.md` : null, sayfalar,
@@ -150,16 +163,22 @@ function rapor(rel) {
 // ---------- long jobs (collect ideas, write a script, produce, pull numbers, draw lessons): run in the background,
 // the panel polls their log. Only these commands can be started, never arbitrary ones.
 const calisan = new Map();
-function isBaslat(tur, { kanal, id } = {}) {
-  if (kanal && !kanallar().includes(kanal)) throw new Error('kanal yok');
-  if (id && !/^f-[\w-]+$/.test(id)) throw new Error('fikir yok');
+// The paid ones approve exactly the price the user saw: voice up to `karakter`, one Higgsfield step up to `kredi`.
+function isBaslat(tur, { kanal, id, karakter, adim, kredi } = {}) {
+  if ((kanal || tur !== 'sonuclar') && !kanallar().includes(kanal)) throw new Error('kanal yok');
+  if ((id || /^uret/.test(tur)) && !/^f-[\w-]+$/.test(id || '')) throw new Error('fikir yok');
+  const sayiMi = n => Number.isFinite(+n) && +n >= 0 && String(n).trim() !== '';
+  if (tur === 'uret-ses' && !sayiMi(karakter)) throw new Error('ses karakteri belli değil');
+  if (tur === 'uret-kredi' && (!['gorsel', 'klip'].includes(adim) || !sayiMi(kredi))) throw new Error('kredi belli değil');
+  const URET_ADIM = path.join(__dirname, 'uret-adim.js');
   const T = {
-    topla: () => [RADAR_JS, 'topla', kanal], puanla: () => [RADAR_JS, 'puanla', kanal],
-    uret: () => [RADAR_JS, 'uret', kanal, id], 'uret-onay': () => [RADAR_JS, 'uret', kanal, id, '--onay'],
-    sonuclar: () => [KUYRUK_JS, 'sonuclar'], ders: () => [path.join(__dirname, 'ders.js'), '--kok', KOK],
+    topla: () => [RADAR_JS, 'topla', kanal], puanla: () => [RADAR_JS, 'puanla', kanal], uret: () => [RADAR_JS, 'uret', kanal, id],
+    'uret-ses': () => [URET_ADIM, kanal, id, '--ses', String(+karakter), '--kok', KOK],
+    'uret-kredi': () => [URET_ADIM, kanal, id, '--kredi', adim, String(+kredi), '--kok', KOK],
+    sonuclar: () => [KUYRUK_JS, 'sonuclar'], ders: () => [path.join(__dirname, 'ders.js'), '--kok', KOK, '--kanal', kanal],
   }[tur];
   if (!T) throw new Error('bilinmeyen iş');
-  for (const [, x] of calisan) if (x.tur === tur && x.kanal === kanal && x.fid === id && x.durum === 'calisiyor') throw new Error('Bu iş zaten çalışıyor.');
+  for (const [, x] of calisan) if ((x.tur === tur || (/^uret/.test(tur) && /^uret/.test(x.tur))) && x.kanal === kanal && x.fid === id && x.durum === 'calisiyor') throw new Error('Bu iş zaten çalışıyor.');
   fs.mkdirSync(ISLER, { recursive: true });
   const isId = `${Date.now().toString(36)}-${tur}`, log = path.join(ISLER, isId + '.log');
   const out = fs.openSync(log, 'a');
@@ -202,6 +221,9 @@ async function instagram(yenile) {
   return igSurer;
 }
 
+// how a channel reaches the language model: 'claude-cli' (the user's Claude subscription) or 'api' (pay as you go)
+const yzYolu = k => { try { return require(path.join(KOK, 'konu', 'llm.js')).yolSec((okuJ(path.join(KOK, 'kanal', k, 'konu.json'), {}) || {}).llm || {}); } catch { return null; } };
+
 // ---------- http
 const TUR = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.md': 'text/plain; charset=utf-8' };
 const gonder = (res, kod, govde, tur = 'application/json; charset=utf-8') => { res.writeHead(kod, { 'Content-Type': tur, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(typeof govde === 'string' || Buffer.isBuffer(govde) ? govde : JSON.stringify(govde)); };
@@ -224,7 +246,7 @@ async function api(req, u) {
   const sunucu = (b.makine || u.searchParams.get('makine')) === 'sunucu';
   if (GET && yol === 'ozet') {
     const S = sunucuAyar();
-    return { yerel: kuyrukOzet(), sunucu: S ? { ad: S.ad || 'Sunucu' } : null, kanallar: kanallar() };
+    return { yerel: kuyrukOzet(), sunucu: S ? { ad: S.ad || 'Sunucu' } : null, kanallar: kanallar(), yz: Object.fromEntries(kanallar().map(k => [k, yzYolu(k)])) };
   }
   if (GET && yol === 'sunucu') return JSON.parse(sunucuda('panel/panel.js --ozet'));
   if (GET && yol === 'fikirler') return fikirler();
@@ -254,12 +276,20 @@ async function api(req, u) {
     if (is === 'onayla' || is === 'iptal') return { mesaj: sunucu ? sunucuda(`kuyruk/kuyruk.js ${is} ${q(b.id)}`) : nodeCalistir(KUYRUK_JS, [is, b.id]) };
     if (is === 'zaman') { if (sunucu) sunucuda(`panel/panel.js --zaman ${q(b.id)} ${q(zamanMetni(b.zaman))}`); else zamanDegistir(b.id, b.zaman); return { tamam: true }; }
   }
-  // lessons: save one to the channel's lesson file (the second brain reads it)
+  // lessons: into the second brain as a decision when it is installed (the agent reads it at every session start),
+  // otherwise into the channel's lesson file
   if (!GET && yol === 'ders-kaydet') {
     if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
+    const kural = String(b.kural || '').replace(/\s+/g, ' ').trim().slice(0, 200), guven = String(b.guven || '?').slice(0, 10);
+    if (!kural) throw new Error('ders boş');
+    const BEYIN = path.join(KOK, 'ikinci-beyin', 'beyin.js');
+    if (fs.existsSync(path.join(KOK, 'ayarlar', 'ikinci-beyin.json')) && fs.existsSync(BEYIN)) {
+      const neden = `${b.kanal} Instagram rakamlarından yapay zekânın çıkardığı ders (güven: ${guven}): ${String(b.kanit || '').slice(0, 300)}`;
+      return { tamam: true, mesaj: nodeCalistir(BEYIN, ['karar', (guven === 'yuksek' ? '' : 'tahmin: ') + kural, '--neden', neden]) };
+    }
     const f = path.join(KOK, 'kanal', b.kanal, 'dersler.md');
-    if (!fs.existsSync(f)) fs.writeFileSync(f, '# Sonuçlardan çıkan dersler\n\nPanel (Sonuçlar → Kaydet) buraya yazar. Yapay zekâ metin yazarken bunu okur.\n');
-    fs.appendFileSync(f, `\n- **${String(b.kural).slice(0, 200)}** (${new Date().toLocaleDateString('tr-TR')}, güven: ${String(b.guven || '?').slice(0, 10)})\n  ${String(b.kanit || '').slice(0, 300)}\n`);
+    if (!fs.existsSync(f)) fs.writeFileSync(f, '# Sonuçlardan çıkan dersler\n\nPanel (Sonuçlar → Kaydet) buraya yazar. Metin yazan yapay zekâ bu dosyayı kendiliğinden okumaz: ajana "kanal/<kanal>/dersler.md\'yi oku" de ya da ikinci beyni kur (ikinci-beyin/BENIOKU.md), panel dersleri oraya yazar.\n');
+    fs.appendFileSync(f, `\n- **${kural}** (${new Date().toLocaleDateString('tr-TR')}, güven: ${guven})\n  ${String(b.kanit || '').slice(0, 300)}\n`);
     return { tamam: true, dosya: path.relative(KOK, f) };
   }
   throw Object.assign(new Error('yok'), { kod: 404 });
