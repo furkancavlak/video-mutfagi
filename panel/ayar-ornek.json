@@ -1,0 +1,11 @@
+{
+  "_aciklama": "Kontrol paneli ayarları. ayarlar/panel.json olarak kopyala. Sunucun yoksa bu dosyaya gerek yok.",
+  "sunucu": {
+    "ad": "Sunucu",
+    "ssh": "kullanici@sunucu-adresi",
+    "on_ek": "",
+    "kok": "/home/kullanici/video-mutfagi",
+    "node": "node",
+    "_not": "ssh: şifresiz (anahtarla) bağlanabildiğin adres. on_ek: komutlar başka bir kullanıcıyla çalışacaksa ör. \"sudo -u vmutfak -H\". kok: sunucudaki repo klasörü."
+  }
+}

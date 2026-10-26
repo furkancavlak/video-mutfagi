@@ -81,3 +81,7 @@ videolar/<kanal>-v01-<konu>/
 - **Zaman:** Her hareket bir kelimeye bağlanır: `cue('kelime', L[satır])`. Elle saniye yazma.
 - **Çekirdeğe dokunma:** Altyazı, marka ekranları ve köşe etiketi çekirdekten gelir, sahne dosyasında yeniden yazma.
 - **Kare al:** Yazdıktan sonra kareleri al (`--kare`) ve kendin bak. Kullanıcıya göstermeden önce düzelt.
+
+## Kontrol paneli
+
+Kullanıcı "panel", "sıraya bakayım", "takvim" ya da "sonuçlar" derse paneli başlat: `node panel/panel.js` (arka planda çalışır, terminaldeki linki kullanıcıya ver). Ayrıntı: panel/BENIOKU.md. Sunucu kullanan biri için `ayarlar/panel.json` dosyasını panel/ayar-ornek.json'dan birlikte doldurun.
