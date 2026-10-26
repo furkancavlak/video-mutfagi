@@ -28,6 +28,7 @@ Altyazı, marka ekranları ve köşe etiketi ayrıca otomatik gelir.
 - **Adımlar:** 8-16 adım yaz (karakter ve eşya adımları dahil). Her adım metindeki bir ana bağlanır. Aynı satırda birden çok adım olabilir.
 - **`an`:** `"kelime:<kelime>@<satır>"` biçimindedir. Kelime o satırda **aynen** geçmeli: küçük harfle, ekleriyle, noktalamasız, kelimenin başından. Örnek: satır 2 "Bir yıl sonra mercanlar ağarıyor" ise `"kelime:yıl@2"` ya da `"kelime:mercanlar@2"`. Emin değilsen `"satir:<satır>+0.5"` kullan. Zamanlar sırayla ilerlemeli.
 - **`yil`:** Zaman atlaması söylendiği anda verilir ve `zaman_cetveli` içindeki bir etiketle **aynı** olmalıdır. Cetveli metne göre kur, 4-5 etiket, ilki "BUGÜN".
+- **O harfi ile 0 rakamı:** Ekrandaki yazı tipinde (Anton) büyük O harfi ile 0 rakamı neredeyse aynı görünür. Tabela, eşya yazısı ya da konuşma balonunda 0 rakamını O harfinin yanına koyma: "0 O₂" yerine "SIFIR O₂" ya da "O₂ BİTTİ", "%0 OKSİJEN" yerine "OKSİJEN: SIFIR" yaz. O harfi geçmeyen rakamlar ("100 YIL", "1000 YIL") sorun değil.
 - **`buyuk`:** Yalnız zaman atlamalarında, 2-3 kelime ("100 YIL SONRA").
 - **`odak`:** Kamera, o an anlatılan şeyin olduğu yere gider. Değerler: `genel`, `gok`, `kiyi`, `yuzey`, `deniz`, `dip`.
   - Balıklar → `deniz` ya da `yuzey`.

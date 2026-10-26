@@ -35,7 +35,8 @@
 //   yazi  the short text it carries (roof plate, title, stamp, notification, placard...): BÜYÜK HARF, <= 16 chars, optional
 //   yer   genel|gok|kiyi|yuzey|deniz|dip: where it stands (default: the step's odak, else where the camera is). The camera
 //         goes to the prop. Ground props stand on the land (kiyi) or the seabed (deniz, dip); asked for genel/gok/yuzey they
-//         go to kiyi. The boat floats on open water (gok, yuzey; elsewhere it goes to yuzey). Hanging props go anywhere.
+//         go to kiyi. The boat floats on the open sea right of the buoy (always yuzey). Hanging props go anywhere.
+//         Coast, surface and seabed props get a closer camera of their own so they fill the frame.
 //   an    its own time (the stamp lands on a later word); default: the step's an
 //   A second prop (a damga, usually) lands on the first one, clear of the first one's text.
 //   Placement is automatic: the prop keeps clear of the sign, the gauges, the character and his bubble, the ruler and the
@@ -57,16 +58,20 @@ const karis = (a, b, k) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.substr
 // [x, y, camera, bubble x offset]; spots and offsets checked so he, his bubble, the sign and the gauges never overlap
 const KAHRAMAN_YER = { deniz: [700, 1050, 'deniz', 0], yuzey: [540, 615, 'yuzey', 0], kiyi: [360, 600, 'kiyi', -100], balkon: [277, 512, 'kiyi', 80], kara: [250, 545, 'kiyi', 110], dip: [680, 1380, 'dip', 0] };
 // sign centre on SCREEN per camera preset (the sign is scaled against the zoom, so it always reads the same size)
-const TABELA_EKRAN = { genel: [700, 560, ''], gok: [720, 600, ''], kiyi: [820, 520, ''], yuzey: [330, 540, ''], deniz: [620, 1100, '2'], dip: [760, 640, '2'] };
+const TABELA_EKRAN = { genel: [700, 560, ''], gok: [720, 600, ''], kiyi: [820, 520, ''], yuzey: [330, 540, ''], deniz: [620, 1100, '2'], dip: [760, 640, '2'],
+  kiyiE: [820, 520, ''], yuzeyE: [330, 540, ''], denizE: [620, 1100, '2'], dipE: [760, 640, '2'] };
 // props: which ground each shot shows ('kara' = land top, 'dip' = seabed); shots without ground send ground props elsewhere
 // (genel is the wide establishing shot: its ground is too far away for a hero prop, so ground props go to kiyi)
 const ESYA_ZEMIN = { kiyi: ['kara'], deniz: ['dip'], dip: ['dip'] };
-const ESYA_YEDEK = { zemin: { genel: 'kiyi', gok: 'kiyi', yuzey: 'kiyi' }, su: { genel: 'yuzey', kiyi: 'yuzey', deniz: 'yuzey', dip: 'yuzey' } };
+const ESYA_YEDEK = { zemin: { genel: 'kiyi', gok: 'kiyi', yuzey: 'kiyi' }, su: { genel: 'yuzey', gok: 'yuzey', kiyi: 'yuzey', deniz: 'yuzey', dip: 'yuzey' } };
 // where a floating prop would ideally hang on SCREEN per shot (free sky or open water); the final spot is searched around it
-const ESYA_TERCIH = { genel: [700, 1100], gok: [540, 900], kiyi: [600, 760], yuzey: [540, 700], deniz: [760, 800], dip: [380, 740] };
-// screen pixels per prop unit: props read about the same size in every shot (the coast is cramped between the
-// weather station and the sign post, so its props are a little smaller; their text still reads >= 36 px)
-const ESYA_EKRAN = { kiyi: 1.15 }, ESYA_EKRAN_V = 1.4;
+const ESYA_TERCIH = { genel: [700, 1100], gok: [540, 900], kiyi: [600, 760], yuzey: [540, 700], deniz: [760, 800], dip: [380, 740], kiyiE: [640, 680], yuzeyE: [700, 700], denizE: [760, 820], dipE: [540, 760] };
+// a prop on the coast or the seabed gets a closer framing of its own, so the prop and its ground fill the frame instead
+// of half a screen of soil or sand (camera presets kiyiE / denizE / dipE below; steps without props keep the old ones)
+const ESYA_CEKIM = { kiyi: 'kiyiE', yuzey: 'yuzeyE', deniz: 'denizE', dip: 'dipE' };
+// screen pixels per prop unit: the props are the heroes of their shots (coast and seabed close-ups give them more room;
+// plate text there reads >= 40 px and wraps to two lines rather than shrinking)
+const ESYA_EKRAN = { kiyi: 1.3, deniz: 1.6, dip: 1.6 }, ESYA_EKRAN_V = 1.4;
 // a point on a quadratic curve at x (x is monotonic on every ground curve of this world)
 const qY = (p0, p1, p2, x) => { let a = 0, b = 1; for (let i = 0; i < 30; i++) { const m = (a + b) / 2, xm = (1 - m) ** 2 * p0[0] + 2 * m * (1 - m) * p1[0] + m * m * p2[0]; if (xm < x) a = m; else b = m; } const t = (a + b) / 2; return (1 - t) ** 2 * p0[1] + 2 * t * (1 - t) * p1[1] + t * t * p2[1]; };
 const renk = (v, tablo, d) => Array.isArray(v) ? v : (tablo[v] || (typeof v === 'string' && v.startsWith('#') ? [v, v, v] : tablo[d]));
@@ -138,7 +143,8 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
   const olu = baliklar.map((b, i) => ({ x: 470 + (i * 37) % 820, i }));
   w += olu.map(o => `<g class="olu olu${o.i}" opacity="0" transform="translate(${o.x} ${SY + 2}) scale(1.15 -1.15)"><ellipse cx="0" cy="0" rx="22" ry="10" fill="#C9C2B4"/><path d="M-20 0 L -34 -10 L -34 10 Z" fill="#C9C2B4"/><path d="M8 -6 l6 6 m0 -6 l-6 6" stroke="${C.ink}" stroke-width="2"/></g>`).join('');
   // birds
-  w += `<g id="kuslar">${[0, 1, 2, 3, 4].map(i => `<path class="kus kus${i}" d="M${60 + i * 70} ${430 + (i % 2) * 40} q 12 -12 24 0 q 12 -12 24 0" fill="none" stroke="${C.ink}" stroke-width="4" stroke-linecap="round"/>`).join('')}</g>`;
+  // (they fly in the gap between the weather station's screen, world y <= 436, and the roofs, y >= 502: never across gauge text)
+  w += `<g id="kuslar">${[0, 1, 2, 3, 4].map(i => `<path class="kus kus${i}" d="M${60 + i * 70} ${458 + (i % 2) * 14} q 12 -12 24 0 q 12 -12 24 0" fill="none" stroke="${C.ink}" stroke-width="4" stroke-linecap="round"/>`).join('')}</g>`;
   w += '<!--ESYA-->';
   // shore sign (the per-step headline lives on it)
   // (both signs are moved to TABELA_EKRAN spots per step; the outer group carries the move, the inner one the drawing)
@@ -170,7 +176,10 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
     <circle id="cetvelIsaret" cx="${cx(0)}" cy="255" r="18" fill="${C.coral}"/></g>`;
 
   // ---------- camera presets (world scale + offset so the region sits in the free middle of the frame)
-  const NOKTA = { genel: [1, 440, 900], gok: [1.3, 560, 470], kiyi: [1.6, 200, 560], yuzey: [1.5, 640, 640], deniz: [1.35, 760, 1220], dip: [1.55, 780, 1380] };
+  const NOKTA = { genel: [1, 440, 900], gok: [1.3, 560, 470], kiyi: [1.6, 200, 560], yuzey: [1.5, 640, 640], deniz: [1.35, 760, 1220], dip: [1.55, 780, 1380],
+    // prop close-ups: the coast from nearer with the weather station whole at the left; open sea right of the buoy (room
+    // for the boat); the seabed low in the frame
+    kiyiE: [1.9, 175, 450], yuzeyE: [1.5, 940, 640], denizE: [1.35, 760, 1060], dipE: [1.55, 780, 1170] };
   // the focus point lands at screen (540, 930); zoom > 1 is the slow creep between steps
   const kamera = (o, t, d = 1.6, zoom = 1, ease = 'power2.inOut') => {
     const [s0, wx, wy] = NOKTA[o] || NOKTA.genel, s = +(s0 * zoom).toFixed(4);
@@ -222,7 +231,7 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
   // a step about the character with no camera of its own goes to him
   for (const a of adimlar) if (!a.odak && a.kahraman && KAHRAMAN_YER[a.kahraman.yer]) a.odak = KAHRAMAN_YER[a.kahraman.yer][2];
   // props: read the names, pick the shot each one stands in; the camera goes to the prop
-  let bolgeSimdi = 'genel';
+  let bolgeSimdi = 'genel', kamSimdi = 'genel';
   for (const a of adimlar) {
     const ham = Array.isArray(a.esya) ? a.esya : a.esya ? [a.esya] : [];
     a.es = ham.map(e => e && E.cozumle({ ...e, tur: e.ad || e.tur })).filter(Boolean).slice(0, 2);
@@ -231,10 +240,10 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
       let b = NOKTA[ana.yer] ? ana.yer : a.odak || bolgeSimdi;
       if (tip === 'zemin' && !ESYA_ZEMIN[b]) b = ESYA_YEDEK.zemin[b];
       if (tip === 'su' && ESYA_YEDEK.su[b]) b = ESYA_YEDEK.su[b];
-      a.esyaBolge = b;
-      if (a.odak || b !== bolgeSimdi) a.odak = b;
+      a.esyaBolge = b; a.kam = b === 'yuzey' && tip !== 'su' ? b : ESYA_CEKIM[b] || b;     // the surface close-up is for the boat
+      if (a.odak || a.kam !== kamSimdi) a.odak = b;
     }
-    if (a.odak) bolgeSimdi = a.odak;
+    if (a.odak) { bolgeSimdi = a.odak; kamSimdi = a.kam || a.odak; }
   }
   let SON = T.Z.sting[1] != null ? T.Z.sting[1] - 2.6 : END;
   // the closing wide shot waits for a prop that lands on the last words (the punchline)
@@ -245,7 +254,7 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
   const surun = (bitis) => { if (bitis - kt > 1) kamera(odak, kt, bitis - kt, 1.07, 'none'); };
   for (const a of adimlar) if (a.odak) {
     const [bas, sure] = a.es.length ? [a.t - .7, 1.2] : [a.t - .3, 1.6];      // a prop's shot is reached sooner so the prop enters into a settled frame
-    surun(Math.max(0, bas)); kamera(a.odak, Math.max(0, bas), sure); odak = a.odak; kt = bas + sure;
+    surun(Math.max(0, bas)); kamera(a.kam || a.odak, Math.max(0, bas), sure); odak = a.kam || a.odak; kt = bas + sure;
   }
   surun(SON);
   if (T.Z.sting[1] != null) { kamera('genel', SON, 1.4); tl.push(`tl.to('#tabela,#tabela2,#kahBalon',{opacity:0,duration:.3},${at(SON - .2)});`); }   // wide shot again before the closing sting
@@ -272,7 +281,7 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
 
   // Places the props of step k and plays them; returns the seat for the character if one of them has a koltuk
   function esyaKoy(a, k, t) {
-    const o = a.esyaBolge, [s] = NOKTA[o], ek = ESYA_EKRAN[o] || ESYA_EKRAN_V, kw = ek / s, birim = 1 / ek;
+    const o = a.esyaBolge, c = a.kam || o, [s] = NOKTA[c], ek = ESYA_EKRAN[o] || ESYA_EKRAN_V, kw = ek / s, birim = 1 / ek;   // o: where, c: camera
     // leaves on the next step that brings a prop, a sign, a camera move or the character; the last props stay through the
     // closing wide shot (they are part of the world) until the closing sting covers them; every prop gets >= 1.8 s
     let j = k + 1; while (j < adimlar.length && !(adimlar[j].es.length || adimlar[j].odak || adimlar[j].tabela || adimlar[j].kahraman)) j++;
@@ -280,12 +289,12 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
     let bitis = j < adimlar.length ? adimlar[j].t - .3 : sting1 - .3;
     bitis = Math.max(bitis, ...a.es.map((e, i) => (e.an != null ? ifade(e.an) : t + (i ? 1.3 : 0)) + 1.8));
     // fixed things on screen in this shot
-    const engel = [[-92, SY - 312, 92, SY - 204], [-4, SY - 204, 4, SY - 70], [668, SY - 206, 852, SY - 98], [748, SY - 100, 772, SY + 50]].map(b => [kutuE(o, b), 10]);
-    if (tabelaW) tabelaW.forEach(b => engel.push([kutuE(o, b), 10]));
+    const engel = [[-92, SY - 312, 92, SY - 204], [-4, SY - 204, 4, SY - 70], [668, SY - 206, 852, SY - 98], [748, SY - 100, 772, SY + 50]].map(b => [kutuE(c, b), 10]);
+    if (tabelaW) tabelaW.forEach(b => engel.push([kutuE(c, b), 10]));
     const oturur = K && a.kahraman && a.kahraman.yer === 'esya';
     const kahSimdi = K && a.kahraman && KAHRAMAN_YER[a.kahraman.yer] ? KAHRAMAN_YER[a.kahraman.yer] : (!oturur && !kahGizli ? kahYer : null);
-    if (kahSimdi) { const [kx, ky, , bx] = kahSimdi; engel.push([kutuE(o, [kx - 82, ky - 46, kx + 62, ky + 34]), 10], [kutuE(o, [kx + bx - 135, ky - 142, kx + bx + 135, ky - 46]), 10]); }
-    if (o === 'kiyi' || o === 'genel') engel.push([kutuE(o, [146, SY - 142, 307, SY - 50]), 3]);    // rather not hide the little town
+    if (kahSimdi) { const [kx, ky, , bx] = kahSimdi; engel.push([kutuE(c, [kx - 82, ky - 46, kx + 62, ky + 34]), 10], [kutuE(c, [kx + bx - 135, ky - 142, kx + bx + 135, ky - 46]), 10]); }
+    if (o === 'kiyi' || o === 'genel') engel.push([kutuE(c, [146, SY - 142, 307, SY - 50]), 3]);    // rather not hide the little town
     const yerlesen = [];
     a.es.forEach((e, i) => {
       const P = E.ESYA[e.tur], te = e.an != null ? ifade(e.an) : i && yerlesen[0] ? yerlesen[0].te + girisSure(yerlesen[0].tur) : t, id = `es${k}_${i}`;
@@ -293,9 +302,9 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
         const dipte = o === 'deniz' || o === 'dip';
         let g = '';
         for (let m = 0; m < 9; m++) {
-          const sx = 150 + m * 97 + r2(-25, 25), [wx] = dny(o, sx, 0);
+          const sx = 150 + m * 97 + r2(-25, 25), [wx] = dny(c, sx, 0);
           if (dipte ? wx < 560 || wx > 1390 : wx < -390) continue;
-          const wy = dipte ? zeminY('dip', wx) : wx < 300 ? zeminY('kara', wx) : wx < 330 ? SY - 30 + (wx - 300) * .4 : SY + 4, [, sy] = ekr(o, wx, wy);
+          const wy = dipte ? zeminY('dip', wx) : wx < 300 ? zeminY('kara', wx) : wx < 330 ? SY - 30 + (wx - 300) * .4 : SY + 4, [, sy] = ekr(c, wx, wy);
           if (sy > 1540) continue;
           g += `<g transform="translate(${f(wx)} ${f(wy)}) scale(${(1 / s).toFixed(4)})"><g id="${id}_${m}" opacity="0"><g transform="rotate(${Math.round(r2(-30, 30))}) translate(0 -14)">${E.yagmurNesne(e.nesne, C, m)}</g></g></g>`;
           const tm = te + (m * 5 % 9) * .11;      // falls from just below the ruler band, appearing as it starts
@@ -305,7 +314,7 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
         tl.push(`tl.to('#${id}',{opacity:0,duration:.35},${at(Math.max(bitis, te + 2))});`);
         return;
       }
-      const lk = yerelKutu(e.tur), ekrK = (bx, by, lb) => kutuE(o, [bx + lb[0] * kw, by + lb[1] * kw, bx + lb[2] * kw, by + lb[3] * kw]);
+      const lk = yerelKutu(e.tur), ekrK = (bx, by, lb) => kutuE(c, [bx + lb[0] * kw, by + lb[1] * kw, bx + lb[2] * kw, by + lb[3] * kw]);
       // the seated character's bubble counts as part of the prop: above it, or beside it when there is no room above
       let balonlar = [null];
       if (oturur && P.koltuk && !yerlesen.some(x => x.koltuk)) {
@@ -321,7 +330,7 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
       let olcek = 1, balon = null;
       if (i && ortak && P.tip === 'hava') {             // a stamp (or any floating second prop) lands on the first one, clear of its text
         const m = E.ESYA[ortak.tur].muhur, kb = ortak.kutu;
-        if (m) { bx = ortak.bx + m[0] * kw; by = ortak.by + m[1] * kw; } else [bx, by] = dny(o, (kb[0] + kb[2]) / 2, (kb[1] + kb[3]) / 2);
+        if (m) { bx = ortak.bx + m[0] * kw; by = ortak.by + m[1] * kw; } else [bx, by] = dny(c, (kb[0] + kb[2]) / 2, (kb[1] + kb[3]) / 2);
         olcek = .8;
       } else {
         const aday = [];
@@ -329,8 +338,8 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
         if (P.tip === 'zemin') for (const z of ESYA_ZEMIN[o] || []) for (let x = ZEMIN_X[z][0] + yar; x <= ZEMIN_X[z][1] - yar; x += 10)
           aday.push([x, Math.max(zeminY(z, x - yar * .8), zeminY(z, x), zeminY(z, x + yar * .8)) + 2]);
         else if (P.tip === 'su') for (let x = 400 + yar; x <= 1395 - yar; x += 10) aday.push([x, SY + 2]);
-        else for (let sx = 140; sx <= 940; sx += 20) for (let sy = 480; sy <= 1480; sy += 20) aday.push(dny(o, sx, sy));
-        const [px, py] = ESYA_TERCIH[o];
+        else for (let sx = 140; sx <= 940; sx += 20) for (let sy = 480; sy <= 1480; sy += 20) aday.push(dny(c, sx, sy));
+        const [px, py] = ESYA_TERCIH[c];
         let eniyi = null;
         for (const [x, y] of aday) for (const bl of balonlar) {
           const kb = [lk, ...(bl ? [bl[1]] : [])].map(b => ekrK(x, y, b));
@@ -348,7 +357,7 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
       const kutu = ekrK(bx, by, lk.map(v => v * olcek));
       // a ground prop standing in the little town hides the houses it covers until it leaves (no roof peeking under a bus)
       if (P.tip === 'zemin') evler.forEach(([hx, hy], h) => {
-        const ev = kutuE(o, [hx - 4, hy - 20, hx + 48, hy + 34]);
+        const ev = kutuE(c, [hx - 4, hy - 20, hx + 48, hy + 34]);
         if (kes(ev, kutu) <= .1 * alan(ev)) return;
         if (evGizli[h] != null && evGizli[h] >= te - .6) { evGizli[h] = bitis + .5; return; }     // still hidden by the previous prop: stay hidden
         if (evGizli[h] != null) tl.push(`tl.to('#ev${h}',{opacity:1,duration:.4},${at(evGizli[h])});`);
@@ -356,7 +365,8 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
       });
       // a vehicle drives in from the left edge, or from just past a gauge or sign standing in its way
       let yol = 900;
-      if (P.giris === 'sur') { const sag = Math.max(-1e9, ...engel.filter(([e2, ag]) => ag >= 10 && e2 !== kutu && e2[2] < kutu[0] + 20 && e2[1] < kutu[3] && e2[3] > kutu[1]).map(([e2]) => e2[2])); if (sag > 0) yol = Math.max(160, kutu[0] - sag - 12); }
+      if (P.giris === 'yuz') { const kiyiX = ekr(c, 400, SY)[0]; if (kiyiX > 0) yol = Math.max(160, kutu[0] - kiyiX - 12); }
+      if (P.giris === 'sur' || P.giris === 'yuz') { const sag = Math.max(-1e9, ...engel.filter(([e2, ag]) => ag >= 10 && e2 !== kutu && e2[2] < kutu[0] + 20 && e2[1] < kutu[3] && e2[3] > kutu[1]).map(([e2]) => e2[2])); if (sag > 0) yol = Math.min(yol, Math.max(160, kutu[0] - sag - 12)); }
       engel.push([kutu, 10]); if (balon) engel.push([ekrK(bx, by, balon[1]), 10]);
       yerlesen.push({ ...e, te, id, bx, by, kw: kw * olcek, kutu, yol, koltuk: P.koltuk && oturur && !yerlesen.some(x => x.koltuk) ? P.koltuk : null, h: P.h, tip: P.tip, balon: balon && { yer: balon[0], kutu: balon[1].map(v => v * kw) } });
     });
@@ -374,7 +384,7 @@ module.exports = function ({ C: C0, T, at, f, r2, W, H, dir }) {
 
   adimlar.forEach((a, k) => {
     const t = a.t, sonraki = adimlar[k + 1] ? adimlar[k + 1].t : SON;
-    if (a.odak) odakSimdi = a.odak;
+    if (a.odak) odakSimdi = a.kam || a.odak;
     if (a.yil) {
       const i = cetvel.indexOf(a.yil);
       if (i >= 0) tl.push(`tl.to('#cetvelIsaret',{attr:{cx:${cx(i)}},duration:.8,ease:'power2.inOut'},${at(t)});tl.to('#cetvelDolu',{attr:{width:${cx(i) - 100}},duration:.8,ease:'power2.inOut'},${at(t)});`);

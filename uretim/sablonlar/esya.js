@@ -14,16 +14,27 @@ const ust = s => String(s || '').toLocaleUpperCase('tr');
 // AntonTR is narrow: a capital is about half its size wide
 const sigdir = (s, maxW, taban) => Math.max(12, Math.min(taban, Math.floor(maxW / (Math.max(1, [...s].length) * .5))));
 // text centred on (cx, cy); goes to two lines when one line would shrink it too much
-function yazi(s, cx, cy, maxW, taban, renk, satirMax = 2) {
-  s = ust(s).trim(); if (!s) return '';
-  let sat = [s];
-  if (satirMax > 1 && sigdir(s, maxW, taban) < taban * .8 && s.includes(' ')) {
+// one line, or two (split at the space nearest the middle) when one line would shrink below esik x taban
+function bol(s, maxW, taban, satirMax = 2, esik = .8) {
+  if (satirMax > 1 && sigdir(s, maxW, taban) < taban * esik && s.includes(' ')) {
     const bosluk = [...s.matchAll(/ /g)].map(m => m.index), orta = s.length / 2;
     const k = bosluk.reduce((a, b) => Math.abs(b - orta) < Math.abs(a - orta) ? b : a);
-    sat = [s.slice(0, k), s.slice(k + 1)];
+    return [s.slice(0, k), s.slice(k + 1)];
   }
+  return [s];
+}
+function yazi(s, cx, cy, maxW, taban, renk, satirMax = 2, esik = .8) {
+  s = ust(s).trim(); if (!s) return '';
+  const sat = bol(s, maxW, taban, satirMax, esik);
   const boy = Math.min(...sat.map(x => sigdir(x, maxW, taban))), lh = boy * 1.04, y0 = cy - (sat.length - 1) * lh / 2 + boy * .36;
   return sat.map((x, i) => `<text x="${cx}" y="${(y0 + i * lh).toFixed(1)}" text-anchor="middle" font-family="AntonTR" font-size="${boy}" fill="${renk}">${esc(x)}</text>`).join('');
+}
+// a white plate of width w whose bottom edge sits at alt; a long text takes two lines (the plate grows up) rather than
+// shrinking below 92 % of taban, so plate text stays readable on the small coast shot
+function levha(s, cx, alt, w, taban, ink, sw = 3) {
+  s = ust(s).trim(); if (!s) return '';
+  const sat = bol(s, w - 18, taban, 2, .92), boy = Math.min(...sat.map(x => sigdir(x, w - 18, taban))), h = sat.length * boy * 1.04 + boy * .3 + 10;
+  return `<rect x="${cx - w / 2}" y="${(alt - h).toFixed(1)}" width="${w}" height="${h.toFixed(1)}" rx="6" fill="#fff" stroke="${ink}" stroke-width="${sw}"/>${yazi(s, cx, alt - h / 2 - boy * .04, w - 18, taban, ink, 2, .92)}`;
 }
 const yaziGen = (s, taban, min, max) => Math.max(min, Math.min(max, [...ust(s)].length * taban * .5 + 40));
 
@@ -32,9 +43,9 @@ const balikK = (renk, ink, x = 0, y = 0, s = 1, ek = '') => `<g transform="trans
 
 const ESYA = {
   // a yellow minibus; roof plate shows the text (default DOLMUŞ); drives in from the left
-  dolmus: { tip: 'zemin', w: 330, h: 188, muhur: [-40, -80], koltuk: [96, -100, .4], giris: 'sur', ciz: (C, y) => {
-    const yz = ust(y || 'DOLMUŞ'), pg = yaziGen(yz, 32, 120, 320);
-    return `<rect x="${-pg / 2}" y="-186" width="${pg}" height="44" rx="7" fill="#fff" stroke="${C.ink}" stroke-width="4"/>${yazi(yz, 0, -167, pg - 18, 32, C.ink, 1)}
+  dolmus: { tip: 'zemin', w: 330, h: 190, muhur: [-40, -80], koltuk: [98, -104, .6], giris: 'sur', ciz: (C, y) => {
+    const yz = ust(y || 'DOLMUŞ'), pg = yaziGen(yz, 34, 120, 320);
+    return `${levha(yz, 0, -142, pg, 34, C.ink, 4)}
     <rect x="-8" y="-142" width="16" height="4" fill="${C.ink}"/>
     <path d="M-158 -40 L -158 -124 Q -158 -140 -142 -140 L 98 -140 Q 122 -140 134 -122 L 160 -82 L 162 -42 Q 162 -28 148 -28 L -146 -28 Q -158 -28 -158 -40 Z" fill="#F2C14E" stroke="#D9A23A" stroke-width="3"/>
     <rect x="-158" y="-70" width="320" height="12" fill="${C.coral}"/>
@@ -52,28 +63,28 @@ const ESYA = {
     const yz = ust(y || 'ONAYLANDI'), g = yaziGen(yz, 66, 200, 330);
     return `<g transform="rotate(-11)"><rect x="${-g / 2}" y="-50" width="${g}" height="100" rx="12" fill="#fff" fill-opacity=".55" stroke="${C.coral}" stroke-width="10"/><rect x="${-g / 2 + 12}" y="-38" width="${g - 24}" height="76" rx="6" fill="none" stroke="${C.coral}" stroke-width="3"/>${yazi(yz, 0, 0, g - 40, 64, C.coral, 1)}</g>`; } },
   // a factory with a chimney and a facade sign; when stamped, its shutter comes down
-  fabrika: { tip: 'zemin', w: 340, h: 270, muhur: [-20, -40], koltuk: [10, -40, .5], giris: 'yuksel', ciz: (C, y) => `<rect x="112" y="-262" width="36" height="262" fill="#B9AFA0"/><rect x="112" y="-236" width="36" height="12" fill="${C.coral}"/><rect x="112" y="-206" width="36" height="12" fill="${C.coral}"/>
-    ${[0, 1, 2].map(i => `<circle class="duman" cx="${130 + i * 14}" cy="${-282 - i * 26}" r="${16 + i * 6}" fill="#DCD6CA"/>`).join('')}
-    <path d="M-160 -150 L -160 -196 L -110 -150 L -110 -196 L -60 -150 L -60 -196 L -10 -150 L -10 -196 L 40 -150 L 40 -196 L 90 -150 L 112 -150 L 112 0 L -160 0 Z" fill="${C.alu2}"/>
-    <rect x="-160" y="-150" width="272" height="150" fill="#E6DCC8" stroke="#C9B99A" stroke-width="3"/>
-    <rect x="-148" y="-140" width="248" height="44" rx="5" fill="#fff" stroke="${C.ink}" stroke-width="3"/>${yazi(y || 'FABRİKA', -24, -118, 230, 30, C.ink, 1)}
+  fabrika: { tip: 'zemin', w: 340, h: 330, muhur: [-20, -40], koltuk: [-18, -44, .62], giris: 'yuksel', ciz: (C, y) => `<rect x="112" y="-296" width="36" height="296" fill="#B9AFA0"/><rect x="112" y="-270" width="36" height="12" fill="${C.coral}"/><rect x="112" y="-240" width="36" height="12" fill="${C.coral}"/>
+    ${[0, 1, 2].map(i => `<circle class="duman" cx="${130 + i * 14}" cy="${-316 - i * 26}" r="${16 + i * 6}" fill="#DCD6CA"/>`).join('')}
+    <path d="M-160 -184 L -160 -230 L -110 -184 L -110 -230 L -60 -184 L -60 -230 L -10 -184 L -10 -230 L 40 -184 L 40 -230 L 90 -184 L 112 -184 L 112 0 L -160 0 Z" fill="${C.alu2}"/>
+    <rect x="-160" y="-184" width="272" height="184" fill="#E6DCC8" stroke="#C9B99A" stroke-width="3"/>
+    ${levha(y || 'FABRİKA', -24, -92, 252, 34, C.ink)}
     ${[-138, 46].map(x => `<rect x="${x}" y="-80" width="44" height="34" fill="#BFE3EE" stroke="#C9B99A" stroke-width="3"/>`).join('')}
     <rect x="-56" y="-82" width="76" height="82" fill="#5A4E44"/>
     <g class="kepenk"><rect x="-56" y="-82" width="76" height="82" fill="${C.alu}"/>${[0, 1, 2, 3, 4, 5].map(i => `<rect x="-56" y="${-76 + i * 13}" width="76" height="3" fill="${C.alu2}"/>`).join('')}</g>` },
   // an apartment block with a balcony on the second floor; door plate shows the text
-  apartman: { tip: 'zemin', w: 250, h: 330, muhur: [0, -150], koltuk: [128, -170, .45], giris: 'yuksel', ciz: (C, y) => `<rect x="-95" y="-312" width="190" height="312" fill="#EBD9BD" stroke="#C9B48F" stroke-width="3"/><rect x="-104" y="-322" width="208" height="14" fill="${C.roof}"/>
+  apartman: { tip: 'zemin', w: 250, h: 330, muhur: [0, -150], koltuk: [128, -174, .62], giris: 'yuksel', ciz: (C, y) => `<rect x="-95" y="-312" width="190" height="312" fill="#EBD9BD" stroke="#C9B48F" stroke-width="3"/><rect x="-104" y="-322" width="208" height="14" fill="${C.roof}"/>
     ${[-282, -192, -102].map((yy, f) => [-66, 24].map((x, i) => `<rect x="${x}" y="${yy}" width="42" height="42" fill="${(f + i) % 3 ? '#BFE3EE' : '#FFD66B'}" stroke="#C9B48F" stroke-width="3"/>`).join('')).join('')}
     <rect x="95" y="-152" width="62" height="9" fill="#B9AFA0"/><path d="M95 -186 L 157 -186 M157 -186 L 157 -152 ${[107, 119, 131, 143].map(x => `M${x} -186 L ${x} -152`).join(' ')}" fill="none" stroke="${C.ink}" stroke-width="4"/>
     <rect x="-24" y="-62" width="48" height="62" fill="${C.trunk}"/>
-    ${y ? `<rect x="-80" y="-98" width="160" height="30" rx="5" fill="#fff" stroke="${C.ink}" stroke-width="3"/>${yazi(y, 0, -83, 150, 28, C.ink, 1)}` : ''}` },
+    ${y ? levha(y, 0, -66, 176, 30, C.ink) : ''}` },
   // a town hall: pediment, columns, waving flag; plate on the pediment
-  belediye: { tip: 'zemin', w: 330, h: 300, muhur: [0, -110], koltuk: [-60, -50, .45], giris: 'yuksel', ciz: (C, y) => `<rect x="-2" y="-300" width="5" height="70" fill="${C.ink}"/><path class="bayrak" d="M3 -298 L 52 -290 L 3 -274 Z" fill="${C.coral}"/>
+  belediye: { tip: 'zemin', w: 330, h: 300, muhur: [0, -110], koltuk: [-60, -54, .62], giris: 'yuksel', ciz: (C, y) => `<rect x="-2" y="-300" width="5" height="70" fill="${C.ink}"/><path class="bayrak" d="M3 -298 L 52 -290 L 3 -274 Z" fill="${C.coral}"/>
     <rect x="-160" y="-22" width="320" height="22" fill="#D9CBB0"/><rect x="-145" y="-40" width="290" height="18" fill="#E6DCC8"/>
     <rect x="-130" y="-178" width="260" height="138" fill="${C.wall}" stroke="#D9CBB0" stroke-width="3"/>
     <path d="M-150 -176 L 0 -236 L 150 -176 Z" fill="#E7D3A6" stroke="#CDB27B" stroke-width="3"/>
     ${[-112, -62, 40, 90].map(x => `<rect x="${x}" y="-168" width="22" height="128" fill="#fff" stroke="#D9CBB0" stroke-width="2"/>`).join('')}
     <rect x="-22" y="-104" width="44" height="64" fill="${C.trunk}"/>
-    <rect x="-92" y="-214" width="184" height="32" rx="5" fill="#fff" stroke="${C.ink}" stroke-width="3"/>${yazi(y || 'BELEDİYE', 0, -198, 172, 30, C.ink, 1)}` },
+    ${levha(y || 'BELEDİYE', 0, -180, 196, 32, C.ink)}` },
   // a big cartoon nose with smell waves drifting at it; a stamp of its step lands on it
   burun: { tip: 'hava', w: 300, h: 280, muhur: [40, 0], giris: 'bel', ciz: (C, y) => `${[-40, 0, 40].map((yy, i) => `<path class="koku" d="M-150 ${yy} q 14 -14 28 0 q 14 14 28 0 q 14 -14 28 0" fill="none" stroke="#9CB84A" stroke-width="7" stroke-linecap="round"/>`).join('')}
     <g transform="translate(40 0)"><path d="M0 -120 Q 30 -110 40 -28 Q 84 4 74 46 Q 64 84 22 78 Q 0 94 -22 78 Q -64 84 -74 46 Q -84 4 -40 -28 Q -30 -110 0 -120 Z" fill="#E9B48F" stroke="#C98E68" stroke-width="5"/>
@@ -107,13 +118,14 @@ const ESYA = {
   megafon: { tip: 'hava', w: 410, h: 220, giris: 'bel', ciz: (C, y) => `<path d="M-170 -20 L -130 -20 L -60 -70 L -60 70 L -130 20 L -170 20 Z" fill="${C.coral}"/><rect x="-150" y="20" width="16" height="50" rx="6" fill="${C.ink}"/>
     ${[0, 1, 2].map(i => `<path class="ses" d="M${-40 + i * 22} -40 Q ${-18 + i * 26} 0 ${-40 + i * 22} 40" fill="none" stroke="${C.ink}" stroke-width="6" stroke-linecap="round"/>`).join('')}
     <rect x="34" y="-70" width="200" height="140" rx="14" fill="#fff" stroke="${C.ink}" stroke-width="4"/>${yazi(y || 'DUYURU', 134, 0, 178, 44, C.ink)}` },
-  // a small fishing boat on the sea surface; its name is painted on the hull (default SON BALIKÇI); sails in from the right
-  tekne: { tip: 'su', w: 370, h: 250, muhur: [40, -100], koltuk: [28, -112, .36], giris: 'yuz', ciz: (C, y) => `<rect x="-132" y="-244" width="7" height="190" fill="${C.trunk}"/><g class="flama"><path d="M-125 -242 L -78 -230 L -125 -216 Z" fill="${C.coral}"/></g>
-    <path d="M-125 -150 L -62 -76 M-125 -120 L -86 -76" stroke="${C.ink}" stroke-width="3" fill="none"/>
-    <rect x="-24" y="-154" width="128" height="92" rx="6" fill="#F4EEDF" stroke="#C9B48F" stroke-width="3"/><rect x="-32" y="-166" width="144" height="16" rx="5" fill="${C.o2}"/>
-    <rect x="-6" y="-136" width="68" height="44" rx="6" fill="#BFE3EE"/><rect x="70" y="-136" width="24" height="44" rx="5" fill="#BFE3EE"/>
-    <path d="M-184 -66 L 186 -66 Q 178 -22 142 6 L -146 6 Q -174 -22 -184 -66 Z" fill="#fff" stroke="#C9B48F" stroke-width="3"/>
-    <path d="M-170 -26 L 172 -26 Q 162 -6 142 6 L -146 6 Q -160 -8 -170 -26 Z" fill="${C.coral}"/>${yazi(y || 'SON BALIKÇI', 0, -45, 290, 32, C.ink, 1)}` },
+  // a small fishing boat on the sea surface: bow raised on the right, wheelhouse aft, mast forward with the flag streaming
+  // back; its name is painted on the hull (default SON BALIKÇI); it sails in from the left and leaves to the right, bow first
+  tekne: { tip: 'su', w: 400, h: 250, muhur: [40, -110], koltuk: [-66, -112, .55], giris: 'yuz', ciz: (C, y) => `<rect x="104" y="-244" width="7" height="186" fill="${C.trunk}"/><g class="flama"><path d="M104 -242 L 58 -230 L 104 -216 Z" fill="${C.coral}"/></g>
+    <path d="M111 -150 L 176 -82 M111 -120 L 150 -76" stroke="${C.ink}" stroke-width="3" fill="none"/>
+    <rect x="-128" y="-158" width="136" height="96" rx="6" fill="#F4EEDF" stroke="#C9B48F" stroke-width="3"/><rect x="-136" y="-170" width="152" height="16" rx="5" fill="${C.o2}"/>
+    <rect x="-112" y="-140" width="88" height="50" rx="6" fill="#BFE3EE"/><rect x="-16" y="-140" width="18" height="50" rx="5" fill="#BFE3EE"/>
+    <path d="M-184 -64 L 158 -64 L 214 -92 Q 196 -30 150 6 L -150 6 Q -178 -20 -184 -64 Z" fill="#fff" stroke="#C9B48F" stroke-width="3"/>
+    <path d="M-172 -26 L 189 -26 Q 172 -6 150 6 L -150 6 Q -164 -10 -172 -26 Z" fill="${C.coral}"/>${yazi(y || 'SON BALIKÇI', 4, -45, 300, 34, C.ink, 1)}` },
   // a tulip tea glass on its saucer, steam rising; with bosal: true the tea drains and the steam flies off
   cay: { tip: 'hava', w: 220, h: 330, giris: 'bel', ciz: (C, y) => `${[-22, 4, 30].map((x, i) => `<path class="buhar" d="M${x} -96 q -14 -18 0 -36 q 14 -18 0 -36" fill="none" stroke="#C9C2B4" stroke-width="7" stroke-linecap="round" opacity=".8"/>`).join('')}
     <ellipse cx="0" cy="98" rx="100" ry="18" fill="#fff" stroke="#CDBE9E" stroke-width="4"/><ellipse cx="0" cy="94" rx="58" ry="8" fill="#EDE6D6"/>
@@ -171,7 +183,8 @@ function giris(tur, sel, t, omur, { at, f, birim = 1, damgaT = null, bosal = fal
   } else if (g === 'yazdir') {
     tl.push(`tl.set('${sel}',{opacity:1},${at(t)});tl.fromTo('${sel}',{scaleY:0},{scaleY:1,transformOrigin:'50% 0%',smoothOrigin:false,duration:1.1,ease:'steps(9)',immediateRender:false},${at(t)});`);
   } else if (g === 'yuz') {
-    tl.push(`tl.set('${sel}',{opacity:1},${at(t)});tl.fromTo('${sel}',{x:${f(760 * birim)}},{x:0,duration:1.6,ease:'power2.out',immediateRender:false},${at(t)});`);
+    tl.push(`tl.fromTo('${sel}',{x:${f(-yol * birim)}},{x:0,duration:1.6,ease:'power2.out',immediateRender:false},${at(t)});`);
+    tl.push(yol < 900 ? `tl.fromTo('${sel}',{opacity:0},{opacity:1,duration:.25,ease:'none',immediateRender:false},${at(t)});` : `tl.set('${sel}',{opacity:1},${at(t)});`);
   } else if (g === 'zipla') {
     tl.push(`tl.set('${sel}',{opacity:1},${at(t)});tl.fromTo('${sel} .kisi',{opacity:0,y:${f(60 * birim)}},{opacity:1,y:0,duration:.35,ease:'back.out(2.5)',stagger:.14,immediateRender:false},${at(t)});`);
     tl.push(`tl.fromTo('${sel} .kisi',{y:0},{y:${f(-14 * birim)},duration:.32,ease:'sine.inOut',yoyo:true,repeat:${tekrar(.32)},stagger:.11,immediateRender:false},${at(t + 1.1)});`);
