@@ -1,7 +1,9 @@
 // Measurement maths for stil/olc.js: everything is computed from ffmpeg-decoded raw frames and raw audio, no extra packages.
 //   kesmeler(...)  hard cuts from ffmpeg's scene score
-//   KareOlcer      one pass over gray frames at the source fps: brightness flashes, camera zoom/pan, text rows, caption cards
-//   yaziKirpim(...) words and lines on a caption card (full-resolution crop)
+//   KareOlcer      one pass over gray frames at the source fps: flashes, whips, blur-in, zoom tracker (punch-in, rhythm),
+//                  camera moves, text rows, caption cards, text appearing, frame-rate cadence
+//   yaziKirpim(...) / satirDolgu(...) lines, words, letter height, stem width, thin + bold, outline (full-resolution crop)
+//   belirmeOlc(...) how text appears (duration, fade or blur, line by line) on full-resolution frames
 //   palet(...)     dominant colours (k-means)
 //   sesOlaylari(...) sound-effect onsets by frequency band
 const { spawn } = require('child_process');
@@ -37,7 +39,7 @@ const dagilim = a => a.length ? { ortanca: yuv(ortanca(a)), ort: yuv(a.reduce((x
 async function kesmeler(dosya, esik, sinirSn) {
   const skor = []; let t = null;
   await calistir(['-hide_banner', '-loglevel', 'info', '-t', String(sinirSn), '-i', dosya, '-map', '0:v:0', '-an',
-    '-vf', "scale=320:-2,select='gte(scene\\,0)',metadata=print", '-f', 'null', '-'], s => {
+    '-vf', "setpts=PTS-STARTPTS,scale=320:-2,select='gte(scene\\,0)',metadata=print", '-f', 'null', '-'], s => {
     const m = s.match(/pts_time:([\d.]+)/); if (m) { t = +m[1]; return; }
     const k = s.match(/lavfi\.scene_score=([\d.]+)/); if (k && t != null) { skor.push([t, +k[1]]); t = null; }
   });
@@ -50,8 +52,9 @@ async function kesmeler(dosya, esik, sinirSn) {
 }
 
 // ---- image matching for camera moves: is frame B frame A scaled by s around the centre and shifted by (dx, dy)?
-// returns the mean absolute difference over the central 70% of B (gray levels 0-255)
-function fark(A, B, w, h, s, dx, dy, adim, bilinear) {
+// returns the mean absolute difference over the central 70% of B (gray levels 0-255); tavan caps each pixel's
+// difference, so a small region that changes by itself (a caption swap, a hand) cannot outweigh the rest
+function fark(A, B, w, h, s, dx, dy, adim, bilinear, tavan = 1e9) {
   const cx = w / 2, cy = h / 2; let top = 0, n = 0;
   for (let y = Math.floor(h * .15); y < h * .85; y += adim) for (let x = Math.floor(w * .15); x < w * .85; x += adim) {
     const xa = cx + (x - cx) / s - dx, ya = cy + (y - cy) / s - dy;
@@ -59,7 +62,7 @@ function fark(A, B, w, h, s, dx, dy, adim, bilinear) {
     let v;
     if (bilinear) { const x0 = xa | 0, y0 = ya | 0, fx = xa - x0, fy = ya - y0, i = y0 * w + x0; v = (A[i] * (1 - fx) + A[i + 1] * fx) * (1 - fy) + (A[i + w] * (1 - fx) + A[i + w + 1] * fx) * fy; }
     else v = A[Math.round(ya) * w + Math.round(xa)];
-    top += Math.abs(B[y * w + x] - v); n++;
+    top += Math.min(tavan, Math.abs(B[y * w + x] - v)); n++;
   }
   return n > 20 ? top / n : 1e9;
 }
@@ -79,6 +82,29 @@ function eslestir(a, b, olcekler, kayma) {
     } }
   return { e0, e: ince.e, s: ince.s, dx: ince.dx / ow, dy: ince.dy / ow };
 }
+// local search around a prior (log scale, shift in 1/4-thumb pixels) on the 1/4 thumbs, with a parabola fit per axis:
+// used by the zoom tracker, where the scale changes a little from frame to frame
+function yerelEslestir(a, b, ls0, dx0, dy0) {
+  const { o: A, ow, oh } = a, B = b.o, F = (l, x, y) => fark(A, B, ow, oh, Math.exp(l), x, y, 2, true, 30);
+  const ADIM = [.004, .5, .5];
+  let c = [ls0, dx0, dy0], ec = F(...c);
+  for (let it = 0; it < 15; it++) {
+    let en = null;
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let l = -1; l <= 1; l++) {
+      if (!i && !j && !l) continue;
+      const q = [c[0] + i * ADIM[0], c[1] + j * ADIM[1], c[2] + l * ADIM[2]], e = F(...q);
+      if (e < ec && (!en || e < en.e)) en = { q, e };
+    }
+    if (!en) break; c = en.q; ec = en.e;
+  }
+  const ince = c.slice();
+  for (let k = 0; k < 3; k++) {
+    const m = c.slice(), p = c.slice(); m[k] -= ADIM[k]; p[k] += ADIM[k];
+    const em = F(...m), ep = F(...p), pay = em - 2 * ec + ep;
+    if (pay > 1e-9) ince[k] = c[k] + Math.max(-.5, Math.min(.5, (em - ep) / (2 * pay))) * ADIM[k];
+  }
+  return { ls: ince[0], dx: ince[1], dy: ince[2], e: ec, e0: F(0, 0, 0) };
+}
 const aralik = (a, b, n) => Array.from({ length: n }, (_, i) => Math.exp(Math.log(a) + (Math.log(b) - Math.log(a)) * i / (n - 1)));
 const OLCEK_HAREKET = aralik(.8, 1.25, 23);
 const OLCEK_ZIPLAMA = aralik(1 / 1.8, 1.8, 41).filter(s => Math.abs(Math.log(s)) > .05);
@@ -94,6 +120,8 @@ class KareOlcer {
     this.halka = [];                               // recent thumbnails for camera matching
     this.kamera = []; this.ziplama = [];
     this.kesmeSet = new Set(this.kesme);
+    this.ex = []; this.ey = []; this.d1 = [];      // per frame: horizontal / vertical gradient energy (mean square; blur lowers it), change from the previous frame
+    this.iz = []; this.zincir = 0; this.anahtar = null; this.profil = [];   // zoom tracker: per frame scale against a key frame of the same chain
   }
   kucult(p, f) {                                    // box-average thumbnail, f = factor
     const w = Math.floor(this.w / f), h = Math.floor(this.h / f), o = new Float32Array(w * h);
@@ -102,14 +130,23 @@ class KareOlcer {
   }
   kare(p) {
     const { w, h, G, gw } = this, n = this.n++;
-    let lum = 0; const satir = new Uint16Array(h), izg = new Uint8Array(gw * this.gh);
-    for (let y = 0; y < h; y++) { const r = y * w; let c = 0;
-      for (let x = 0; x < w - 1; x++) { lum += p[r + x]; if (Math.abs(p[r + x + 1] - p[r + x]) > G) { c++; const g = ((y / 10) | 0) * gw + ((x / 10) | 0); if (izg[g] < 255) izg[g]++; } }
+    let lum = 0, sx = 0, sy = 0; const satir = new Uint16Array(h), izg = new Uint8Array(gw * this.gh);
+    for (let y = 0; y < h; y++) { const r = y * w, son = y < h - 1; let c = 0;
+      for (let x = 0; x < w - 1; x++) { const v = p[r + x], d = Math.abs(p[r + x + 1] - v); lum += v; sx += d * d; if (son) { const e = p[r + x + w] - v; sy += e * e; }
+        if (d > G) { c++; const g = ((y / 10) | 0) * gw + ((x / 10) | 0); if (izg[g] < 255) izg[g]++; } }
       satir[y] = c; }
     this.lum.push(lum / (w * h)); this.satir.push(satir); this.izgara.push(izg);
+    this.ex.push(sx / (w * h)); this.ey.push(sy / (w * h));
     // camera: thumbnails at 1/4 (refine) and 1/8 (coarse) of 540 px
     const o = this.kucult(p, 4), k = this.kucult(p, 8), tb = { o: o.o, k: k.o, ow: o.w, oh: o.h, kw: k.w, kh: k.h, n };
+    const onceki = this.halka[this.halka.length - 1];
+    if (onceki) { let d = 0; for (let i = 0; i < o.o.length; i++) d += Math.abs(o.o[i] - onceki.o[i]); this.d1.push(d / o.o.length); } else this.d1.push(0);
+    // column and row profiles of the 1/4 thumb: how far the picture slides between frames (whip pans)
+    const kp = new Float32Array(o.w), sp = new Float32Array(o.h);
+    for (let y = 0; y < o.h; y++) for (let x = 0; x < o.w; x++) { const v = o.o[y * o.w + x]; kp[x] += v / o.h; sp[y] += v / o.w; }
+    this.profil.push([kp, sp]);
     this.halka.push(tb); if (this.halka.length > this.L + 1) this.halka.shift();
+    this.izle(tb, n);
     if (this.kesmeSet.has(n) && this.halka.length >= 2) {      // zoom cut: same picture, suddenly bigger or smaller?
       const m = eslestir(this.halka[this.halka.length - 2], tb, OLCEK_ZIPLAMA, 8);
       if (m.e < .55 * m.e0 && m.e < 14) this.ziplama.push({ t: n / this.fps, s: m.s });
@@ -125,17 +162,169 @@ class KareOlcer {
       this.kamera.push({ t: n / this.fps, tur, z: m.z || 0 });
     }
   }
-  // brightness flashes (white) and dips (black): a jump of 40 gray levels that comes back within 8 frames
+  // zoom tracker: every frame is matched against the key frame of its chain (scale around the centre + shift).
+  // A cut, a failed match (animation, flash, whip) starts a new chain; the key moves on after 10% zoom or 2 s.
+  izle(tb, n) {
+    const yeni = () => { this.zincir++; this.anahtar = { tb, n, ls: 0, dx: 0, dy: 0 }; this.onceki = null; this.sonKare = { tb, n, ls: 0, dx: 0, dy: 0 }; this.iz.push({ n, z: this.zincir, ls: 0, dx: 0, dy: 0 }); };
+    if (!this.anahtar || this.kesmeSet.has(n)) return yeni();
+    const iyi = m => m.e0 < 1 || m.e < 4 || m.e < .5 * m.e0;
+    const genis = K => { const g = eslestir(K.tb, tb, OLCEK_HAREKET, 4); return yerelEslestir(K.tb, tb, Math.log(g.s), g.dx * K.tb.ow, g.dy * K.tb.ow); };
+    let K = this.anahtar, o = this.onceki;
+    let m = yerelEslestir(K.tb, tb, ...(o ? [o.ls + (o.v || 0), o.dx, o.dy] : [0, 0, 0]));   // prior: last estimate + last speed
+    if (!iyi(m)) m = genis(K);
+    if (!iyi(m) && this.sonKare && this.sonKare.n === n - 1 && this.sonKare.n !== K.n) {
+      // the key no longer matches (part of the picture changed by itself): continue from the previous frame instead
+      const q = genis(this.sonKare);
+      if (iyi(q)) { K = this.anahtar = this.sonKare; o = null; m = q; }
+    }
+    if (!iyi(m)) return yeni();
+    const ls = K.ls + m.ls, dx = K.dx + m.dx, dy = K.dy + m.dy;
+    this.iz.push({ n, z: this.zincir, ls, dx, dy, e: +m.e.toFixed(2) });
+    this.onceki = { ls: m.ls, dx: m.dx, dy: m.dy, v: o ? m.ls - o.ls : 0 };
+    this.sonKare = { tb, n, ls, dx, dy };
+    if (Math.abs(m.ls) > .1 || n - K.n > 2 * this.fps) { this.anahtar = this.sonKare; this.onceki = { ls: 0, dx: 0, dy: 0, v: this.onceki.v }; }
+  }
+  // brightness flashes (white) and dips (black): frames at least 40 gray levels brighter (darker) than both the shot before
+  // and the shot after, for at most 6 frames. Works across a cut (A -> white -> B), which is where editors put them.
   flaslar() {
-    const L = this.lum, cik = { flas: [], kararma: [] };
-    for (let i = 5; i < L.length - 1; i++) {
-      const once = ortanca(L.slice(i - 5, i)), d = L[i] - once;
-      if (Math.abs(d) < 40) continue;
-      const geri = L.slice(i + 1, i + 9).some(v => Math.abs(v - once) < 15);
-      const liste = d > 0 ? cik.flas : cik.kararma;
-      if (geri && (!liste.length || i / this.fps - liste[liste.length - 1] > .5)) liste.push(+(i / this.fps).toFixed(2));
+    const L = this.lum, cik = { flas: [], kararma: [], flas_kare: [], kararma_kare: [] };
+    for (let i = 3; i < L.length - 2; i++) {
+      for (const [yon, liste, kare] of [[1, cik.flas, cik.flas_kare], [-1, cik.kararma, cik.kararma_kare]]) {
+        const once = ortanca(L.slice(Math.max(0, i - 6), i)), d = yon * (L[i] - once);
+        if (d < 40 || (yon > 0 ? L[i] < 160 : L[i] > 60)) continue;
+        let e = i; while (e + 1 < L.length && e - i < 6 && yon * (L[e + 1] - once) >= 40 && Math.abs(L[e + 1] - L[i]) <= 25) e++;
+        if (e - i >= 6 || e + 1 >= L.length) continue;
+        const sonra = ortanca(L.slice(e + 1, e + 6)), tepe = yon > 0 ? Math.min(...L.slice(i, e + 1)) : Math.max(...L.slice(i, e + 1));
+        if (yon * (tepe - sonra) < 30) continue;
+        if (liste.length && i / this.fps - liste[liste.length - 1] < .5) continue;
+        liste.push(+(i / this.fps).toFixed(3)); kare.push(e - i + 1); i = e;
+      }
     }
     return cik;
+  }
+  // whip pans: 2-15 frames in which the picture is smeared along one axis (horizontal detail drops far below vertical
+  // detail, or the other way), compared with the frames around them
+  whipler(disla = new Set()) {
+    const N = this.ex.length, r = this.ex.map((x, i) => Math.log((x + 1) / (this.ey[i] + 1))), cik = [];
+    // slide between two frames along one axis: the shift (fraction of the size) that best lines up their profiles
+    const kayma = (a, b, eksen) => { const A = this.profil[a][eksen], B = this.profil[b][eksen], n = A.length, m = Math.round(n * .45); let en = { e: 1e9, s: 0 };
+      for (let s = -m; s <= m; s++) { let t = 0, c = 0; for (let i = Math.max(0, -s); i < Math.min(n, n - s); i++) { t += Math.abs(A[i] - B[i + s]); c++; } if (c > n * .4 && t / c < en.e) en = { e: t / c, s }; }
+      return en.s / n; };
+    for (let i = 1; i < N; i++) {
+      if (disla.has(i)) continue;
+      const cevre = [...r.slice(Math.max(0, i - 20), Math.max(0, i - 8)), ...r.slice(i + 9, i + 21)]; if (cevre.length < 6) continue;
+      const m = ortanca(cevre), d = r[i] - m;
+      if (Math.abs(d) < Math.log(3)) continue;
+      const yon = d < 0 ? 'yatay' : 'dikey', eksen = d < 0 ? 0 : 1;
+      let a = i, e = i;
+      while (a - 1 > 0 && !disla.has(a - 1) && Math.sign(r[a - 1] - m) === Math.sign(d) && Math.abs(r[a - 1] - m) >= Math.log(1.5)) a--;
+      while (e + 1 < N && !disla.has(e + 1) && Math.sign(r[e + 1] - m) === Math.sign(d) && Math.abs(r[e + 1] - m) >= Math.log(1.5)) e++;
+      const k = e - a + 1;
+      // a whip moves: the smeared frames slide along the smear axis (a blur or a flash in place does not)
+      const kay = []; for (let j = a; j <= e + 1 && j < N; j++) kay.push(kayma(j - 1, j, eksen));
+      const hareket = kay.filter(x => Math.abs(x) >= .02).length, ayni = Math.abs(kay.filter(x => Math.abs(x) >= .02).reduce((t, x) => t + Math.sign(x), 0));
+      if (k >= 2 && k <= 15 && hareket >= Math.max(2, kay.length * .5) && ayni >= hareket * .7) cik.push({ t: +(a / this.fps).toFixed(3), n: a, kare: k, yon });
+      i = e;
+    }
+    return cik;
+  }
+  // blur-to-sharp entrance after a cut: the first frames hold much less detail than the shot a little later
+  bulanikGiris(n0) {
+    const S = i => this.ex[i] + this.ey[i], N = this.ex.length;
+    if (n0 + 14 >= N) return null;
+    const hedef = ortanca(Array.from({ length: 6 }, (_, j) => S(n0 + 8 + j)));
+    if (!(S(n0) < .6 * hedef)) return null;
+    let k = n0; while (k < n0 + 12 && S(k) < .9 * hedef) k++;
+    return { kare: k - n0, sn: +((k - n0) / this.fps).toFixed(3) };
+  }
+  // zoom over each shot from the tracker: relative to the widest frame of the shot (= 1.00).
+  //   punch : the shot opens zoomed in and falls back fast (scale at the first frame, time to 90% of the fall)
+  //   ritim : the slow zoom after that (largest / smallest scale, time between turning points)
+  zoomSeyri(sinir) {
+    const fps = this.fps, cekim = [];
+    for (let i = 0; i < sinir.length - 1; i++) {
+      const [a, b] = [sinir[i], sinir[i + 1]]; if (b - a < Math.round(.6 * fps)) continue;
+      const kayit = this.iz.filter(x => x.n >= a && x.n < b), say = {};
+      kayit.forEach(x => say[x.z] = (say[x.z] || 0) + 1);
+      const z = +Object.keys(say).sort((u, v) => say[v] - say[u])[0], seri = kayit.filter(x => x.z === z);
+      if (seri.length < Math.max(8, .4 * (b - a))) { cekim.push({ t: +(a / fps).toFixed(3), sure_sn: +((b - a) / fps).toFixed(2), izlenemedi: true }); continue; }
+      // median of 3 against single bad matches
+      const ls = seri.map((x, j) => j && j < seri.length - 1 ? ortanca(seri.slice(j - 1, j + 2).map(q => q.ls)) : x.ls);
+      const t = seri.map(x => x.n / fps), enAz = Math.min(...ls);
+      const c = { t: +(a / fps).toFixed(3), sure_sn: +((b - a) / fps).toFixed(2), izlenen_sn: +(seri.length / fps).toFixed(2), punch: null, ritim: null };
+      // punch: the chain starts within 0.15 s of the cut, opens 6%+ above the lowest zoom of its first 1.2 s, and falls fast
+      let bas = 0;
+      if (seri[0].n - a <= Math.round(.15 * fps)) {
+        const ilk = ls.filter((_, j) => t[j] - t[0] <= 1.2), dip = Math.min(...ilk), dj = ilk.indexOf(dip), fark0 = ls[0] - dip;
+        if (fark0 >= Math.log(1.06) && dj > 0 && fark0 / (t[dj] - t[0] + 1 / fps) > .25) {
+          let j90 = 0; while (j90 < dj && ls[j90] - dip > .1 * fark0) j90++;
+          // sub-frame: interpolate where the curve crosses the 10% level
+          const y0 = ls[j90 - 1] - dip, y1 = ls[j90] - dip, kes = j90 > 0 && y0 !== y1 ? (y0 - .1 * fark0) / (y0 - y1) : 0;
+          c.punch = { bas: yuv(Math.exp(fark0), 3), sure90_sn: yuv((j90 > 0 ? t[j90 - 1] + kes * (t[j90] - t[j90 - 1]) : t[0]) - t[0] + (seri[0].n - a) / fps, 3), bitis_sn: yuv(t[dj] - t[0], 2) };
+          bas = dj;
+        }
+      }
+      // rhythm after the punch: range and turning points (a turn must be 2% away from the last one)
+      const r = ls.slice(bas), rt = t.slice(bas);
+      if (r.length >= 6) {
+        const mn = Math.min(...r), mx = Math.max(...r), donus = [];
+        let yon = 0, uc = r[0], ut = rt[0];
+        for (let j = 1; j < r.length; j++) {
+          if (!yon) { if (Math.abs(r[j] - r[0]) > .02) { yon = Math.sign(r[j] - r[0]); uc = r[j]; ut = rt[j]; } }
+          else if (yon * (r[j] - uc) > 0) { uc = r[j]; ut = rt[j]; }
+          else if (yon * (uc - r[j]) > .02) { donus.push({ t: ut, tur: yon > 0 ? 'tepe' : 'dip' }); yon = -yon; uc = r[j]; ut = rt[j]; }
+        }
+        if (bas > 0) donus.unshift({ t: rt[0], tur: 'dip' });
+        const ara = donus.slice(1).map((d, j) => d.t - donus[j].t);
+        c.ritim = { alt: yuv(Math.exp(mn - enAz), 3), ust: yuv(Math.exp(mx - enAz), 3), aralik: yuv(Math.exp(mx - mn), 3), donus: donus.map(d => yuv(d.t, 2)), yari_periyot_sn: ara.length ? yuv(ortanca(ara), 2) : null };
+      }
+      cekim.push(c);
+    }
+    return cekim;
+  }
+  // text appearing over a steady picture (titles, labels, paragraphs), outside the caption band: a cluster of 10 px cells
+  // gains edges over 8 frames while few cells lose any. Returns rough windows; olc.js measures them at full resolution.
+  yaziBelirmeleri(bant, disla) {
+    const N = this.izgara.length, gw = this.gw, gh = this.gh, olay = [], B = 8;
+    const bantta = gy => bant && bant.var && gy * 10 + 10 >= bant.ust && gy * 10 <= bant.alt;
+    let acik = null;
+    for (let n = B; n < N; n++) {
+      let yakin = false; for (let j = n - B; j <= n; j++) if (disla.has(j)) { yakin = true; break; }
+      const kazan = [], kayip = [];
+      if (!yakin) for (let g = 0; g < gw * gh; g++) {
+        const gy = (g / gw) | 0; if (bantta(gy)) continue;
+        const d = this.izgara[n][g] - this.izgara[n - B][g];
+        if (d >= 6) kazan.push(g); else if (d <= -6) kayip.push(g);
+      }
+      const var_ = kazan.length >= 6 && kayip.length <= .3 * kazan.length && kazan.length < .3 * gw * gh;
+      if (var_) {
+        if (!acik) acik = { a: n - B, b: n, x0: 1e9, x1: -1, y0: 1e9, y1: -1 };
+        acik.b = n;
+        for (const g of kazan) { const x = g % gw, y = (g / gw) | 0; acik.x0 = Math.min(acik.x0, x); acik.x1 = Math.max(acik.x1, x); acik.y0 = Math.min(acik.y0, y); acik.y1 = Math.max(acik.y1, y); }
+      } else if (acik && n - acik.b > 4) { olay.push(acik); acik = null; }
+    }
+    if (acik) olay.push(acik);
+    return olay.map(o => ({ a: o.a, b: o.b, x0: o.x0 * 10, x1: o.x1 * 10 + 10, y0: o.y0 * 10, y1: o.y1 * 10 + 10 }));
+  }
+  // frame-rate conversion leaves a beat in moving pictures: a doubled step every few frames (frames dropped, e.g. 30 -> 25)
+  // or a frozen one (frames repeated, e.g. 24 -> 30). Measured on the frame-to-frame change while the camera moves.
+  kadans(disla) {
+    const d = this.d1, N = d.length, r = [];
+    for (let i = 4; i < N - 4; i++) {
+      if (disla.has(i)) continue;
+      const m = ortanca([...d.slice(i - 4, i), ...d.slice(i + 1, i + 5)]);
+      if (m >= .8) r.push([i, d[i] / m]);
+    }
+    let en = null;
+    for (let p = 3; p <= 8; p++) for (let f = 0; f < p; f++) {
+      const ic = r.filter(([i]) => i % p === f).map(x => x[1]), dis = r.filter(([i]) => i % p !== f).map(x => x[1]);
+      if (ic.length < 8) continue;
+      const a = ortanca(ic), b = ortanca(dis), puan = Math.abs(Math.log(a / b));
+      if (!en || puan > en.puan) en = { p, puan, tur: a > b ? 'atlanan_kare' : 'tekrar_kare', oran: yuv(a / b, 2), ornek: ic.length };
+    }
+    const kopya = r.filter(x => x[1] < .15).length;
+    return { hareketli_kare: r.length, kadans: en && en.puan > Math.log(1.3) ? en : null, kopya_kare: kopya,
+      yeniden_orneklenmis: !!(en && en.puan > Math.log(1.3)) || (r.length > 30 && kopya / r.length > .05) };
   }
   // caption band: the rows that hold text in most frames; then card changes inside that band
   altyaziBandi() {
@@ -170,8 +359,9 @@ class KareOlcer {
     for (let n = 1; n < N; n++) d1[n] = uzak(imza(n), imza(n - 1));
     for (let n = 3; n < N; n++) d3[n] = uzak(imza(n), imza(n - 3));
     const olay = [];
+    // a change: the band's edge pattern jumps, well above its own wobble (zoom and noise under the text)
     for (let n = 3; n < N - 2; n++) {
-      if (d3[n] < .3) continue;
+      if (d3[n] < .15 || d3[n] < 4 * ortanca(Array.from(d3.subarray(Math.max(3, n - 20), Math.min(N, n + 21))))) continue;
       let tepe = true; for (let j = n - 3; j <= n + 3; j++) if (j !== n && j > 0 && j < N && d3[j] > d3[n]) tepe = false;
       if (tepe && (!olay.length || n - olay[olay.length - 1] >= 6)) olay.push(n);
     }
@@ -179,7 +369,13 @@ class KareOlcer {
     const degisim = olay.map(n => { let m = n; for (let j = n - 3; j <= n; j++) if (d1[j] > d1[m]) m = j;
       let a = m, b = m; while (a > 1 && d1[a - 1] >= .06 && m - a < 15) a--; while (b < N - 1 && d1[b + 1] >= .06 && b - m < 15) b++;
       return { n: m, kare: b - a + 1 }; });
-    const yaziVar = n => this.satirlar(n, bant).length > 0;
+    // text in the band: line runs, and the band holds clearly more edges than the same height just above and below it
+    // (a busy background fills the band and its surroundings alike)
+    const bh = bant.alt - bant.ust + 1, ort = (s, a, b) => { let t = 0, c = 0; for (let y = Math.max(0, a); y <= Math.min(this.h - 1, b); y++) { t += s[y]; c++; } return c ? t / c : 0; };
+    const yaziVar = n => { if (!this.satirlar(n, bant).length) return false; const s = this.satir[n];
+      const ic = ort(s, bant.ust, bant.alt), dis = Math.max(ort(s, bant.ust - bh - 4, bant.ust - 4), ort(s, bant.alt + 4, bant.alt + bh + 4));
+      return ic >= 1.5 * dis + 2; };
+    this.yaziVar = yaziVar;
     const kart = [];
     const sinir = [0, ...degisim.map(d => d.n), N];
     for (let i = 0; i < sinir.length - 1; i++) {
@@ -193,7 +389,7 @@ class KareOlcer {
 
 // ---- 3. words and lines on one caption crop (full resolution gray, width w, height h)
 function yaziKirpim(p, w, h) {
-  const G = 40, T = Math.max(14, Math.round(w * .03)), sat = new Uint16Array(h);
+  const G = 40, T = Math.max(10, Math.round(w * .012)), sat = new Uint16Array(h);   // low enough for a one-word line
   for (let y = 0; y < h; y++) { let c = 0; for (let x = 0; x < w - 1; x++) if (Math.abs(p[y * w + x + 1] - p[y * w + x]) > G) c++; sat[y] = c * 540 / w; }
   const lines = []; let bas = -1, bos = 0;
   for (let y = 0; y <= h; y++) {
@@ -204,6 +400,8 @@ function yaziKirpim(p, w, h) {
   const sonuc = [];
   for (const [a, b] of lines) {
     if (a <= 1 || b >= h - 2) continue;                 // cut by the crop edge: not a whole line
+    const d = satirDolgu(p, w, h, a, b);
+    if (d) { sonuc.push(d); continue; }
     const lh = b - a + 1, kol = new Uint16Array(w);
     for (let y = a; y <= b; y++) for (let x = 0; x < w - 1; x++) { const i = y * w + x; if (Math.abs(p[i + 1] - p[i]) > G || (y < h - 1 && Math.abs(p[i + w] - p[i]) > G)) kol[x]++; }
     // ink pieces separated by gaps wider than a letter gap; thin pieces are card borders, not letters
@@ -223,6 +421,144 @@ function yaziKirpim(p, w, h) {
   // a "line" much shorter than the others is a stray mark, not text
   const ana = Math.max(0, ...sonuc.map(s => s.yukseklik));
   return sonuc.filter(s => s.yukseklik >= ana * .6);
+}
+
+// The letters themselves (the fill), not their outline or shadow: the extreme gray class (brightest or darkest) that is
+// much more common inside the line than just above and below it. Returns letter height, stem width (median horizontal
+// run of the fill in the middle rows), outline width, words with their own stem width, and where the bold block sits.
+function satirDolgu(p, w, h, a, b) {
+  const lh = b - a + 1, deg = [];
+  for (let y = a; y <= b; y++) for (let x = 0; x < w; x += 2) deg.push(p[y * w + x]);
+  deg.sort((u, v) => u - v);
+  const hi = deg[Math.floor(deg.length * .97)], lo = deg[Math.floor(deg.length * .03)];
+  if (hi - lo < 60) return null;
+  // the line's own width: columns with edges in its rows
+  let ex0 = w, ex1 = -1;
+  for (let y = a; y <= b; y++) for (let x = 0; x < w - 1; x++) if (Math.abs(p[y * w + x + 1] - p[y * w + x]) > 40) { if (x < ex0) ex0 = x; if (x > ex1) ex1 = x; }
+  if (ex1 < ex0) return null;
+  const pay = (fn, y0, y1) => { let c = 0, n = 0; for (let y = Math.max(0, y0); y <= Math.min(h - 1, y1); y++) for (let x = ex0; x <= ex1; x += 2) { n++; if (fn(p[y * w + x])) c++; } return n ? c / n : 0; };
+  // a caption card: one gray level fills the padding just above and below the line and much of the line itself.
+  // Then every letter that stands out from the card is text, whatever its colour (highlighted words too).
+  const kenar = Math.max(2, Math.round(lh * .35)), hist = new Uint32Array(256);
+  for (const [y0, y1] of [[a - kenar, a - 2], [b + 2, b + kenar]]) for (let y = Math.max(0, y0); y <= Math.min(h - 1, y1); y++) for (let x = ex0; x <= ex1; x += 2) hist[p[y * w + x]]++;
+  let m = 0, enCok = -1; for (let v = 0; v < 256; v++) { let t = 0; for (let j = Math.max(0, v - 12); j <= Math.min(255, v + 12); j++) t += hist[j]; if (t > enCok) { enCok = t; m = v; } }
+  const tumu = hist.reduce((x, y) => x + y, 0), kart = tumu > 20 && enCok / tumu >= .75 && pay(v => Math.abs(v - m) <= 12, a, b) >= .4;
+  let aday;
+  if (kart) {
+    // only the columns that lie on the card (its padding is card-coloured above and below the line)
+    const ust0 = Math.max(0, a - kenar), alt1 = Math.min(h - 1, b + kenar), uygun = new Uint8Array(w);
+    // (either side is enough: the other one may hold the next line of the card)
+    for (let x = ex0; x <= ex1; x++) uygun[x] = [[ust0, a - 2], [b + 2, alt1]].some(([y0, y1]) => { let c = 0, n = 0; for (let y = y0; y <= y1; y++) { n++; if (Math.abs(p[y * w + x] - m) <= 12) c++; } return n && c / n >= .8; });
+    const fn = (v, x) => uygun[x] && Math.abs(v - m) > 60;
+    aday = { fn, ic: pay(v => Math.abs(v - m) > 60, a, b), oran: 99, kart: true, koyu: pay(v => v < m - 60, a, b) >= pay(v => v > m + 60, a, b) };
+  }
+  else aday = [v => v >= hi - 35, v => v <= lo + 35].map(fn => {
+    // the letters' tone is rare just above or below the line (one side may be another line of text),
+    // and it comes in strokes: short horizontal runs (an outline merged with a dark background makes long ones)
+    const ic = pay(fn, a, b), dis = Math.min(pay(fn, a - Math.round(lh * .7), a - 3), pay(fn, b + 3, b + Math.round(lh * .7)));
+    let kisa = 0, top = 0;
+    for (let y = a + (lh >> 2); y <= b - (lh >> 2); y++) { let run = 0;
+      for (let x = ex0; x <= ex1 + 1; x++) { if (x <= ex1 && fn(p[y * w + x])) run++; else if (run) { top += run; if (run <= lh * .4) kisa += run; run = 0; } } }
+    const oran = ic / (dis + .004), cizgi = top ? kisa / top : 0;
+    return { fn, ic, oran, cizgi, puan: Math.min(oran, 50) * cizgi * cizgi, koyu: fn(0) };
+  }).sort((u, v) => v.puan - u.puan)[0];
+  if (aday.oran < 2.5 || aday.ic < .01) return null;
+  const M = aday.fn, kol = new Uint16Array(w), sat = new Uint16Array(lh);
+  for (let y = a; y <= b; y++) for (let x = 0; x < w; x++) if (M(p[y * w + x], x)) { kol[x]++; sat[y - a]++; }
+  // letter rows: rows holding fill, the longest run allowing 2-row gaps
+  const esik = Math.max(2, 0.004 * w); let ust = -1, alt = -1, bu = -1, bos = 0, en = 0;
+  for (let y = 0; y <= lh; y++) {
+    if (y < lh && sat[y] >= esik) { if (bu < 0) bu = y; bos = 0; }
+    else if (bu >= 0 && (++bos > 2 || y === lh)) { const son = y - bos; if (son - bu > en) { en = son - bu; ust = bu; alt = son; } bu = -1; bos = 0; }
+  }
+  if (ust < 0) return null;
+  const boy = alt - ust + 1;
+  // words: runs of fill columns; a word gap is wider than both 15% of the letter height and 1.6x the typical letter gap
+  // (tight fonts put letters almost as far apart as words, so the gap is judged against this line's own letters)
+  const kos = []; let x0 = -1;
+  for (let x = 0; x <= w; x++) { const d = x < w && kol[x] > 0; if (d && x0 < 0) x0 = x; if (!d && x0 >= 0) { kos.push([x0, x - 1]); x0 = -1; } }
+  const bosluk = kos.slice(1).map((k, i) => k[0] - kos[i][1] - 1), esikB = Math.max(3, boy * .15, 1.6 * (ortanca(bosluk.filter(g => g < boy * .6)) || 0));
+  const parca = [];
+  for (let i = 0; i < kos.length; i++) {
+    if (i && bosluk[i - 1] < esikB) parca[parca.length - 1][1] = kos[i][1]; else parca.push(kos[i].slice());
+  }
+  for (let i = parca.length - 1; i >= 0; i--) if (parca[i][1] - parca[i][0] + 1 < boy * .2) parca.splice(i, 1);
+  if (!parca.length) return null;
+  // stems: horizontal runs of fill in the middle 50% of the letter rows
+  const govde = (xa, xb) => { const r = [];
+    for (let y = a + ust + Math.round(boy * .25); y <= a + ust + Math.round(boy * .75); y++) { let run = 0;
+      for (let x = xa; x <= xb + 1; x++) { if (x <= xb && M(p[y * w + x], x)) run++; else if (run) { if (run >= 1) r.push(run); run = 0; } } }
+    return r.length >= 3 ? ortanca(r) : null; };
+  // keep the widest group of words (a gap of 1.5 letter heights separates unrelated things)
+  const grup = [[parca[0]]];
+  for (let i = 1; i < parca.length; i++) { if (parca[i][0] - parca[i - 1][1] > boy * 1.5) grup.push([]); grup[grup.length - 1].push(parca[i]); }
+  const g = grup.sort((u, v) => (v[v.length - 1][1] - v[0][0]) - (u[u.length - 1][1] - u[0][0]))[0];
+  const kel = g.map(([xa, xb]) => ({ x0: xa, x1: xb, govde: govde(xa, xb) }));
+  const gv = kel.map(k => k.govde).filter(x => x != null), ince = Math.min(...gv), kalin = Math.max(...gv);
+  let kalin_konum = null;
+  if (gv.length >= 2 && kalin / ince >= 1.5) {
+    const sinir = Math.sqrt(ince * kalin), k = kel.map(x => x.govde != null && x.govde >= sinir);
+    const ilk = k.indexOf(true), son = k.lastIndexOf(true), blok = k.slice(ilk, son + 1).every(Boolean);
+    kalin_konum = !blok ? 'karisik' : son === k.length - 1 && ilk > 0 ? 'son' : ilk === 0 && son < k.length - 1 ? 'bas' : ilk === 0 ? 'hepsi' : 'orta';
+  }
+  // outline: a thin run of the opposite tone right next to the letters, the same width all around (a background of the
+  // outline's tone hides it, for the eye too). Letter gaps, card padding and other words vary, so they do not form a peak.
+  const acik = !aday.koyu, zit = v => acik ? v <= Math.min(lo + 60, hi - 120) : v >= Math.max(hi - 60, lo + 120), kr = [];
+  if (!aday.kart) for (let y = a + ust + Math.round(boy * .3); y <= a + ust + Math.round(boy * .7); y++) for (const yon of [1, -1]) {
+    for (let x = 2; x < w - 2; x++) {
+      const i = y * w + x; if (!(M(p[i]) && !M(p[i + yon]))) continue;
+      let k = 0; while (k < boy * .25 && x + yon * (k + 1) >= 0 && x + yon * (k + 1) < w && zit(p[i + yon * (k + 1)])) k++;
+      const sonraki = x + yon * (k + 1); if (k >= 1 && k < boy * .25 && sonraki >= 0 && sonraki < w && !zit(p[y * w + sonraki]) && !M(p[y * w + sonraki])) kr.push(k);
+    }
+  }
+  const tepe = (() => { if (kr.length < 20) return null; const say = {}; kr.forEach(k => say[k] = (say[k] || 0) + 1);
+    const m0 = +Object.keys(say).sort((u, v) => say[v] - say[u])[0], yakin = kr.filter(k => Math.abs(k - m0) <= 1);
+    return yakin.length / kr.length >= .6 ? ortanca(yakin) : null; })();
+  return { yukseklik: boy, kenar_yukseklik: lh, kontur: tepe, kart: !!aday.kart, kutup: acik ? 'acik' : 'koyu',
+    kelime: kel.length, govde: govde(g[0][0], g[g.length - 1][1]), ince_govde: gv.length ? ince : null, kalin_govde: gv.length ? kalin : null,
+    kalinlik_orani: gv.length >= 2 ? yuv(kalin / ince, 2) : null, kalin_konum, sol: g[0][0], sag: g[g.length - 1][1] };
+}
+
+// ---- text appearance at full resolution: frames = gray crops (w x h) of one window, first = before, last = after.
+// A frame is "in transition" while it differs from both the before and the after state by more than 5% of the
+// whole change (on the pixels that change). Duration = frames from the last "before" frame to the first "after" frame.
+// Each text line is timed on its own (a paragraph that opens line by line). Kind of appearance in the middle frame:
+// a plain blend of before and after = fade ("solma"); much less detail than such a blend = blur to sharp.
+function belirmeOlc(kareler, w, h, fps) {
+  const n = kareler.length, once = kareler[0], sonra = kareler[n - 1], M = new Uint8Array(w * h);
+  let mt = 0; for (let i = 0; i < w * h; i++) if (Math.abs(sonra[i] - once[i]) > 30) { M[i] = 1; mt++; }
+  if (mt < 50) return null;
+  const satirSay = new Uint32Array(h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) satirSay[y] += M[y * w + x];
+  const satirlar = []; let bas = -1, bos = 0;
+  for (let y = 0; y <= h; y++) {
+    if (y < h && satirSay[y] >= 3) { if (bas < 0) bas = y; bos = 0; }
+    else if (bas >= 0 && (++bos > 3 || y === h)) { const son = y - bos; if (son - bas + 1 >= 6) satirlar.push([bas, son]); bas = -1; bos = 0; }
+  }
+  const zamanla = (y0, y1) => {
+    let tot = 0, c = 0; const Db = new Float64Array(n), Da = new Float64Array(n);
+    for (let y = y0; y <= y1; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (!M[i]) continue; c++; tot += Math.abs(sonra[i] - once[i]);
+      for (let k = 0; k < n; k++) { const v = kareler[k][i]; Db[k] += Math.abs(v - once[i]); Da[k] += Math.abs(v - sonra[i]); } }
+    if (!c) return null;
+    let kb = -1, ka = -1; for (let k = 0; k < n; k++) { if (kb < 0 && Db[k] > .05 * tot) kb = k; if (Da[k] > .05 * tot) ka = k; }
+    if (kb < 0 || ka < kb - 1) return null;
+    return { kb, ka, kare: ka - kb + 2, sn: yuv((ka - kb + 2) / fps, 3) };
+  };
+  const tum = zamanla(0, h - 1); if (!tum) return null;
+  let bx0 = w, bx1 = -1, by0 = h, by1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (M[y * w + x]) { if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
+  const sat = satirlar.map(([a, b]) => ({ y0: a, y1: b, z: zamanla(a, b) })).filter(s => s.z);
+  // kind: fade or blur, on the middle transition frame
+  const km = Math.max(0, Math.min(n - 1, Math.round((tum.kb + tum.ka) / 2))), F = kareler[km];
+  let sab = 0, sbb = 0; for (let i = 0; i < w * h; i++) if (M[i]) { const d = sonra[i] - once[i]; sab += (F[i] - once[i]) * d; sbb += d * d; }
+  const al = Math.max(0, Math.min(1, sab / sbb)); let res = 0, tot = 0;
+  for (let i = 0; i < w * h; i++) if (M[i]) { res += Math.abs(F[i] - (once[i] + al * (sonra[i] - once[i]))); tot += Math.abs(sonra[i] - once[i]); }
+  const keskin = K => { let s = 0; for (let y = 0; y < h - 1; y++) for (let x = 0; x < w - 1; x++) { const i = y * w + x; if (M[i]) s += (K[i + 1] - K[i]) ** 2 + (K[i + w] - K[i]) ** 2; } return s; };
+  const g0 = keskin(once), g1 = keskin(sonra), gm = keskin(F), kazanc = (gm - g0) / ((g1 - g0) || 1);
+  const tur = tum.kare <= 2 ? 'aninda' : kazanc < .6 * al ? 'bulaniktan_nete' : res / tot < .12 ? 'solma' : 'diger';
+  const basla = sat.map(s => s.z.kb).sort((a, b) => a - b), ara = basla.slice(1).map((b, i) => b - basla[i]);
+  return { kb: tum.kb, ka: tum.ka, kare: tum.kare, sn: tum.sn, tur, karisim: yuv(al, 2), keskinlik_kazanci: yuv(kazanc, 2),
+    kutu: { x0: bx0, x1: bx1, y0: by0, y1: by1 }, satir: sat.length, satir_satir: sat.length >= 2 && ara.length > 0 && ortanca(ara) >= 2,
+    satir_arasi_sn: ara.length ? yuv(ortanca(ara) / fps, 3) : null, satirlar: sat.map(s => ({ y0: s.y0, y1: s.y1, bas_kare: s.z.kb, sn: s.z.sn })) };
 }
 
 // ---- 4. dominant colours: k-means on sampled pixels (fixed seed, so the same video gives the same palette)
@@ -259,7 +595,8 @@ function fft(re, im) {
 // known (brand stings, chimes): speech onsets must not count. An effect is
 //   bas   : the sound jumps 6+ dB and the sub-bass band (20-150 Hz) carries almost all of it for 70 ms  -> boom, kick, hit
 //   ton   : one pitch between 0.9 and 6 kHz stands 20+ dB above its band for 90 ms                    -> ding, chime, bell
-//   genis : the sound jumps 6+ dB into a noise-like spectrum that is loud in low, mid and high bands  -> whoosh, impact
+//   genis : the sound jumps 6+ dB into a noise-like spectrum that is loud in low, mid and high bands  -> impact, hit
+//   hisirti: a noise-like swell (8+ dB over 150 ms) whose high bands lead, for 120 ms+                -> whoosh, swish
 const BANTLAR = [[20, 150], [150, 400], [400, 2500], [2500, 6000], [6000, 11000]];
 function sesOlaylari(x, sr) {
   const N = 1024, H = 256, dt = H / sr, hann = Float32Array.from({ length: N }, (_, i) => .5 - .5 * Math.cos(2 * Math.PI * i / N));
@@ -286,10 +623,18 @@ function sesOlaylari(x, sr) {
     if (ziplama >= 6 && surer(i, q => q.sub >= -1 && q.tot >= orta - 3, 6)) tur = 'bas';
     else if (R[i - 3].ton < 20 && surer(i, q => q.ton >= 20, 8)) tur = 'ton';
     else if (ziplama >= 6 && surer(i, q => q.duz >= .3 && q.tot >= orta && Math.min(q.db[1], q.db[2], q.db[3]) >= Math.max(...q.db) - 10, 6)) tur = 'genis';
-    if (tur && i * dt - son > .3) { olay.push({ t: +(i * dt).toFixed(3), tur, guc: +Math.max(0, ziplama).toFixed(1) }); son = i * dt; }
+    // whoosh: swells (no sharp attack), so the rise is taken against the quietest moment of the last 150 ms;
+    // then 120 ms of loud noise whose high bands outweigh the low-mid band (speech hiss is far quieter than vowels)
+    const once = Math.min(...R.slice(Math.max(0, i - 13), i - 1).map(q => q.tot));
+    if (!tur && r.tot - once >= 8 && surer(i, q => q.duz >= .25 && Math.max(q.db[3], q.db[4]) >= q.db[1] && q.tot >= orta - 3, 10)) tur = 'hisirti';
+    if (tur && i * dt - son > .3) {
+      let j = i; while (j > Math.max(1, i - 15) && R[j - 1].tot > once + 3) j--;         // back to where the sound starts rising
+      const t = j * dt + N / 2 / sr;                                                      // window centre
+      olay.push({ t: +t.toFixed(3), tur, guc: +Math.max(0, ziplama, r.tot - once).toFixed(1) }); son = i * dt;
+    }
   }
   const sessiz = R.filter(r => r.rms < Math.pow(10, -45 / 20)).length / (R.length || 1);
   return { olay, sessizlik: +sessiz.toFixed(3) };
 }
 
-module.exports = { akis, calistir, kesmeler, KareOlcer, yaziKirpim, palet, sesOlaylari, fft, ortanca, yuzdelik, dagilim, yuv };
+module.exports = { akis, calistir, kesmeler, KareOlcer, yaziKirpim, satirDolgu, belirmeOlc, palet, sesOlaylari, fft, ortanca, yuzdelik, dagilim, yuv };
