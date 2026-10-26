@@ -138,6 +138,25 @@ test('word cues Whisper did not hear fall back to the line start; bad recipes ar
   assert.ok(U.ucretliKontrol({ gorseller: [{ ad: 'a', referans: ['z'] }], kurgu: [{ kadar: 'satir:1', gorsel: 'b' }] }).length >= 3);
 });
 
+test('template props: unknown ones are dropped, seats and text lengths are checked, unheard prop cues fall back', () => {
+  const S = { kahraman: { ad: 'X' }, adimlar: [
+    { an: 'satir:0', esya: { ad: 'Dilekçe', yazi: 'DİLEKÇE' } },
+    { an: 'satir:0', esya: [{ ad: 'uzaygemisi' }, { ad: 'damga', yazi: 'ONAY' }] },
+    { an: 'satir:0', esya: { ad: 'kagit' }, kahraman: { yer: 'esya' } },
+    { an: 'satir:0', esya: { ad: 'dolmus', yazi: 'ÇOK UZUN BİR PLAKA YAZISI' } },
+  ] };
+  assert.deepStrictEqual(U.simEsyaOnar(S), ['bilinmeyen eşya "uzaygemisi" çıkarıldı']);
+  assert.strictEqual(S.adimlar[1].esya.ad, 'damga');
+  const k = U.simKontrol(S);
+  assert.ok(k.some(x => x.includes('adım 2') && x.includes('oturulacak')));
+  assert.ok(k.some(x => x.includes('adım 3') && x.includes('16')));
+  assert.ok(!k.some(x => x.includes('adım 0') || x.includes('adım 1')));
+  const Z = { satirlar: [{ bas: 0, son: 2 }], kelimeler: [{ w: 'merhaba', a: .5, satir: 0 }], sting: [], chime: [], toplam: 3 };
+  const T = { adimlar: [{ an: 'satir:0', esya: [{ ad: 'pano' }, { ad: 'damga', an: 'kelime:yok@0' }] }] };
+  U.simIpucuOnar(T, Z);
+  assert.strictEqual(T.adimlar[0].esya[1].an, undefined);
+});
+
 test('posting queue job file follows the contract', () => {
   const ctx = geciciCtx();
   const f = U.kuyrugaYaz({ video: 'videolar/x-v02-deneme', mp4: 'videolar/x-v02-deneme/cikti/x-v02-deneme-ucretli.mp4', aciklama: 'açıklama', onayGerekli: true }, ctx.kok);

@@ -14,6 +14,7 @@ const O = require('./ortak');
 const LLM = require('./llm');
 const H = require('./havuz');
 const A = require('./otomasyon');
+const ESYA = require('../uretim/sablonlar/esya');
 
 const rel = f => path.relative(O.KOK, f).split(path.sep).join('/');
 const md = f => fs.readFileSync(path.join(O.KOK, f), 'utf8');
@@ -60,6 +61,8 @@ function ifadeCoz(e, Z) {
 // template data (simulasyon.json): unknown word cues fall back to the line, steps are kept in time order
 function simIpucuOnar(S, Z) {
   const notlar = [];
+  // a prop's own word cue that Whisper did not hear: the prop comes with its step instead
+  for (const a of S.adimlar || []) for (const e of [].concat(a.esya || [])) if (e && e.an != null && ifadeCoz(e.an, Z) == null) { notlar.push(`eşya "${e.an}" bulunamadı → adımla birlikte`); delete e.an; }
   for (const a of S.adimlar || []) {
     if (a.an == null || ifadeCoz(a.an, Z) != null) continue;
     const m = String(a.an).match(IFADE), satir = m && m[3] != null ? +m[3] : 0;
@@ -67,6 +70,20 @@ function simIpucuOnar(S, Z) {
     a.an = `satir:${satir}+0.5`;
   }
   S.adimlar = (S.adimlar || []).filter(a => ifadeCoz(a.an, Z) != null).sort((x, y) => ifadeCoz(x.an, Z) - ifadeCoz(y.an, Z));
+  return notlar;
+}
+// props the template does not know are dropped (the step keeps its other fields); returns the notes
+function simEsyaOnar(S) {
+  const notlar = [];
+  for (const a of S.adimlar || []) {
+    if (a.esya == null) continue;
+    const liste = [].concat(a.esya).filter(e => {
+      const ok = e && typeof e === 'object' && ESYA.cozumle({ ...e, tur: e.ad || e.tur });
+      if (!ok) notlar.push(`bilinmeyen eşya "${e && (e.ad || e.tur)}" çıkarıldı`);
+      return ok;
+    });
+    if (!liste.length) delete a.esya; else a.esya = liste.length === 1 ? liste[0] : liste;
+  }
   return notlar;
 }
 function simKontrol(S) {
@@ -77,9 +94,13 @@ function simKontrol(S) {
     if (!a.an) s.push(`adım ${i}: an yok`);
     if (a.yil && cetvel.length && !cetvel.includes(a.yil)) s.push(`adım ${i}: yil "${a.yil}" cetvelde yok`);
     if (a.odak && !['genel', 'gok', 'kiyi', 'yuzey', 'deniz', 'dip'].includes(a.odak)) s.push(`adım ${i}: odak "${a.odak}" geçersiz`);
+    const esya = [].concat(a.esya || []);
+    if (esya.length > 2) s.push(`adım ${i}: en fazla iki eşya`);
+    for (const e of esya) if ([...String((e && e.yazi) || '')].length > 16) s.push(`adım ${i}: eşya yazısı çok uzun, en fazla 16 karakter ("${e.yazi}")`);
     if (a.kahraman) {
       if (!S.kahraman) s.push(`adım ${i}: kahraman adımı var ama en üstte "kahraman" tanımı yok`);
-      if (!['deniz', 'yuzey', 'kiyi', 'balkon', 'kara', 'dip'].includes(a.kahraman.yer)) s.push(`adım ${i}: kahraman yeri "${a.kahraman.yer}" geçersiz`);
+      if (!['deniz', 'yuzey', 'kiyi', 'balkon', 'kara', 'dip', 'esya'].includes(a.kahraman.yer)) s.push(`adım ${i}: kahraman yeri "${a.kahraman.yer}" geçersiz`);
+      if (a.kahraman.yer === 'esya' && !esya.some(e => { const c = e && ESYA.cozumle({ ...e, tur: e.ad || e.tur }); return c && ESYA.ESYA[c.tur].koltuk; })) s.push(`adım ${i}: kahraman eşyada oturuyor ama adımda oturulacak eşya yok (dolmus, tekne, apartman, belediye, fabrika)`);
       if ((a.kahraman.yazi || '').length > 18) s.push(`adım ${i}: kahraman yazısı çok uzun, en fazla 18 karakter ("${a.kahraman.yazi}")`);
     }
   }
@@ -241,6 +262,8 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       const belge = fs.readFileSync(path.join(O.KOK, 'uretim', 'sablonlar', sablonAd + '.js'), 'utf8').split('\n').filter(l => l.startsWith('//')).map(l => l.replace(/^\/\/ ?/, '')).join('\n');
       const ornekF = path.join(O.KOK, 'uretim', 'sablonlar', sablonAd + '-ornek.json');
       const S = await sor(LLM.istem('simulasyon-yaz', { sablon_belgesi: belge, ornek: fs.existsSync(ornekF) ? fs.readFileSync(ornekF, 'utf8') : '{}', satirlar: video.satirlar.map((x, i) => `${i}: ${x.metin}`).join('\n') }), { is: 'simulasyon-yaz' });
+      const en = simEsyaOnar(S);
+      if (en.length) yaz('Şablon verisi onarıldı: ' + en.join('; '));
       const sk = simKontrol(S);
       if (sk.length) throw new Dur('insan', 'Yapay zekânın yazdığı simulasyon.json tutarsız: ' + sk.join('; '));
       O.yazJson(simF, S);
@@ -380,4 +403,4 @@ function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null }, kok =
   return f;
 }
 
-module.exports = { uret, kuyrugaYaz, ipuclariniOnar, ifadeCoz, ucretliKontrol, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, kuyrugaYaz, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
