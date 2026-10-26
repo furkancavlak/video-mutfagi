@@ -4,53 +4,34 @@ Bu sistemle bir video yaptın ve izlendi mi? Bize yaz. Kaç izlenme aldığını
 
 ## Nereye yazılır
 
-GitHub Discussions, **"Başarı hikâyeleri"** bölümü:
+YouTube'da, bu repoyu anlattığımız videonun altına yorum olarak.
 
-https://github.com/furkancavlak/video-mutfagi/discussions
+1. [YouTube kanalımıza](https://www.youtube.com/@furkancavlakcom) abone ol. Yeni dersler ve güncellemeler orada çıkıyor.
+2. Kanalda bu repoyu anlattığımız videoyu aç.
+3. Aşağıdaki şablonu kopyala, doldur, yorum olarak gönder.
 
-1. GitHub'a giriş yap (hesap bedava).
-2. Bağlantıyı aç, **New discussion** düğmesine bas.
-3. Bölüm olarak **Başarı hikâyeleri**'ni seç.
-4. Aşağıdaki şablonu kopyala, doldur, gönder.
-
-Kod bilmen gerekmez. Sorun yaşadıysan aynı yerde **Soru-cevap** bölümüne yaz.
+Kod bilmen gerekmez. Kurulumda takıldıysan aynı videonun altına sorunu yaz.
 
 ## Şablon
 
 ```
-**Kanal:** (adı ya da bağlantısı. İstemiyorsan yazma)
-**Platform:** Instagram Reels / YouTube Shorts / TikTok / uzun YouTube
-**Video:** (bağlantı)
-**Konu:** (tek cümle)
-
-**Sonuç**
-- Yayın tarihi:
-- İzlenme: … (… gün sonra)
-- Beğeni / yorum / kayıt / paylaşım:
-- Kanalın önceki videolarının ortalaması: (karşılaştırma için)
-
-**Nasıl yaptın**
-- Katman: ücretsiz (kodla çizim) / ücretli (yapay zekâ görselleri) / ikisi karışık
-- Ses: kendi sesim / ElevenLabs / başka
-- Yapay zekâ ajanı: Claude Code / Codex / Gemini / başka
-- Fikirden yayına kaç saat sürdü:
-- Harcama: (ElevenLabs karakteri, Higgsfield kredisi, para. Hiç yoksa "0")
-
-**Ne işe yaradı:**
-
-**Ne yaramadı:**
-
-**Bir sonraki videoda neyi değiştireceksin:**
-
-**Ekran görüntüsü:** (YouTube Studio ya da Instagram istatistikleri)
+Video: (link)
+Platform: Instagram Reels / YouTube Shorts / TikTok
+Konu: (tek cümle)
+Sonuç: … izlenme (… gün sonra), kanalın önceki ortalaması …
+Katman: ücretsiz (kodla çizim) / ücretli (yapay zekâ görselleri)
+Ses: kendi sesim / ElevenLabs / başka
+Fikirden yayına: … saat · Harcama: … (yoksa 0)
+İşe yarayan:
+Yaramayan:
 ```
 
 ## Kurallar
 
-- **Gerçek sayı.** Sayıyı yuvarlama, şişirme. Ekran görüntüsü ekle.
+- **Gerçek sayı.** Sayıyı yuvarlama, şişirme.
 - **Kendi videon.** Başkasının videosunu paylaşma.
-- **Gizli bilgi yok.** Ekran görüntüsünde e-posta, telefon, anahtar (token) ya da ödeme bilgisi görünmesin. Paylaşmadan önce üstünü karala.
-- **Kısa tut.** Birkaç satır yeter. Uzun yazmak zorunda değilsin.
+- **Gizli bilgi yok.** Yoruma e-posta, telefon, anahtar (token) ya da ödeme bilgisi yazma.
+- **Kısa tut.** Birkaç satır yeter.
 - **Kanal büyüklüğü önemli değil.** 50 izlenme alan ilk videonun hikâyesi de değerli.
 
 ## Hikâyeler ne olacak
