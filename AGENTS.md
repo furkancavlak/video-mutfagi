@@ -47,7 +47,7 @@ Kurulumda kanal kimliğinden sonra kullanıcıya önerilir (`kurulum/KURULUM.md`
 - **Düzeltme gelince** ("bunu böyle yapma", "şöyle istiyorum") sormadan yaz: `node ikinci-beyin/beyin.js kural "..." --neden "..."`.
 - **Karar gelince** yaz: `karar "..." --neden "..."`. Bir referansın stilinden ölçülebilir kural çıkınca: `stil "..." --neden "..."`.
 - **Video paylaşılınca** `node ikinci-beyin/beyin.js video-kaydet videolar/<video>` çalıştır. 1 gün ve 7 gün sonra `node kuyruk/kuyruk.js sonuclar` çalıştır, notlar kendiliğinden güncellenir. Sayıları kullanıcıya göster, birlikte "ne tuttu, ne tutmadı" yaz (`--tuttu "..." --tutmadi "..."`). Genel bir ders çıkarsa kural ya da karar olarak da yaz.
-- **Oturum biterken** kasadaki `son-durum.md`'yi 3-5 satırla yeniden yaz: ne yapıldı, sıradaki iş, bekleyen karar.
+- **Oturum biterken** kasadaki `son-durum.md`'yi 3-5 satırla yeniden yaz, `ikinci-beyin/sablon/son-durum.md` biçiminde: `- **Son oturum:** ...`, `- **Sıradaki iş:** ...`, `- **Bekleyen karar:** ...`. Üstteki `guncellendi:` tarihini de bugüne çek.
 - Tahmini gerçek gibi yazma ("tahmin:" diye başlat). Gizli bilgi yazma. Ayrıntı: `ikinci-beyin/BENIOKU.md`.
 
 ## Konu radarı (isteğe bağlı)

@@ -5,7 +5,7 @@ guncellendi: {{tarih}}
 
 # Son durum
 
-<!-- Ajan her oturumun sonunda bu dosyayı baştan yazar. 3-5 satır yeter. -->
+<!-- Ajan her oturumun sonunda bu dosyayı baştan yazar. 3-5 satır yeter. Biçim aşağıdaki gibi kalır: "- **Başlık:** metin". Özete her dolu satır girer. -->
 
 - **Son oturum:** İkinci beyin kuruldu ({{tarih}}).
 - **Sıradaki iş:** 
