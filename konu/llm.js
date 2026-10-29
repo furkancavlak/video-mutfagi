@@ -77,7 +77,8 @@ function cliCalistir(istem, { model, efor, araclar = [], dizinler = [], zamanAsi
       clearTimeout(zaman);
       let j; try { j = JSON.parse(out.trim()); } catch (e) { return reddet(new LlmHatasi(`claude çıktısı okunamadı (çıkış ${kod}): ${(err || out).slice(0, 300)}`)); }
       if (j.is_error || kod !== 0) return reddet(new LlmHatasi('claude hata verdi: ' + String(j.result || err).slice(0, 300)));
-      coz({ metin: j.result || '', maliyet: j.total_cost_usd || 0 });
+      const u = j.usage || {};
+      coz({ metin: j.result || '', maliyet: j.total_cost_usd || 0, token: { girdi: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), cikti: u.output_tokens || 0 } });
     });
     p.stdin.end(istem);
   });
@@ -133,7 +134,8 @@ function codexCalistir(istem, { model, efor, araclar = [], resimler = [], zamanA
       clearTimeout(zaman);
       let metin = ''; try { metin = fs.readFileSync(cikti, 'utf8'); fs.unlinkSync(cikti); } catch (e) { }
       if (kod !== 0 || !metin) return reddet(new LlmHatasi(`codex hata verdi (çıkış ${kod}): ${err.split('\n').filter(l => !/rmcp::transport/.test(l)).join(' ').slice(-300)}`));
-      coz({ metin, maliyet: null });
+      const tk = err.match(/tokens used\D*([\d,.]+)/i);      // codex prints the total on stderr; the plan has no per-call price
+      coz({ metin, maliyet: null, token: tk ? { toplam: +tk[1].replace(/[,.]/g, '') } : null });
     });
     p.stdin.end(istem);
   });
@@ -157,7 +159,8 @@ async function openrouterCalistir(istem, { model, efor, araclar = [], resimler =
   }).catch(e => { throw new LlmHatasi('OpenRouter cevap vermedi (' + model + '): ' + e.message); });
   const j = await r.json().catch(() => ({}));
   if (!j.choices) throw new LlmHatasi('OpenRouter hata verdi: ' + JSON.stringify(j.error || j).slice(0, 300));
-  return { metin: j.choices[0].message.content || '', maliyet: j.usage && j.usage.cost != null ? j.usage.cost : null };
+  const u = j.usage || {};
+  return { metin: j.choices[0].message.content || '', maliyet: u.cost != null ? u.cost : null, token: { girdi: u.prompt_tokens || 0, cikti: u.completion_tokens || 0 } };
 }
 
 // Ollama route: a model running on this computer (free, offline). No tools; small models make facts up.
@@ -171,7 +174,7 @@ async function ollamaCalistir(istem, { model, resimler = [] }) {
   }).catch(e => { throw new LlmHatasi('Ollama çalışmıyor (' + adres + '): ' + e.message); });
   const j = await r.json();
   if (!j.message) throw new LlmHatasi('Ollama hata verdi: ' + JSON.stringify(j).slice(0, 300));
-  return { metin: j.message.content || '', maliyet: 0 };
+  return { metin: j.message.content || '', maliyet: 0, token: { girdi: j.prompt_eval_count || 0, cikti: j.eval_count || 0 } };
 }
 
 // Pulls the first JSON object out of a reply (```json fences, prose around it).
@@ -186,7 +189,8 @@ function jsonCikar(metin) {
   throw new LlmHatasi('yapay zekâ yanıtında JSON bulunamadı: ' + String(metin).slice(0, 200));
 }
 
-// One call. `is` names the job in the log (kayit/konu/llm.jsonl), which also records time and CLI cost estimate.
+// One call. `is` names the job in the log (kayit/konu/llm.jsonl), which also records time, cost and tokens
+// (subscription routes such as codex-cli have no per-call price, so their tokens are the usage measure).
 async function sor(istem, { is = 'genel', ayar = {}, model, efor, araclar = [], resimler = [], json = true, calistir } = {}) {
   const yol = calistir ? 'test' : yolSec(ayar);
   const t0 = Date.now();
@@ -201,7 +205,7 @@ async function sor(istem, { is = 'genel', ayar = {}, model, efor, araclar = [], 
     const ek = resimler.length ? `\n\nBakman gereken resim dosyaları (Read aracıyla aç):\n${resimler.map(f => '- ' + path.resolve(f)).join('\n')}\n` : '';
     r = await cliCalistir(istem + ek, { model, efor, araclar: resimler.length ? [...new Set([...araclar, 'Read'])] : araclar, dizinler });
   }
-  if (!calistir) O.satirEkle(path.join(O.KAYIT, 'llm.jsonl'), { zaman: new Date().toISOString(), is, yol, model, sure_sn: Math.round((Date.now() - t0) / 1000), maliyet_usd: r.maliyet });
+  if (!calistir) O.satirEkle(path.join(O.KAYIT, 'llm.jsonl'), { zaman: new Date().toISOString(), is, yol, model, sure_sn: Math.round((Date.now() - t0) / 1000), maliyet_usd: r.maliyet, token: r.token || null });
   return json ? jsonCikar(r.metin) : r.metin;
 }
 
