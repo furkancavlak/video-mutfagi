@@ -422,7 +422,9 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       isaretle('render');
     }
 
-    // 13. frame review (denetim/kare-denetci.md rules)
+    // 13. frame review (denetim/kare-denetci.md rules). The formul layer already looked at its own frames and fixed them
+    // in the scene rounds, so its last scene score stands in for this pass (no second look at the same frames).
+    if (katman === 'formul' && !bitti('denetim')) isaretle('denetim', { puan: (D.adimlar.sahne || {}).puan ?? null, kaynak: 'sahne turları' });
     if (!bitti('denetim')) {
       const ddir = path.join(dir, 'cikti', 'denetim');
       fs.mkdirSync(ddir, { recursive: true });

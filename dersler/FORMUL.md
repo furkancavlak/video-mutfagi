@@ -87,3 +87,6 @@ Ağır sorun varsa sahne en fazla iki kez düzeltilir. Yine de sorun kalırsa **
 kalan notlar `uretim.json` → `adimlar.sahne.kalan` alanına ve çıktıya yazılır; paylaşmadan önce bakılır. Hazır şablona
 düşme yoktur (29.10.2026 kararı): kendi çizimi olan 7/10'luk bir sahne, hazır şablondan iyidir. Üç denemenin
 hiçbirinde kod çalışmazsa üretim durur ve insana haber verir.
+
+Bitmiş videonun ayrıca denetlenmesi (`video-denetim`) bu katmanda yapılmaz: aynı kareler sahne turlarında zaten
+kontrol edildi. Son sahne puanı videonun denetim puanı olarak kaydedilir.
