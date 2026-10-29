@@ -160,6 +160,15 @@ function dogrulamaSorunlari(d) {
   return [...kotu.map(b => `- "${b.cumle}": ${b.durum === 'yanlis' ? 'YANLIŞ' : 'kaynak bulunamadı'}. ${b.not || ''}`), ...(d.eksik || []).map(e => `- "${e.cumle}": bilgiler listesinde yok (${e.neden || 'doğrulanmamış iddia'})`)];
 }
 
+// ---- formul layer helpers
+// the ```js block of a model answer (the longest one that exports a function); null if none
+function kodCikar(metin) {
+  const bloklar = [...String(metin).matchAll(/```(?:js|javascript)?[ \t]*\r?\n([\s\S]*?)```/g)].map(m => m[1]).filter(k => /module\.exports\s*=/.test(k));
+  return bloklar.length ? bloklar.sort((a, b) => b.length - a.length)[0].trim() + '\n' : null;
+}
+// the leading // comment block of a file is its manual
+const basYorum = f => { const out = []; for (const l of fs.readFileSync(f, 'utf8').split('\n')) { if (!l.startsWith('//')) break; out.push(l.replace(/^\/\/ ?/, '')); } return out.join('\n'); };
+
 // ---- the run
 async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir } = {}) {
   const h = H.havuzOku(ctx);
@@ -238,6 +247,47 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     }
     const video = O.okuJson(videoF);
 
+    async function formulSahne() {
+      const Z = O.okuJson(path.join(dir, 'ses', 'zaman.json'));
+      const gd = ctx.kimlik.gorsel_dil || {}, kf = path.join(ctx.dir, (gd.karakter || {}).dosya || 'karakter.js');
+      const { _aciklama, karakter: _k, ...gdMetin } = gd;
+      const satirlar = video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(2)}-${Z.satirlar[i].son.toFixed(2)} sn]: ${s.metin}\n   kelimeler: ${Z.kelimeler.filter(k => k.satir === i).map(k => `${k.w}@${k.a.toFixed(2)}`).join(' ')}`).join('\n');
+      const kareDir = path.join(dir, 'cikti', 'kareler-ucretsiz'), sf = path.join(dir, 'sahneler.js');
+      // two stills per line: just after the cut and near the end, where the line's action has landed
+      const saniyeler = Z.satirlar.flatMap(s => [s.bas + (s.son - s.bas) * .3, s.bas + (s.son - s.bas) * .85]).map(x => +x.toFixed(2));
+      let kod = null, sorunlar = [], puan = null;
+      for (let tur = 0; tur < 3; tur++) {
+        const duzeltme = tur ? `## Önceki denemenin sorunları (düzelt, geri kalanını bozma)\n\n${sorunlar.join('\n')}${kod ? `\n\nÖnceki dosya:\n\n\`\`\`js\n${kod}\`\`\`` : ''}` : '';
+        yaz(tur ? `Sahne düzeltiliyor (tur ${tur + 1})…` : 'Sahne çiziliyor (formül: bu videoya özel çizim)…');
+        const cevap = await sor(LLM.istem('sahne-yaz', {
+          formul: md('dersler/FORMUL.md'), renkler: ctx.kimlik.renkler || {}, gorsel_dil: gdMetin,
+          karakter: fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.',
+          motor: basYorum(path.join(O.KOK, 'uretim', 'motor.js')), satirlar, sure: Z.toplam.toFixed(1), marka: (Z.sting[0] || 0).toFixed(2),
+          ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'), duzeltme,
+        }), { is: 'sahne-yaz', json: false, efor: 'high' });
+        const yeni = kodCikar(cevap);
+        if (!yeni) { sorunlar = ['- Cevapta module.exports içeren bir \`\`\`js kod bloğu yok. Dosyanın tamamını tek blokta döndür.']; continue; }
+        kod = yeni;
+        fs.writeFileSync(sf, kod);
+        fs.mkdirSync(kareDir, { recursive: true });
+        for (const f of fs.readdirSync(kareDir)) if (/^(frame-|contact-sheet)/.test(f)) fs.unlinkSync(path.join(kareDir, f));   // our own old stills
+        const r = node('uretim/kurgu.js', [dir, '--kare', saniyeler.join(',')], { yakala: true });
+        if (!r.ok) { sorunlar = ['- Dosya çalışmadı ya da kare alınamadı: ' + r.cikti.split('\n').filter(Boolean).slice(-4).join(' | ')]; continue; }
+        const sayfalar = fs.readdirSync(kareDir).filter(f => /^contact-sheet.*\.jpg$/.test(f)).sort().map(f => path.join(kareDir, f));
+        yaz(`Sahne kareleri kontrol ediliyor (${saniyeler.length} kare)…`);
+        const d = await sor(LLM.istem('sahne-denetim', {
+          sayfalar: sayfalar.map(f => path.resolve(f)).join(', '), gorsel_dil: gdMetin,
+          satirlar: video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(1)}-${Z.satirlar[i].son.toFixed(1)} sn]: ${s.metin}`).join('\n'),
+        }), { is: 'sahne-denetim', resimler: sayfalar, efor: 'medium' });
+        puan = d.puan;
+        const agir = (d.sorunlar || []).filter(x => x.agirlik !== 'dusuk');
+        yaz(`  puan ${d.puan ?? '?'}/10, ağır sorun ${agir.length}`);
+        if (!agir.length) return { ok: true, tur: tur + 1, puan };
+        sorunlar = agir.map(x => `- ${x.saniye != null ? x.saniye + ' sn: ' : ''}${x.sorun} → ${x.duzeltme || ''}`);
+      }
+      return { ok: false, sorunlar, puan };
+    }
+
     // 4. paid-tier recipe
     if (katman === 'ucretli' && !bitti('ucretli_tarif')) {
       const butce = (oto.butce || {}).video_basi_kredi || 50;
@@ -256,7 +306,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
 
     // 4b. free template recipe (the template draws; the model only fills in the data)
     const sablonAd = oto.sablon || 'simulasyon', simF = path.join(dir, 'simulasyon.json');
-    if (katman === 'sablon' && !bitti('sablon_tarif')) {
+    const sablonTarif = async () => {
       yaz(`Şablon verisi (${sablonAd}) yazılıyor…`);
       // the template's header comment is its manual
       const belge = fs.readFileSync(path.join(O.KOK, 'uretim', 'sablonlar', sablonAd + '.js'), 'utf8').split('\n').filter(l => l.startsWith('//')).map(l => l.replace(/^\/\/ ?/, '')).join('\n');
@@ -269,7 +319,8 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       O.yazJson(simF, S);
       O.yazJson(videoF, { ...O.okuJson(videoF), sablon: sablonAd });
       isaretle('sablon_tarif', { adim: S.adimlar.length });
-    }
+    };
+    if (katman === 'sablon' && !bitti('sablon_tarif')) await sablonTarif();
 
     // 5. 💳 voice
     const sesDir = path.join(dir, 'ses');
@@ -302,11 +353,26 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     if (!bitti('kelime')) { yaz('\nKelime zamanları (Whisper)…'); if (!kos(python(), [path.join(O.KOK, 'uretim', 'kelime.py'), dir]).ok) throw new Dur('insan', 'kelime.py başarısız (çıktı yukarıda).'); isaretle('kelime'); }
     if (!bitti('mix')) { yaz('\nSes karışımı…'); if (!node('uretim/mix.js', [dir]).ok) throw new Dur('insan', 'mix.js başarısız (çıktı yukarıda).'); isaretle('mix'); }
 
-    if (katman !== 'ucretli' && katman !== 'sablon') throw new Dur('insan', 'Ücretsiz katman seçili: sahneler.js (kodla animasyon) otomatik yazılmıyor, çünkü kare kare bakıp düzeltmeden güvenilir çıkmıyor. Ajan ya da insan sahneler.js yazmalı (uretim/TARIF.md 5a). Ses hazır.');
+    // 7b. formul: the model draws this video's scenes itself (dersler/FORMUL.md), looks at its own frames, fixes at most
+    // twice; if it still fails the video falls back to the template, so automation never stops here
+    if (katman === 'formul' && !bitti('sahne')) {
+      const r = await formulSahne();
+      if (r.ok) isaretle('sahne', { tur: r.tur, puan: r.puan });
+      else {
+        yaz('Sahne iki düzeltmeden sonra da geçmedi, hazır şablona geçiliyor:\n' + r.sorunlar.map(x => '  ' + x).join('\n'));
+        const sf = path.join(dir, 'sahneler.js');
+        if (fs.existsSync(sf)) fs.renameSync(sf, path.join(dir, 'sahneler-reddedildi.js'));     // kept for a human to look at
+        if (!bitti('sablon_tarif')) await sablonTarif();
+        isaretle('sahne', { dusus: 'sablon', sorunlar: r.sorunlar });
+      }
+    }
+    const etkin = katman === 'formul' && D.adimlar.sahne && D.adimlar.sahne.dusus === 'sablon' ? 'sablon' : katman;
+
+    if (katman !== 'ucretli' && katman !== 'sablon' && katman !== 'formul') throw new Dur('insan', 'Ücretsiz katman seçili: sahneler.js (kodla animasyon) otomatik yazılmıyor, çünkü kare kare bakıp düzeltmeden güvenilir çıkmıyor. Ajan ya da insan sahneler.js yazmalı (uretim/TARIF.md 5a). Ses hazır.');
 
     // 8. repair word cues against what Whisper actually heard
     const Z = O.okuJson(path.join(sesDir, 'zaman.json'));
-    if (katman === 'sablon' && !bitti('ipucu')) {
+    if (etkin === 'sablon' && !bitti('ipucu')) {
       const S = O.okuJson(simF), notlar = simIpucuOnar(S, Z);
       O.yazJson(simF, S);
       if (notlar.length) yaz('Zaman ipuçları onarıldı: ' + notlar.join('; '));
@@ -403,4 +469,4 @@ function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null }, kok =
   return f;
 }
 
-module.exports = { uret, kuyrugaYaz, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, kodCikar, kuyrugaYaz, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };

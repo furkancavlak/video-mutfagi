@@ -45,6 +45,7 @@ Ajan aşağıdaki sırayı kullanıcıyla birlikte yürütür. Her adımda kulla
 ## 6. Görsel katman
 
 - **Ücretsiz:** kodla animasyon. Her video için `sahneler.js` yazılır.
+- **Formül (ücretsiz, otomatik):** yapay zekâ her videonun nesnelerini baştan çizer (`dersler/FORMUL.md`). Bunun için kimliğe `gorsel_dil` yazılır: çizgi tarzı, ek renkler, ekrandaki yazı kuralı, kanalın imza anı, kaçınılacaklar. Kanalın tekrar eden bir karakteri varsa kullanıcıyla birlikte tarif edilir, yapay zekâ `kanal/<ad>/karakter.js` dosyasını bir kez çizer (örnek: `kanal/oxygbio/karakter.js`), kullanıcı kareye bakıp onaylar. Karakter her videoda aynı kalır, geri kalan her şey her videoda yeniden çizilir. Başka kanalın karakterini ya da örnek videonun nesnelerini kopyalama.
 - **Ücretli:** Higgsfield görsel ve klip. Video başına bütçe belirlenir. Örnek video 36 kredi harcadı, bütçe 50'ydi.
 
 Kullanıcıya örnek videonun iki sürümünü de izlet, sonra seçtir. Örnek kanalda videoların çoğu ücretsiz, yalnız biri ücretli.

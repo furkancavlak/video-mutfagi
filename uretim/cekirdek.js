@@ -18,7 +18,21 @@ function videoYukle(klasor) {
   const dir = path.resolve(klasor);
   const video = okuJson(path.join(dir, 'video.json'), 'video.json');
   const kimlik = okuJson(path.resolve(dir, video.kanal), 'kanal kimliği (kimlik.json)');
-  return { dir, video, kimlik, ad: path.basename(dir) };
+  return { dir, video, kimlik, kimlikDir: path.dirname(path.resolve(dir, video.kanal)), ad: path.basename(dir) };
+}
+
+// Scene code written by a language model (sahneler.js, kanal/<ad>/karakter.js) runs in a sandbox: no require, no process,
+// no file or network access, 5 s CPU limit. It only builds strings. Repo templates (uretim/sablonlar/) are trusted and use require.
+function guvenliYukle(dosya) {
+  const vm = require('vm');
+  const kod = fs.readFileSync(dosya, 'utf8');
+  const kutu = { module: { exports: {} }, console: { log() {}, warn() {}, error() {} } };
+  kutu.exports = kutu.module.exports;
+  try { vm.runInNewContext(kod, kutu, { filename: dosya, timeout: 5000 }); }
+  catch (e) { fail(`${path.basename(dosya)} çalışmadı: ${e.message}`); }
+  const fn = kutu.module.exports;
+  if (typeof fn !== 'function') fail(`${path.basename(dosya)} bir fonksiyon dışa aktarmalı (module.exports = function (...) { ... }).`);
+  return (...args) => { try { return fn(...args); } catch (e) { fail(`${path.basename(dosya)} hata verdi: ${e.message}`); } };
 }
 
 function anahtar(ad, nereden) {
@@ -169,4 +183,4 @@ function renderEt(hfDir, mixWav, outMp4, kodlama = KODLAMA) {
   console.log(`\nHAZIR: ${outMp4} (${(fs.statSync(outMp4).size / 1048576).toFixed(1)} MB)`);
 }
 
-module.exports = { KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, sayfaYaz, kareler, renderEt, norm };
+module.exports = { KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, sayfaYaz, kareler, renderEt, norm };

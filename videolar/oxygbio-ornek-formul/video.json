@@ -1,0 +1,41 @@
+{
+  "_aciklama": "formul katmanının örnek videosu (29.10.2026): kurallar dersler/FORMUL.md, sahneler.js bu hikâye için çizildi. Yapay zekâya yalnız yapısı örnek verilir, nesneleri değil.",
+  "kanal": "../../kanal/oxygbio/kimlik.json",
+  "baslik": "Ağaçlar oksijen üretmeyi bıraksa ne olur?",
+  "anlaticilar": {
+    "yasli-dayi": "mF7tIc9VLrznhGooGjaT"
+  },
+  "anons_rolleri": [],
+  "hiz": 1.15,
+  "duzeltme": {},
+  "satirlar": [
+    {
+      "rol": "yasli-dayi",
+      "metin": "[excited] Lan, dünyadaki bütün ağaçlar bir sabah oksijen üretmeyi bırakıyor!"
+    },
+    {
+      "rol": "yasli-dayi",
+      "metin": "Mahallede panik. Hamsi Cemil bakkaldaki bütün oksijen tüplerini alıp balkona diziyor."
+    },
+    {
+      "rol": "yasli-dayi",
+      "metin": "[shouting] Ama ölçer kıpırdamıyor, amına koyayım. Yüzde yirmi bir!"
+    },
+    {
+      "rol": "yasli-dayi",
+      "metin": "Çünkü orman ürettiği oksijeni zaten neredeyse tamamen kendisi geri harcıyor."
+    },
+    {
+      "rol": "yasli-dayi",
+      "metin": "[dramatic pause] Bin yıl sonra… hâlâ yüzde yirmi bir."
+    },
+    {
+      "rol": "yasli-dayi",
+      "metin": "[shouting] Ama çürüyen ormanlar havaya dağ gibi karbondioksit basıyor. Dünya fırına dönüyor, amına koyayım!"
+    },
+    {
+      "rol": "yasli-dayi",
+      "metin": "[laughs] Cemil'in torunu tüpleri hurdacıya satıp klima alıyor: dedem pandemide de tuvalet kâğıdı stoklamıştı."
+    }
+  ]
+}

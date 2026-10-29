@@ -30,12 +30,12 @@ Bu repoyu bir kullanıcı sana verdi. Repo, yapay zekâyla sıfırdan dikey vide
 | `ARACLAR.md` | Her aracın ne işe yaradığı, bedava mı ücretli mi, lisans ve kontrol tarihi. Kullanıcı fiyat sorarsa buradan cevap ver, eskiyse resmi sayfaya bak |
 | `kanal/` | Kanal kimlikleri. `KIMLIK-REHBERI.md`, `sablon/`, dolu örnek `oxygbio/` |
 | `videolar/` | Her video bir klasör. `_sablon/` yeni video için. `oxygbio-v01-ucak/` tam örnek |
-| `uretim/` | `TARIF.md` (iş sırası), `ses.js`, `kelime.py`, `mix.js`, `kurgu.js` (ücretsiz), `ucretli.js` (Higgsfield), `cekirdek.js` (ortak) |
+| `uretim/` | `TARIF.md` (iş sırası), `ses.js`, `kelime.py`, `mix.js`, `kurgu.js` (ücretsiz), `ucretli.js` (Higgsfield), `cekirdek.js` (ortak), `motor.js` (formül: zaman ve hareket, çizim yok) |
 | `marka/` | `marka-sesi.js`: açılış sesini kodla üretir, hazır sesleriyle |
 | `denetim/` | `DENETIM.md`, `kareler.sh`, `kare-denetci.md` (denetçi ajanın kuralları) |
 | `instagram/` | `REHBER.md` (Meta kurulumu), `paylas.js` |
 | `kuyruk/` | `BENIOKU.md`, `kuyruk.js`: videolar sıraya girer, zamanlayıcı saati gelince paylaşır, sonuçları çeker |
-| `dersler/` | `HATALAR.md`, `KURGU-DILI.md`, `METIN.md`, `KAPAK-BASLIK.md` (kapak, başlık, Instagram açıklaması) |
+| `dersler/` | `HATALAR.md`, `KURGU-DILI.md`, `METIN.md`, `KAPAK-BASLIK.md` (kapak, başlık, Instagram açıklaması), `FORMUL.md` (her videonun kendi çizimi) |
 | `konu/` | Konu radarı: forum ve trend sitelerinden kanala uygun video fikri bulur, isterse otomatik üretir. `BENIOKU.md`, `radar.js` |
 | `ikinci-beyin/` | Kanalın hafızası: profil, kararlar, düzeltmeler, video sonuçları. `BENIOKU.md`, `beyin.js`, `sablon/` |
 | `kesit/` | Uzun yatay videodan dikey kısa: tanıtım (cevaptan önce kesilir) ya da en iyi an. `BENIOKU.md`, `kesit.js` |
@@ -75,6 +75,10 @@ videolar/<kanal>-v01-<konu>/
   ucretli/        üretilen resim ve klipler (repoya girmez)
   cikti/          kareler ve videolar (repoya girmez)
 ```
+
+## Formül: her videonun kendi çizimi (ücretsiz, otomatik)
+
+`konu.json` → `otomasyon.katman: "formul"` seçilirse yapay zekâ her videonun sahnesini baştan çizer (`sahneler.js`), kendi karelerine bakıp en fazla iki kez düzeltir; olmazsa hazır şablona düşer. Kurallar `dersler/FORMUL.md`. Repo yalnız mantığı ve görünmeyen motoru (`uretim/motor.js`) verir, tek bir hazır çizim yoktur. Kanalın görünüşü `kimlik.json` → `gorsel_dil` ve `kanal/<ad>/karakter.js` içindedir; nesneler her videoda yeniden çizilir. Örnek: `videolar/oxygbio-ornek-formul/` (yalnız yapısı örnek, nesneleri kopyalanmaz). Sahne kodu korumalı kutuda çalışır (`require`, dosya, ağ yok).
 
 ## Hazır şablonla ücretsiz video (kod yazmadan)
 

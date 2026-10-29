@@ -57,5 +57,17 @@
   "gorsel": {
     "ucretsiz": "kodla animasyon (sahneler.js)",
     "ucretli": "Higgsfield, video başına en fazla N kredi (ucretli.json)"
+  },
+  "gorsel_dil": {
+    "_aciklama": "Yalnız formul katmanında kullanılır (dersler/FORMUL.md). Videonun nesneleri her seferinde yeni çizilir; bu alan hepsinin bu kanala ait görünmesini sağlar.",
+    "cizgi": "Çizgi tarzı: ör. düz renkli vektör, yuvarlak hatlar, gölge yok.",
+    "palet": {},
+    "yazi": "Ekrandaki yazıların kuralı: ör. AntonTR, büyük harf, vurgu coral.",
+    "karakter": {
+      "ad": "Karakter yoksa bu alanı sil.",
+      "dosya": "karakter.js"
+    },
+    "imza": "Kanalın her videoda tekrar eden anı.",
+    "kacin": []
   }
 }

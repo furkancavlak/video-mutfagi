@@ -130,6 +130,7 @@ Kuyruk iş dosyası (kuyruk modülüyle sözleşme):
 ### Dürüst not: hangi katman otomatik çalışır
 
 - **Ücretli katman otomatik çalışır.** Yapay zekânın yazdığı `ucretli.json` örnekle aynı biçimde, zamanlar satır sonlarına bağlı; resimler klipten önce kontrol edilir.
+- **Formül katmanı otomatik çalışır, ama en genç katmandır (29.10.2026).** Yapay zekâ sahneyi bu videoya özel çizer, her satırdan iki kare alıp kendine bakar, en fazla iki kez düzeltir; geçmezse video hazır şablona düşer ve reddedilen dosya `sahneler-reddedildi.js` olarak kalır. Sonucu paylaşmadan önce izle.
 - **Ücretsiz katman (kodla animasyon) otomatik çalışmaz.** `sahneler.js` ancak kare kare bakıp düzelterek iyi oluyor (HATALAR §6). Ücretsiz seçildiğinde radar ses ve karışımı hazırlar, sonra `insan-bekliyor` der. Sahneleri ajan ya da insan TARIF 5a ile yazar.
 - Yapay zekâ denetimi de yanılabilir (HATALAR §9). `uret` seviyesinde video paylaşılmadan önce insan izler; `tam` seviyede bu güvence yoktur.
 

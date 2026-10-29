@@ -2,7 +2,7 @@
   "_aciklama": "Kanal kimliği: her videoda aynı kalan her şey. Sıfırdan doldurmak için kanal/sablon/kimlik.json'u kopyala ve kanal/KIMLIK-REHBERI.md'deki sırayla doldur.",
   "hesap": "@oxygbio",
   "konu": "Geniş 'ne olurdu' merak kanalı. ANA SERİ (25.10'dan itibaren): 'Oksijen X yerde biterse 1000 yıl sonra dünyaya ne olur?' — ör. denizde, ormanlarda, toprakta, atmosferin bir katmanında. Oksijen tek bir yerde biter, sonuçları zincirleme ve zaman atlamalı izlenir (1 gün, 1 yıl, 100 yıl, 1000 yıl). İlk video (uçak) farklı öncülle yapıldı: evrendeki bütün oksijen bir anda yok oluyordu.",
-  "karakter": "Ekranda sabit karakter yok; yıldız konunun kendisi.",
+  "karakter": "Hamsi Cemil: gümüş bir hamsi, iki bacak üstünde yürür, başında kırmızı bant. Panikçi, kurnaz planlar yapar, hep yanlış şeyi stoklar. Torunu (siyah şapkalı küçük hamsi) ve yaşlı hâli (gri, monokllü) de var. Her videoda en az bir sahnede oynar; metin onu konuşturmaz, anlatıcı onun yaptığını anlatır.",
   "ton": "Komedi ağırlıklı, bilgi omurga. Video gerçek bir bilgi zincirinin üstünde akar ama izleyiciyi sonuna kadar tutan şey absürt örnekler ve küfürlü tepkilerdir. Zaman atlamaları tırmanışı taşır; her atlamada hem bilgi hem saçmalık bir öncekinden büyür.",
   "kufur": "Bol ve açık (hassiktir, amına koyayım, siktir, lan…): her 2-3 cümlede bir, olaya verilen doğal tepki olarak; kancada da olabilir. Kişiye, gruba, kimliğe hakaret yok; küfür olaya ve duruma.",
   "karisim": {
@@ -72,5 +72,31 @@
   "gorsel": {
     "ucretsiz": "kodla animasyon (sahneler.js)",
     "ucretli": "Higgsfield görsel + kısa klip, video başına en fazla 50 kredi (ucretli.json)"
+  },
+  "gorsel_dil": {
+    "_aciklama": "formul katmanının görsel kimliği (dersler/FORMUL.md). Videonun bütün nesneleri o hikâye için yeni çizilir; bu alan yalnız hepsinin bu kanala ait görünmesini sağlar.",
+    "cizgi": "Düz renkli (flat) vektör, yuvarlak hatlar, gölge ve gradyan yok, kontur yalnız küçük nesnelerde ve ince. Açık, sıcak zemin; tek vurgu rengi coral.",
+    "palet": {
+      "gok": "#DCEEF2",
+      "yaprak": "#5FA35C",
+      "yaprak2": "#4C8C4A",
+      "govde": "#8A5A3B",
+      "toprak": "#B98A5E",
+      "duvar": "#EADBC2",
+      "duvar2": "#D9C6A6",
+      "celik": "#C9D3D8",
+      "pas": "#A0613A"
+    },
+    "yazi": "Ekrandaki yazılar AntonTR, BÜYÜK HARF. Damga ve vurgu coral; nesnelerin üstündeki yazılar ink.",
+    "karakter": {
+      "ad": "Hamsi Cemil",
+      "dosya": "karakter.js"
+    },
+    "imza": "Zaman sıçraması: koyu (ink) tam ekranda dev \"N YIL SONRA\", sert kesme; hemen ardından daha önce görülen kadrajın o zamandaki hâli (pas, örümcek ağı, büyümüş, çökmüş...).",
+    "kacin": [
+      "Gösterge çubuğu ve yüzde barı: olayın kendisini göster",
+      "Kamera gezintisi: kadrajlar sert kesmeyle değişir, kadraj içinde yalnız yavaş yaklaşma",
+      "Aynı anda ikiden fazla hareket eden nesne"
+    ]
   }
 }

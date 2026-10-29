@@ -19,6 +19,9 @@ Yapay zekâ metni bu kurallara göre yazar, kullanıcı onaylar. Metin onaylanma
 - **Sonuna kadar tutma.** Bir absürt öğe başta kurulur, ortada geri döner, kapanışta en büyük hâliyle patlar.
 - **Küfür ünlem olarak, olayın ortasında.** Başa ve sona yapıştırılmaz. Kişiye ya da gruba yönelik hakaret olmaz. Ne kadar küfür kullanılacağı `kimlik.json` → `kufur` alanında yazar.
 - **İkinci bir ses varsa bir role ver.** Örnekte kaptan anonsu var. Rol `video.json` → `anons_rolleri` alanına yazılırsa hoparlör sesi ve "bing-bong" otomatik eklenir.
+- **Şaka tanıdık bir davranışın abartısıdır.** Rastgele tuhaf görüntü değil ("amca ağaca hortum bağlamış" komik değil). Test: "bunu bizim mahallede biri kesin yapar" denebiliyor mu? Stokçuluk, kuyruk, dilekçe, belediye açıklaması, aile grubu mesajı gibi herkesin tanıdığı davranışlar.
+- **Şakayı çizilebilecek eşyaya uydurma.** Önce hikâyeyi düşün; görüntü sonra o hikâye için çizilir (`dersler/FORMUL.md`).
+- **"Bir şey olmaz" bitişi yok.** Gerçek bilgi beklenen felaketin olmadığını söylüyorsa, ters köşe asıl etkiyi gösterir (oksijen yerinde kalır ama karbondioksit dünyayı ısıtır). İzleyici "demek bir şey olmuyormuş" diye çıkmamalı.
 - **Bir fikir bir kez anlatılır.** Aynı şeyi iki örnekle tekrar etme.
 - **Yapay şok cümlesi yok.** "Meğer çok kötü bir fikirmiş…" gibi cümleler kullanılmaz. Merak içerikten doğar.
 - **Ses etiketleri** (`[excited]`, `[shouting]`, `[laughs]`, `[pause]`) tonu yönetir, sesli okunmaz. Satır başına 1-2 tane yeter.

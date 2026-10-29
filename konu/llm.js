@@ -153,7 +153,8 @@ async function openrouterCalistir(istem, { model, efor, araclar = [], resimler =
     method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'x-title': 'video-mutfagi' },
     body: JSON.stringify({ model: model + (araclar.includes('WebSearch') && !model.endsWith(':online') ? ':online' : ''), messages: [{ role: 'user', content: icerik }],
       max_tokens: 32000, ...(efor ? { reasoning: { effort: efor } } : {}), usage: { include: true } }),
-  });
+    signal: AbortSignal.timeout(20 * 60 * 1000),   // a stuck provider must not hang the whole run
+  }).catch(e => { throw new LlmHatasi('OpenRouter cevap vermedi (' + model + '): ' + e.message); });
   const j = await r.json().catch(() => ({}));
   if (!j.choices) throw new LlmHatasi('OpenRouter hata verdi: ' + JSON.stringify(j.error || j).slice(0, 300));
   return { metin: j.choices[0].message.content || '', maliyet: j.usage && j.usage.cost != null ? j.usage.cost : null };

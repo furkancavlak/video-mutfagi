@@ -190,6 +190,6 @@
     "_butce_not": "0 = harcama izni yok. Otomasyon (uret/tam) ancak buraya sıfırdan büyük sınır yazılınca para harcar.",
     "denetim_esik": 7,
     "sablon": "simulasyon",
-    "_katman": "ucretli: Higgsfield görsel+klip (kredi harcar) | sablon: hazır kodla animasyon şablonu, kredisiz (uretim/sablonlar/) | ucretsiz: sahneler.js elle yazılır"
+    "_katman": "ucretli: Higgsfield görsel+klip (kredi harcar) | sablon: hazır kodla animasyon şablonu, kredisiz (uretim/sablonlar/) | formul: yapay zekâ her videonun sahnesini baştan çizer ve kendi karesine bakıp düzeltir, kredisiz (dersler/FORMUL.md) | ucretsiz: sahneler.js elle yazılır"
   }
 }
