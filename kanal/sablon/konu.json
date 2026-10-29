@@ -105,7 +105,7 @@
     "efor_puanlama": "low",
     "model_metin": "claude-opus-5-5",
     "efor_metin": "high",
-    "_not": "yol: otomatik | claude-cli (Claude aboneliği, claude -p) | api (ANTHROPIC_API_KEY, kullandıkça öde)"
+    "_not": "yol: otomatik | claude-cli (Claude aboneliği, claude -p) | api (ANTHROPIC_API_KEY, kullandıkça öde) | codex-cli | openrouter | ollama. efor_sahne (formul katmanı, varsayılan high): ucuz ve hızlı modeller sahnede düşünmekten cevap yazamazsa low yap."
   },
   "otomasyon": {
     "seviye": "kapali",

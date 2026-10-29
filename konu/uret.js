@@ -271,7 +271,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
           karakter: fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.',
           motor: basYorum(path.join(O.KOK, 'uretim', 'motor.js')), satirlar, sure: Z.toplam.toFixed(1), marka: (Z.sting[0] || 0).toFixed(2),
           ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'), duzeltme,
-        }), { is: 'sahne-yaz', json: false, efor: 'high' });
+        }), { is: 'sahne-yaz', json: false, efor: llm.efor_sahne || 'high' });   // fast / cheap models can think themselves out of an answer: lower it per channel
         const yeni = kodCikar(cevap);
         if (!yeni) { sorunlar = ['- Cevapta module.exports içeren bir \`\`\`js kod bloğu yok. Dosyanın tamamını tek blokta döndür.']; continue; }
         kod = yeni;
@@ -285,7 +285,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
         const d = await sor(LLM.istem('sahne-denetim', {
           sayfalar: sayfalar.map(f => path.resolve(f)).join(', '), gorsel_dil: gdMetin,
           satirlar: video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(1)}-${Z.satirlar[i].son.toFixed(1)} sn]: ${s.metin}`).join('\n'),
-        }), { is: 'sahne-denetim', resimler: sayfalar, efor: 'medium' });
+        }), { is: 'sahne-denetim', resimler: sayfalar, efor: llm.efor_sahne === 'low' ? 'low' : 'medium' });
         puan = d.puan;
         const agir = (d.sorunlar || []).filter(x => x.agirlik !== 'dusuk');
         const kalan = agir.map(x => `- ${x.saniye != null ? x.saniye + ' sn: ' : ''}${x.sorun} → ${x.duzeltme || ''}`);
