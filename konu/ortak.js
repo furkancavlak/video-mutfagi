@@ -18,7 +18,14 @@ function yazJson(f, veri) {
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const gecici = f + '.' + process.pid + '.tmp';
   fs.writeFileSync(gecici, JSON.stringify(veri, null, 2) + '\n');
-  fs.renameSync(gecici, f);
+  // Windows refuses the rename while another run holds the file (several videos produced at once): wait and retry
+  for (let deneme = 0; ; deneme++) {
+    try { fs.renameSync(gecici, f); return; }
+    catch (e) {
+      if (!['EPERM', 'EBUSY', 'EACCES'].includes(e.code) || deneme >= 40) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 + Math.random() * 75);
+    }
+  }
 }
 const satirEkle = (f, o) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.appendFileSync(f, JSON.stringify(o) + '\n'); };
 const satirlarOku = f => { try { return fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)); } catch (e) { return []; } };
