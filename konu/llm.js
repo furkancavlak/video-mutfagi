@@ -1,6 +1,9 @@
-// Language model calls for the radar. Two routes:
+// Language model calls for the radar and production. The "brain" is one setting: konu.json → llm.yol + llm.model_metin.
 //   claude-cli  `claude -p` with the user's Claude subscription (default when the CLI is installed)
 //   api         Anthropic API with ANTHROPIC_API_KEY (pay as you go; needs `npm i @anthropic-ai/sdk`)
+//   codex-cli   `codex exec` with the user's ChatGPT plan (model e.g. "gpt-6-astra")
+//   openrouter  any model on openrouter.ai, open ones too (model e.g. "z-ai/glm-5.3-flash"; pay as you go)
+//   ollama      a model running on this computer (model e.g. "qwen3.8:27b"; free, small models invent facts)
 //
 // The CLI runs isolated from the user's own Claude Code setup: an empty temp working dir that holds a
 // `.beyin-yok` marker, BEYIN_V3_SKIP=1, `--setting-sources project,local` (skips ~/.claude/settings.json hooks
@@ -31,9 +34,10 @@ function claudeBul() {
   return claudeYolu;
 }
 
+const YOLLAR = ['claude-cli', 'api', 'codex-cli', 'openrouter', 'ollama'];
 function yolSec(ayar = {}) {
   const yol = process.env.KONU_LLM_YOL || ayar.yol || 'otomatik';
-  if (yol === 'claude-cli' || yol === 'api') return yol;
+  if (YOLLAR.includes(yol)) return yol;
   if (claudeBul()) return 'claude-cli';
   if (process.env.ANTHROPIC_API_KEY) return 'api';
   throw new LlmHatasi('Yapay zekâya ulaşılamadı: Claude Code (claude) kurulu değil ve ANTHROPIC_API_KEY yok. konu/BENIOKU.md → "Yapay zekâ bağlantısı".');
@@ -108,6 +112,67 @@ async function apiCalistir(istem, { model, efor, araclar = [], resimler = [] }) 
   return { metin, maliyet: null };
 }
 
+// Codex route: `codex exec` with the user's ChatGPT plan. Read-only sandbox in the same empty work dir.
+// Web search for the fact-check step is asked for through config; only the Claude routes were tested with it.
+function codexCalistir(istem, { model, efor, araclar = [], resimler = [], zamanAsimiMs = 15 * 60e3 }) {
+  const cikti = path.join(calismaDizini(), `codex-${process.pid}-${Date.now()}.txt`);
+  const q = s => process.platform === 'win32' ? `"${s}"` : s;      // Windows runs codex.cmd through the shell
+  const args = ['exec', '--skip-git-repo-check', '-s', 'read-only', '-o', q(cikti)];
+  if (model) args.push('-m', model);
+  if (efor) args.push('-c', `model_reasoning_effort=${efor}`);
+  if (araclar.includes('WebSearch')) args.push('-c', 'tools.web_search=true');
+  for (const r of resimler) args.push('-i', q(path.resolve(r)));
+  args.push('-');
+  return new Promise((coz, reddet) => {
+    const p = spawn(process.platform === 'win32' ? 'codex.cmd' : 'codex', args, { cwd: calismaDizini(), env: { ...process.env, BEYIN_V3_SKIP: '1' }, windowsHide: true, shell: process.platform === 'win32' });
+    let err = '';
+    const zaman = setTimeout(() => { p.kill(); reddet(new LlmHatasi(`codex ${Math.round(zamanAsimiMs / 60000)} dakikada bitmedi.`)); }, zamanAsimiMs);
+    p.stderr.on('data', d => err += d);
+    p.on('error', e => { clearTimeout(zaman); reddet(new LlmHatasi('codex çalıştırılamadı (Codex CLI kurulu mu?): ' + e.message)); });
+    p.on('close', kod => {
+      clearTimeout(zaman);
+      let metin = ''; try { metin = fs.readFileSync(cikti, 'utf8'); fs.unlinkSync(cikti); } catch (e) { }
+      if (kod !== 0 || !metin) return reddet(new LlmHatasi(`codex hata verdi (çıkış ${kod}): ${err.split('\n').filter(l => !/rmcp::transport/.test(l)).join(' ').slice(-300)}`));
+      coz({ metin, maliyet: null });
+    });
+    p.stdin.end(istem);
+  });
+}
+
+// OpenRouter route: one key, hundreds of models (open ones too), pay per use. Key in OPENROUTER_API_KEY or
+// ~/.video-mutfagi/openrouter.txt. `:online` adds OpenRouter's paid web search for the fact-check step (untested).
+async function openrouterCalistir(istem, { model, efor, araclar = [], resimler = [] }) {
+  let key = process.env.OPENROUTER_API_KEY;
+  const keyF = path.join(os.homedir(), '.video-mutfagi', 'openrouter.txt');
+  if (!key && fs.existsSync(keyF)) key = fs.readFileSync(keyF, 'utf8').trim();
+  if (!key) throw new LlmHatasi('OpenRouter anahtarı yok: openrouter.ai → Keys, anahtarı ~/.video-mutfagi/openrouter.txt dosyasına kaydet.');
+  if (!model || !model.includes('/')) throw new LlmHatasi('OpenRouter için konu.json → llm.model_metin tam model adı olmalı (ör. "z-ai/glm-5.3-flash").');
+  const icerik = [{ type: 'text', text: istem },
+    ...resimler.map(f => ({ type: 'image_url', image_url: { url: `data:${/\.png$/i.test(f) ? 'image/png' : 'image/jpeg'};base64,${fs.readFileSync(f).toString('base64')}` } }))];
+  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'x-title': 'video-mutfagi' },
+    body: JSON.stringify({ model: model + (araclar.includes('WebSearch') && !model.endsWith(':online') ? ':online' : ''), messages: [{ role: 'user', content: icerik }],
+      max_tokens: 32000, ...(efor ? { reasoning: { effort: efor } } : {}), usage: { include: true } }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!j.choices) throw new LlmHatasi('OpenRouter hata verdi: ' + JSON.stringify(j.error || j).slice(0, 300));
+  return { metin: j.choices[0].message.content || '', maliyet: j.usage && j.usage.cost != null ? j.usage.cost : null };
+}
+
+// Ollama route: a model running on this computer (free, offline). No tools; small models make facts up.
+async function ollamaCalistir(istem, { model, resimler = [] }) {
+  const adres = process.env.OLLAMA_HOST ? (/^http/.test(process.env.OLLAMA_HOST) ? process.env.OLLAMA_HOST : 'http://' + process.env.OLLAMA_HOST) : 'http://localhost:11434';
+  if (!model) throw new LlmHatasi('Ollama için konu.json → llm.model_metin yerel model adı olmalı (ör. "qwen3.8:27b").');
+  const r = await fetch(adres + '/api/chat', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model, stream: false, options: { num_ctx: 32768 },
+      messages: [{ role: 'user', content: istem, ...(resimler.length ? { images: resimler.map(f => fs.readFileSync(f).toString('base64')) } : {}) }] }),
+  }).catch(e => { throw new LlmHatasi('Ollama çalışmıyor (' + adres + '): ' + e.message); });
+  const j = await r.json();
+  if (!j.message) throw new LlmHatasi('Ollama hata verdi: ' + JSON.stringify(j).slice(0, 300));
+  return { metin: j.message.content || '', maliyet: 0 };
+}
+
 // Pulls the first JSON object out of a reply (```json fences, prose around it).
 function jsonCikar(metin) {
   const adaylar = [...String(metin).matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map(m => m[1]).concat([String(metin)]);
@@ -128,6 +193,9 @@ async function sor(istem, { is = 'genel', ayar = {}, model, efor, araclar = [], 
   let r;
   if (calistir) r = await calistir(istem, { model, efor, araclar, resimler });
   else if (yol === 'api') r = await apiCalistir(istem, { model, efor, araclar, resimler });
+  else if (yol === 'codex-cli') r = await codexCalistir(istem, { model, efor, araclar, resimler });
+  else if (yol === 'openrouter') r = await openrouterCalistir(istem, { model, efor, araclar, resimler });
+  else if (yol === 'ollama') r = await ollamaCalistir(istem, { model, resimler });
   else {
     const ek = resimler.length ? `\n\nBakman gereken resim dosyaları (Read aracıyla aç):\n${resimler.map(f => '- ' + path.resolve(f)).join('\n')}\n` : '';
     r = await cliCalistir(istem + ek, { model, efor, araclar: resimler.length ? [...new Set([...araclar, 'Read'])] : araclar, dizinler });
