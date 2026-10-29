@@ -118,6 +118,8 @@
     },
     "gunluk_en_fazla_video": 1,
     "katman": "ucretli",
+    "sure_sn": [60, 80],
+    "_sure_sn": "Videonun seslendirme süresi, saniye [en az, en çok]. Metnin uzunluğu ve ElevenLabs harcaması buna göre çıkar (saniyede ~14 karakter).",
     "butce": {
       "video_basi_kredi": 50,
       "gunluk_kredi": 0,

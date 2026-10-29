@@ -160,6 +160,13 @@ function dogrulamaSorunlari(d) {
   return [...kotu.map(b => `- "${b.cumle}": ${b.durum === 'yanlis' ? 'YANLIŞ' : 'kaynak bulunamadı'}. ${b.not || ''}`), ...(d.eksik || []).map(e => `- "${e.cumle}": bilgiler listesinde yok (${e.neden || 'doğrulanmamış iddia'})`)];
 }
 
+// Video length is a channel setting: konu.json → otomasyon.sure_sn [min, max] (default 60-80 s). About 14 characters
+// a second (the approved sample: 1,070 characters, 76 s); the narrator's voice budget follows from it.
+function sureAyari(sure = [60, 80]) {
+  const [a, b] = Array.isArray(sure) ? sure : [sure, sure], yuvarla = x => Math.round(x / 50) * 50;
+  return { sure: `${a}-${b}`, sure_ust: String(b), karakter: `${yuvarla(a * 14.5)}-${yuvarla(b * 14.5)}`, satir_sayisi: `${Math.max(4, Math.round(a / 10))}-${Math.max(5, Math.round(b / 9))}` };
+}
+
 // ---- formul layer helpers
 // the ```js block of a model answer (the longest one that exports a function); null if none
 function kodCikar(metin) {
@@ -213,7 +220,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       const ornekVideo = O.okuJson(path.join(O.KOK, 'videolar', 'oxygbio-v01-ucak', 'video.json'));
       const temel = {
         kimlik: kimlikMetin, metin_kurallari: md('dersler/METIN.md'), metin_hatalari: bolum(md('dersler/HATALAR.md'), 5),
-        ornek_metin: md('videolar/oxygbio-v01-ucak/metin.md'), ornek_satirlar: ornekVideo.satirlar,
+        ornek_metin: md('videolar/oxygbio-v01-ucak/metin.md'), ornek_satirlar: ornekVideo.satirlar, ...sureAyari(oto.sure_sn),
         fikir: { baslik: fikir.baslik, oncul: fikir.oncul, kanca: fikir.kanca, tirmanis: fikir.tirmanis, kapanis: fikir.kapanis, kaynaklar: fikir.kaynaklar.map(k => ({ baslik: k.baslik, url: k.url, dis_kaynak: k.dis_kaynak })) },
         roller: anl.map(a => `${a.ad} (${a.not || ''})`).join(', '), ana_rol: ana.ad,
       };
@@ -470,4 +477,4 @@ function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null }, kok =
   return f;
 }
 
-module.exports = { uret, kodCikar, kuyrugaYaz, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, kodCikar, sureAyari, kuyrugaYaz, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };

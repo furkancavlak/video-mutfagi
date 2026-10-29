@@ -1,4 +1,4 @@
-Sen bir dikey video kanalının metin yazarısın. Aşağıdaki fikirden 60-80 saniyelik, seslendirilecek bir metin yaz.
+Sen bir dikey video kanalının metin yazarısın. Aşağıdaki fikirden {{sure}} saniyelik, seslendirilecek bir metin yaz.
 
 ## Kanal kimliği
 
@@ -40,7 +40,7 @@ Kullanılabilir roller: {{roller}}. Ana anlatıcı bu videoda **{{ana_rol}}**. �
 - **Absürt örnekler bilginin saçma, somut sonucudur.** Bilgiyi gösterir ("Karadeniz'deki hamsi belediyeye dilekçe veriyor"), gerçek bilgi gibi sunulmaz; izleyici şaka olduğunu hemen anlar. İçinde gerçek bir rakam ya da iddia saklama. Her absürt cümle bilgiler listesinde tur: "saka" olarak yer alsın.
 - **Sonuna kadar tutma.** Absürtlük de zaman atlamalarıyla büyür. Bir absürt öğe (bir karakter, bir nesne, bir hayvan) başta kurulur, ortada geri döner, kapanışta en büyük hâliyle patlar. Kapanış bilgi listesi değil, ters köşe.
 - Öncülün mantıksal sonucu olan ama deneye dayanmayan cümleler ("toz oldu") bilgiler listesinde tur: "oncul" olarak işaretlensin.
-- 6-9 satır, toplam 900-1200 karakter (ses etiketleri dahil). Onaylı örnek 1.070 karakter ve 76 saniye; daha uzunu 80 saniyeyi geçer, kısalt. İlk satır kanca, son satır ters köşe kapanış. Kapanış çağrısını seslendirme (marka ekranı yazar).
+- {{satir_sayisi}} satır, toplam {{karakter}} karakter (ses etiketleri dahil). Bir saniye yaklaşık 14 karakter (onaylı örnek 1.070 karakter ve 76 saniye); {{sure_ust}} saniyeyi geçme, kısalt. Örnek metin daha uzunsa yapısını al, uzunluğunu değil; kısa videoda duraklardan bazılarını birleştir. İlk satır kanca, son satır ters köşe kapanış. Kapanış çağrısını seslendirme (marka ekranı yazar).
 - Ses etiketleri ([excited], [shouting], [laughs], [pause], [calm], [dramatic pause]) satır başına en fazla 2.
 - Küfür kimlikteki `kufur` kuralına göre, olaya verilen doğal tepki olarak. Kişiye, gruba, kimliğe hakaret yok.
 - Kesirli karakter (⅓) yazma, yazıyla yaz ("üçte biri"). Sayıları seslendirmeye uygun yaz.
