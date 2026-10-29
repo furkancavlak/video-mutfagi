@@ -12,7 +12,7 @@
 const fs = require('fs'), path = require('path'), os = require('os');
 const { execFileSync } = require('child_process');
 
-const FONT = path.join(__dirname, '..', '..', 'uretim', 'fontlar', 'InterTight-800-latin.woff2');   // variable font, default (regular) instance
+const FONT = path.join(__dirname, 'InterTight-800-latin.ttf');   // variable font, default (regular) instance
 const RENK = { lacivert: '#1F2A44', camgobegi: '#2E8C8C', turuncu: '#F2711C', kagit: '#EFE6D2' };
 const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 
@@ -47,7 +47,7 @@ const png = (dir, ad, W, H, p) => { ff(['-f', 'rawvideo', '-pix_fmt', 'rgb24', '
 function yaziOlc(dir, metin, px, kalin) {
   const Wc = 2 * Math.ceil((px * metin.length * .9 + 200) / 2), Hc = 2 * Math.ceil((px * 2 + 100) / 2);   // even sizes: odd widths shift rows
   const b = ff(['-f', 'lavfi', '-i', `color=black:s=${Wc}x${Hc}`, '-vf',
-    `drawtext=fontfile=font.woff2:text='${metin}':fontsize=${px}:fontcolor=white:x=50:y=50${kalin ? `:borderw=${kalin}:bordercolor=white` : ''},format=gray`,
+    `drawtext=fontfile=font.ttf:text='${metin}':fontsize=${px}:fontcolor=white:x=50:y=50${kalin ? `:borderw=${kalin}:bordercolor=white` : ''},format=gray`,
     '-frames:v', '1', '-f', 'rawvideo', '-'], dir);
   let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1; const runs = [];
   for (let y = 0; y < Hc; y++) { let run = 0;
@@ -98,7 +98,7 @@ async function uret(cikti, o = {}) {
   const fps = o.fps || 30, W = o.w || 1080, H = Math.round(W * 16 / 9 / 2) * 2, k = W / 1080, Z = zamanCizelgesi(o.kisa);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stil-sentetik-'));
   try {
-    fs.copyFileSync(FONT, path.join(dir, 'font.woff2'));
+    fs.copyFileSync(FONT, path.join(dir, 'font.ttf'));
     const F = t => Math.round(t * fps);                       // seconds -> frame index
     const sure = Z.A2[1], N = F(sure);
     // scenes: A = "camera" (dark, busy), B / B2 = "graphics" (paper + orange sun + navy ink)
@@ -120,7 +120,7 @@ async function uret(cikti, o = {}) {
     const kartZaman = [];
     for (const [a, b] of [Z.A1, Z.A2]) for (let t = a; t < b - 1e-6; t += Z.kartSn) kartZaman.push([t, Math.min(b, t + Z.kartSn)]);
     const capY = Math.round(1500 * k);                       // top of the drawtext box
-    const dt = (metin, x, y, px, renk, kenar, ek) => `drawtext=fontfile=font.woff2:text='${metin}':fontsize=${px}:fontcolor=${renk}:x=${x}:y=${y}${kenar ? `:borderw=${kenar[0]}:bordercolor=${kenar[1]}` : ''}${ek || ''}`;
+    const dt = (metin, x, y, px, renk, kenar, ek) => `drawtext=fontfile=font.ttf:text='${metin}':fontsize=${px}:fontcolor=${renk}:x=${x}:y=${y}${kenar ? `:borderw=${kenar[0]}:bordercolor=${kenar[1]}` : ''}${ek || ''}`;
     const capF = [];
     kartZaman.forEach(([a, b], i) => {
       const [t1, t2] = kartlar[i % kartlar.length], m1 = yaziOlc(dir, t1, capPx, 0), m2 = yaziOlc(dir, t2, kalinPx, KALIN);
