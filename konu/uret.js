@@ -177,7 +177,7 @@ function kodCikar(metin) {
 const basYorum = f => { const out = []; for (const l of fs.readFileSync(f, 'utf8').split('\n')) { if (!l.startsWith('//')) break; out.push(l.replace(/^\/\/ ?/, '')); } return out.join('\n'); };
 
 // ---- the run
-async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir } = {}) {
+async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir, not = null } = {}) {
   const h = H.havuzOku(ctx);
   const fikir = H.fikirBul(h, fikirId);
   if (fikir.durum === 'reddedildi') O.hata('Bu fikir reddedilmiş. Önce seç: node konu/radar.js sec ' + ctx.kanal + ' ' + fikir.id);
@@ -211,6 +211,13 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
 
   try {
     const videoF = path.join(dir, 'video.json'), ucretliF = path.join(dir, 'ucretli.json');
+    // --not "...": the reader didn't like the script; rewrite it with their note (only before the voice is paid for)
+    let onceki = null;
+    if (not && bitti('metin')) {
+      if (bitti('ses')) throw new Dur('insan', 'Ses zaten üretildi; metni şimdi değiştirmek o harcamayı boşa çıkarır. --not yalnız sesten önce çalışır.');
+      onceki = O.okuJson(videoF).satirlar;
+      delete D.adimlar.metin; O.yazJson(durumF, D);
+    }
     // 2-3. script + fact-check (at most two fix rounds)
     if (!bitti('metin')) {
       const anl = ctx.kimlik.anlaticilar || [];
@@ -226,7 +233,8 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       };
       let m, d, sorunlar = [];
       for (let tur = 0; tur < 3; tur++) {
-        const duzeltme = sorunlar.length ? `## Önceki taslağın sorunları (düzelt)\n\nDoğrulayıcı şunları buldu. Yanlış bilgiyi doğrusuyla değiştir; kaynağı bulunamayanı metinden çıkar, yerine doğrulanabilir bir bilgi koy ya da satırı kısalt. Akışı bozma.\n\n${sorunlar.join('\n')}\n\nÖnceki taslak:\n${JSON.stringify({ satirlar: m.satirlar, bilgiler: m.bilgiler }, null, 1)}` : '';
+        const notIstem = !tur && onceki ? `## Okurun notu (bu taslağı beğenmedi, notu uygulayarak yeniden yaz)\n\n${not}\n\nÖnceki taslak:\n${JSON.stringify(onceki, null, 1)}` : '';
+        const duzeltme = notIstem || sorunlar.length ? notIstem || `## Önceki taslağın sorunları (düzelt)\n\nDoğrulayıcı şunları buldu. Yanlış bilgiyi doğrusuyla değiştir; kaynağı bulunamayanı metinden çıkar, yerine doğrulanabilir bir bilgi koy ya da satırı kısalt. Akışı bozma.\n\n${sorunlar.join('\n')}\n\nÖnceki taslak:\n${JSON.stringify({ satirlar: m.satirlar, bilgiler: m.bilgiler }, null, 1)}` : '';
         yaz(tur ? `Metin düzeltiliyor (tur ${tur + 1})…` : 'Metin yazılıyor…');
         m = await sor(LLM.istem('metin-yaz', { ...temel, duzeltme }), { is: 'metin-yaz' });
         if (!Array.isArray(m.satirlar) || m.satirlar.length < 3) throw new Dur('insan', 'Yapay zekâ geçerli metin yazamadı.');

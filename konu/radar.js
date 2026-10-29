@@ -7,7 +7,8 @@
 //   node konu/radar.js fikirler <kanal> [--hepsi]       list the idea pool (+ kanal/<kanal>/fikirler.md/.html)
 //   node konu/radar.js sec      <kanal> <fikir-id>      mark an idea as chosen   (reddet: rejected)
 //   node konu/radar.js ekle     <kanal> --baslik "..." [--oncul "..."]   put your own idea in the pool (already chosen)
-//   node konu/radar.js uret     <kanal> <fikir-id> [--onay] [--yayin-dk N] [--onaysiz-paylas]
+//   node konu/radar.js uret     <kanal> <fikir-id> [--onay] [--yayin-dk N] [--onaysiz-paylas] [--not "..."]
+//                               --not: rewrite the script with the reader's note (only before the voice)
 //                               produce a video; without --onay it stops at the first paid step.
 //                               --yayin-dk N: queue it N minutes after it is finished · --onaysiz-paylas: no extra posting approval
 //   node konu/radar.js calistir <kanal> [--tam-otomatik]      one scheduled round, following konu.json → otomasyon
@@ -29,7 +30,8 @@ function yardim() {
   node konu/radar.js fikirler <kanal> [--hepsi]    fikir havuzunu göster
   node konu/radar.js sec      <kanal> <fikir-id>   fikri seç      (reddet: reddet)
   node konu/radar.js ekle     <kanal> --baslik "..." [--oncul "..."]   kendi fikrini havuza koy
-  node konu/radar.js uret     <kanal> <fikir-id> [--onay] [--yayin-dk 10] [--onaysiz-paylas]
+  node konu/radar.js uret     <kanal> <fikir-id> [--onay] [--yayin-dk 10] [--onaysiz-paylas] [--not "..."]
+                              --not "...": metni beğenmediysen notunla yeniden yazdır (sesten önce)
                               --yayin-dk N: video bitince N dk sonrasına kuyruğa koy
                               --onaysiz-paylas: paylaşım için ayrıca onay bekleme
   node konu/radar.js calistir <kanal> [--tam-otomatik]   zamanlayıcı için tek giriş
@@ -140,7 +142,7 @@ Son tur: ${son ? `${son.zaman} (${son.seviye})${son.hata ? ' HATA: ' + son.hata 
     if (!rest[0]) O.hata('fikir kimliğini ver. Örnek: node konu/radar.js uret ' + ctx.kanal + ' f-1a2b3c4d');
     const birak = O.kilitAl(ctx, 'uret ' + rest[0]);
     const dk = deger('--yayin-dk');
-    try { await require('./uret').uret(ctx, rest[0], { onay: bayrak('--onay'), otomatik: false, onayGerekli: !bayrak('--onaysiz-paylas'), neZaman: dk ? +dk : null, yaz }); } finally { birak(); }
+    try { await require('./uret').uret(ctx, rest[0], { onay: bayrak('--onay'), otomatik: false, onayGerekli: !bayrak('--onaysiz-paylas'), neZaman: dk ? +dk : null, not: deger('--not'), yaz }); } finally { birak(); }
   }
   else if (komut === 'calistir') await calistir(ctx);
   else if (komut === 'durum') durum(ctx);

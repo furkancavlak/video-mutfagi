@@ -111,7 +111,7 @@ Sıra `uretim/TARIF.md` ile aynıdır, araya yapay zekâ kontrolleri girer:
 2. **Metin:** yapay zekâ `dersler/METIN.md` kurallarına ve örnek videoya bakarak `video.json` satırlarını yazar. Anlatıcılar videodan videoya dönüşümlü seçilir.
 3. **Doğrulama:** ikinci bir yapay zekâ çağrısı her bilgiyi internette arar (WebSearch/WebFetch). Yanlış ya da kaynaksız bilgi varsa metin en fazla iki kez düzeltilir. Yine geçmezse durur, fikir `insan-bekliyor` olur. `metin.md`'nin altındaki bilgi kontrol tablosu kaynak adresleriyle yazılır.
 4. **Görsel tarifi:** ücretli katmanda yapay zekâ örnekteki biçimde `ucretli.json` yazar. Program tutarlılığını kontrol eder.
-5. 💳 **Ses** (`uretim/ses.js`): karakter sayısı ve görüntünün tahmini kredisi gösterilir. `--onay` yoksa **burada durur**, hiçbir şey harcanmaz. Kullanıcı önce `metin.md`'yi okur.
+5. 💳 **Ses** (`uretim/ses.js`): karakter sayısı ve görüntünün tahmini kredisi gösterilir. `--onay` yoksa **burada durur**, hiçbir şey harcanmaz. Kullanıcı önce `metin.md`'yi okur. Metni beğenmezse `uret <kanal> <fikir-id> --not "..."` ile notunu verir; metin o notla yeniden yazılır ve yeniden doğrulanır (yalnız sesten önce).
 6. Kelime zamanları (`kelime.py`, `.venv` ile) ve ses karışımı (`mix.js`).
 7. Whisper'ın duymadığı kelimeye bağlı zaman ipucu satır başına çekilir.
 8. 💳 **Resimler** (`ucretli.js gorsel`): Higgsfield'ın kesin fiyatı, bütçe kontrolü, sonra üretim. Ardından yapay zekâ temas sayfasına bakar (fazladan insan, yazı, bozuk el, tutarsız karakter). Sorun varsa klip üretilmez, durur.
