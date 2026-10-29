@@ -78,7 +78,7 @@ videolar/<kanal>-v01-<konu>/
 
 ## Formül: her videonun kendi çizimi (ücretsiz, otomatik)
 
-`konu.json` → `otomasyon.katman: "formul"` seçilirse yapay zekâ her videonun sahnesini baştan çizer (`sahneler.js`), kendi karelerine bakıp en fazla iki kez düzeltir; olmazsa hazır şablona düşer. Kurallar `dersler/FORMUL.md`. Repo yalnız mantığı ve görünmeyen motoru (`uretim/motor.js`) verir, tek bir hazır çizim yoktur. Kanalın görünüşü `kimlik.json` → `gorsel_dil` ve `kanal/<ad>/karakter.js` içindedir; nesneler her videoda yeniden çizilir. Örnek: `videolar/oxygbio-ornek-formul/` (yalnız yapısı örnek, nesneleri kopyalanmaz). Sahne kodu korumalı kutuda çalışır (`require`, dosya, ağ yok).
+`konu.json` → `otomasyon.katman: "formul"` seçilirse yapay zekâ her videonun sahnesini baştan çizer (`sahneler.js`), kendi karelerine bakıp en fazla iki kez düzeltir ve en iyi denemeyi kullanır (hazır şablona düşmez). Kurallar `dersler/FORMUL.md`. Repo yalnız mantığı ve görünmeyen motoru (`uretim/motor.js`) verir, tek bir hazır çizim yoktur. Kanalın görünüşü `kimlik.json` → `gorsel_dil` ve `kanal/<ad>/karakter.js` içindedir; nesneler her videoda yeniden çizilir. Örnek: `videolar/oxygbio-ornek-formul/` (yalnız yapısı örnek, nesneleri kopyalanmaz). Sahne kodu korumalı kutuda çalışır (`require`, dosya, ağ yok).
 
 ## Hazır şablonla ücretsiz video (kod yazmadan)
 

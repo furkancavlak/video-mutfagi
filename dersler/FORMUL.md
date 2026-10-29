@@ -83,5 +83,7 @@ Sahne yazıldıktan sonra her satırdan kareler alınır ve yapay zekâ kendi ka
 - Örnek videodan kopyalanmış nesne (tüp, hurdacı, termometre...)
 - Satırı gösteren somut bir şey yoksa boş kadraj
 
-Ağır sorun varsa sahne en fazla iki kez düzeltilir. Yine geçmezse video hazır şablona (`sablon`) düşer, üretim
-durmaz.
+Ağır sorun varsa sahne en fazla iki kez düzeltilir. Yine de sorun kalırsa **en yüksek puanlı deneme** kullanılır,
+kalan notlar `uretim.json` → `adimlar.sahne.kalan` alanına ve çıktıya yazılır; paylaşmadan önce bakılır. Hazır şablona
+düşme yoktur (29.10.2026 kararı): kendi çizimi olan 7/10'luk bir sahne, hazır şablondan iyidir. Üç denemenin
+hiçbirinde kod çalışmazsa üretim durur ve insana haber verir.

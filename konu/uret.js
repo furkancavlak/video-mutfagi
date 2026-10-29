@@ -255,7 +255,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       const kareDir = path.join(dir, 'cikti', 'kareler-ucretsiz'), sf = path.join(dir, 'sahneler.js');
       // two stills per line: just after the cut and near the end, where the line's action has landed
       const saniyeler = Z.satirlar.flatMap(s => [s.bas + (s.son - s.bas) * .3, s.bas + (s.son - s.bas) * .85]).map(x => +x.toFixed(2));
-      let kod = null, sorunlar = [], puan = null;
+      let kod = null, sorunlar = [], puan = null, en = null;     // en: the best attempt that ran
       for (let tur = 0; tur < 3; tur++) {
         const duzeltme = tur ? `## Önceki denemenin sorunları (düzelt, geri kalanını bozma)\n\n${sorunlar.join('\n')}${kod ? `\n\nÖnceki dosya:\n\n\`\`\`js\n${kod}\`\`\`` : ''}` : '';
         yaz(tur ? `Sahne düzeltiliyor (tur ${tur + 1})…` : 'Sahne çiziliyor (formül: bu videoya özel çizim)…');
@@ -281,10 +281,14 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
         }), { is: 'sahne-denetim', resimler: sayfalar, efor: 'medium' });
         puan = d.puan;
         const agir = (d.sorunlar || []).filter(x => x.agirlik !== 'dusuk');
+        const kalan = agir.map(x => `- ${x.saniye != null ? x.saniye + ' sn: ' : ''}${x.sorun} → ${x.duzeltme || ''}`);
+        if (!en || (+d.puan || 0) > en.puan || ((+d.puan || 0) === en.puan && agir.length < en.sorunlar.length)) en = { kod, puan: +d.puan || 0, sorunlar: kalan, tur: tur + 1 };
         yaz(`  puan ${d.puan ?? '?'}/10, ağır sorun ${agir.length}`);
-        if (!agir.length) return { ok: true, tur: tur + 1, puan };
-        sorunlar = agir.map(x => `- ${x.saniye != null ? x.saniye + ' sn: ' : ''}${x.sorun} → ${x.duzeltme || ''}`);
+        if (!agir.length) return { ok: true, tur: tur + 1, puan, kalan: [] };
+        sorunlar = kalan;
       }
+      // no attempt passed clean: the best one that ran is used and its remaining notes go to the run record
+      if (en) { fs.writeFileSync(sf, en.kod); return { ok: true, tur: en.tur, puan: en.puan, kalan: en.sorunlar }; }
       return { ok: false, sorunlar, puan };
     }
 
@@ -353,26 +357,21 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     if (!bitti('kelime')) { yaz('\nKelime zamanları (Whisper)…'); if (!kos(python(), [path.join(O.KOK, 'uretim', 'kelime.py'), dir]).ok) throw new Dur('insan', 'kelime.py başarısız (çıktı yukarıda).'); isaretle('kelime'); }
     if (!bitti('mix')) { yaz('\nSes karışımı…'); if (!node('uretim/mix.js', [dir]).ok) throw new Dur('insan', 'mix.js başarısız (çıktı yukarıda).'); isaretle('mix'); }
 
-    // 7b. formul: the model draws this video's scenes itself (dersler/FORMUL.md), looks at its own frames, fixes at most
-    // twice; if it still fails the video falls back to the template, so automation never stops here
+    // 7b. formul: the model draws this video's scenes itself (dersler/FORMUL.md), looks at its own frames and fixes at
+    // most twice; the best attempt is used. There is no fallback to the template (the user's call, 29.10.2026): if no
+    // attempt even ran, the run stops for a human.
     if (katman === 'formul' && !bitti('sahne')) {
       const r = await formulSahne();
-      if (r.ok) isaretle('sahne', { tur: r.tur, puan: r.puan });
-      else {
-        yaz('Sahne iki düzeltmeden sonra da geçmedi, hazır şablona geçiliyor:\n' + r.sorunlar.map(x => '  ' + x).join('\n'));
-        const sf = path.join(dir, 'sahneler.js');
-        if (fs.existsSync(sf)) fs.renameSync(sf, path.join(dir, 'sahneler-reddedildi.js'));     // kept for a human to look at
-        if (!bitti('sablon_tarif')) await sablonTarif();
-        isaretle('sahne', { dusus: 'sablon', sorunlar: r.sorunlar });
-      }
+      if (!r.ok) throw new Dur('insan', 'Sahne kodu üç denemede de çalışmadı (kare alınamadı):\n' + r.sorunlar.join('\n') + `\nSon deneme: ${rel(path.join(dir, 'sahneler.js'))}. Düzelt ya da sil, sonra aynı komutla devam et.`);
+      if (r.kalan.length) yaz(`Sahne en iyi denemeyle (tur ${r.tur}, puan ${r.puan}/10) kullanılıyor; kontrolün kalan notları (paylaşmadan önce bak):\n` + r.kalan.map(x => '  ' + x).join('\n'));
+      isaretle('sahne', { tur: r.tur, puan: r.puan, kalan: r.kalan });
     }
-    const etkin = katman === 'formul' && D.adimlar.sahne && D.adimlar.sahne.dusus === 'sablon' ? 'sablon' : katman;
 
     if (katman !== 'ucretli' && katman !== 'sablon' && katman !== 'formul') throw new Dur('insan', 'Ücretsiz katman seçili: sahneler.js (kodla animasyon) otomatik yazılmıyor, çünkü kare kare bakıp düzeltmeden güvenilir çıkmıyor. Ajan ya da insan sahneler.js yazmalı (uretim/TARIF.md 5a). Ses hazır.');
 
     // 8. repair word cues against what Whisper actually heard
     const Z = O.okuJson(path.join(sesDir, 'zaman.json'));
-    if (etkin === 'sablon' && !bitti('ipucu')) {
+    if (katman === 'sablon' && !bitti('ipucu')) {
       const S = O.okuJson(simF), notlar = simIpucuOnar(S, Z);
       O.yazJson(simF, S);
       if (notlar.length) yaz('Zaman ipuçları onarıldı: ' + notlar.join('; '));
