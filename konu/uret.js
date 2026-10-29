@@ -290,10 +290,18 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
         if (!r.ok) { sorunlar = ['- Dosya çalışmadı ya da kare alınamadı: ' + r.cikti.split('\n').filter(Boolean).slice(-4).join(' | ')]; continue; }
         const sayfalar = fs.readdirSync(kareDir).filter(f => /^contact-sheet.*\.jpg$/.test(f)).sort().map(f => path.join(kareDir, f));
         yaz(`Sahne kareleri kontrol ediliyor (${saniyeler.length} kare)…`);
-        const d = await sor(LLM.istem('sahne-denetim', {
-          sayfalar: sayfalar.map(f => path.resolve(f)).join(', '), gorsel_dil: gdMetin,
-          satirlar: video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(1)}-${Z.satirlar[i].son.toFixed(1)} sn]: ${s.metin}`).join('\n'),
-        }), { is: 'sahne-denetim', resimler: sayfalar, efor: llm.efor_sahne === 'low' ? 'low' : 'medium' });
+        let d;
+        try {
+          d = await sor(LLM.istem('sahne-denetim', {
+            sayfalar: sayfalar.map(f => path.resolve(f)).join(', '), gorsel_dil: gdMetin,
+            satirlar: video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(1)}-${Z.satirlar[i].son.toFixed(1)} sn]: ${s.metin}`).join('\n'),
+          }), { is: 'sahne-denetim', resimler: sayfalar, efor: llm.efor_sahne === 'low' ? 'low' : 'medium' });
+        } catch (e) {
+          // a text-only model cannot look at the stills: keep the attempt that ran, unreviewed, and say so
+          if (!/image|resim|vision|görsel/i.test(e.message)) throw e;
+          yaz('  Bu model resim göremiyor: sahne kontrolsüz kullanılıyor.');
+          return { ok: true, tur: tur + 1, puan: null, kalan: ['- Sahne kontrol edilmedi: seçilen model resim göremiyor. Paylaşmadan önce videoyu baştan sona izle.'] };
+        }
         puan = d.puan;
         const agir = (d.sorunlar || []).filter(x => x.agirlik !== 'dusuk');
         const kalan = agir.map(x => `- ${x.saniye != null ? x.saniye + ' sn: ' : ''}${x.sorun} → ${x.duzeltme || ''}`);

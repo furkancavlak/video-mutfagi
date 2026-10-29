@@ -88,6 +88,9 @@ kalan notlar `uretim.json` → `adimlar.sahne.kalan` alanına ve çıktıya yaz�
 düşme yoktur (29.10.2026 kararı): kendi çizimi olan 7/10'luk bir sahne, hazır şablondan iyidir. Üç denemenin
 hiçbirinde kod çalışmazsa üretim durur ve insana haber verir.
 
+Seçilen model resim göremiyorsa (yalnız metin okuyan modeller) kontrol yapılamaz: çalışan ilk deneme kontrolsüz
+kullanılır ve çıktıya "sahne kontrol edilmedi" notu düşülür. Böyle bir modelle üretilen videoyu paylaşmadan önce baştan sona izle.
+
 Sahne çiziminin düşünme ayarı `konu.json` → `llm.efor_sahne` (varsayılan `high`). Ucuz ve hızlı modeller bütün hakkını
 düşünmeye harcayıp cevap yazamayabilir (GLM 5.3 Flash 29.10'da 32.000 token düşünüp boş döndü); onlar için `low`.
 
