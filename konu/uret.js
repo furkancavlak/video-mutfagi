@@ -213,10 +213,10 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     const videoF = path.join(dir, 'video.json'), ucretliF = path.join(dir, 'ucretli.json');
     // --not "...": the reader didn't like the script; rewrite it with their note (only before the voice is paid for)
     let onceki = null;
-    if (not && bitti('metin')) {
+    if (not && fs.existsSync(path.join(dir, 'metin.md'))) {     // metin.md exists only once a draft was written
       if (bitti('ses')) throw new Dur('insan', 'Ses zaten üretildi; metni şimdi değiştirmek o harcamayı boşa çıkarır. --not yalnız sesten önce çalışır.');
       onceki = O.okuJson(videoF).satirlar;
-      delete D.adimlar.metin; O.yazJson(durumF, D);
+      if (bitti('metin')) { delete D.adimlar.metin; O.yazJson(durumF, D); }
     }
     // 2-3. script + fact-check (at most two fix rounds)
     if (!bitti('metin')) {
