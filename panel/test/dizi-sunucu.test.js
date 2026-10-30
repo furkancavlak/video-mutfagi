@@ -128,3 +128,61 @@ test('--ozet reports ozellik: diziler (the home panel gates the server toggle on
   await istek('POST', '/api/dizi/tekrar', { makine: 'sunucu', kanal: 'kanal_a', id: 'd1', n: 1 });
   assert.deepEqual(sureler, [20e3]);
 });
+
+// ---- server video preview: GET /api/sunucu-video?yol=videolar/... (scp stubbed), cache kayit/sunucu-onizleme (max 5)
+const ham = (yol) => new Promise((ok, red) => {
+  const r = http.request({ host: '127.0.0.1', port, path: yol, method: 'GET', headers: { Host: `127.0.0.1:${port}`, 'X-Panel': P.ANAHTAR } }, res => {
+    const c = []; res.on('data', x => c.push(x)); res.on('end', () => ok({ kod: res.statusCode, tur: res.headers['content-type'], govde: Buffer.concat(c).toString() }));
+  });
+  r.on('error', red); r.end();
+});
+const scpKayit = [];
+const scpDurdur = () => { scpKayit.length = 0; P.kanca.scp = args => { scpKayit.push(args); fs.writeFileSync(args[args.length - 1], 'VIDEO:' + args[args.length - 2]); return { status: 0, stderr: '' }; }; };
+const ONIZ = path.join(KOK, 'kayit', 'sunucu-onizleme');
+
+test('sunucu-video: bad paths are refused before any scp', async () => {
+  yaz('ayarlar/panel.json', { sunucu: { ad: 'S', ssh: 'u@h', kok: '/srv/vm' } });
+  scpDurdur();
+  for (const y of ['../x.mp4', 'videolar/../x.mp4', 'videolar/a/../../x.mp4', 'videolar/a b.mp4', 'videolar/a.mov', 'kayit/x.mp4', '/etc/x.mp4', 'videolar//x.mp4', 'videolar/./x.mp4', "videolar/a';rm.mp4", 'videolar/x.mp4.mov', '']) {
+    const r = await ham('/api/sunucu-video?yol=' + encodeURIComponent(y));
+    assert.equal(r.kod, 400, y);
+  }
+  assert.equal(scpKayit.length, 0);
+});
+
+test('sunucu-video: fetched once with the ssh settings, then streamed from the cache', async () => {
+  scpDurdur();
+  let r = await ham('/api/sunucu-video?yol=' + encodeURIComponent('videolar/k-a-b1/cikti/k-a-b1-ucretsiz.mp4'));
+  assert.equal(r.kod, 200); assert.equal(r.tur, 'video/mp4'); assert.equal(r.govde, 'VIDEO:u@h:/srv/vm/videolar/k-a-b1/cikti/k-a-b1-ucretsiz.mp4');
+  assert.deepEqual(scpKayit[0].slice(0, 5), ['-q', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8']);
+  r = await ham('/api/sunucu-video?yol=' + encodeURIComponent('videolar/k-a-b1/cikti/k-a-b1-ucretsiz.mp4'));
+  assert.equal(r.kod, 200); assert.equal(scpKayit.length, 1, 'second view comes from the cache');
+  assert.ok(!fs.readdirSync(ONIZ).some(f => f.endsWith('.part')), 'no partial file left');
+});
+
+test('sunucu-video: a failed scp is 400 and leaves nothing behind', async () => {
+  P.kanca.scp = args => { fs.writeFileSync(args[args.length - 1], 'yarim'); return { status: 1, stderr: 'Permission denied' }; };
+  const once = fs.readdirSync(ONIZ).sort();
+  const r = await ham('/api/sunucu-video?yol=' + encodeURIComponent('videolar/yok/x.mp4'));
+  assert.equal(r.kod, 400); assert.match(JSON.parse(r.govde).hata, /alınamadı/);
+  assert.deepEqual(fs.readdirSync(ONIZ).sort(), once);
+});
+
+test('sunucu-video: the cache keeps at most 5 files and deletes only its own oldest ones', async () => {
+  scpDurdur();
+  fs.writeFileSync(path.join(ONIZ, 'baska.txt'), 'x'); fs.writeFileSync(path.join(ONIZ, 'elle.mp4'), 'x');
+  const eski = Date.now() / 1000 - 3600;
+  for (const f of ['baska.txt', 'elle.mp4']) fs.utimesSync(path.join(ONIZ, f), eski - 9999, eski - 9999);
+  const ilk = P.onizlemeAd('videolar/k-a-b1/cikti/k-a-b1-ucretsiz.mp4');
+  fs.utimesSync(path.join(ONIZ, ilk), eski - 100, eski - 100);
+  const yollar = Array.from({ length: 6 }, (_, i) => `videolar/v${i}/cikti/v${i}.mp4`);
+  for (const [i, y] of yollar.entries()) {
+    assert.equal((await ham('/api/sunucu-video?yol=' + encodeURIComponent(y))).kod, 200);
+    const f = path.join(ONIZ, P.onizlemeAd(y)); fs.utimesSync(f, eski + i, eski + i);   // a clear age order
+  }
+  const kalan = fs.readdirSync(ONIZ).filter(f => /^[0-9a-f]{12}-/.test(f));
+  assert.equal(kalan.length, 5);
+  assert.ok(!kalan.includes(ilk) && !kalan.includes(P.onizlemeAd(yollar[0])), 'the two oldest cache files went first');
+  for (const y of yollar.slice(1)) assert.ok(kalan.includes(P.onizlemeAd(y)), y);
+  assert.ok(fs.existsSync(path.join(ONIZ, 'baska.txt')) && fs.existsSync(path.join(ONIZ, 'elle.mp4')), 'other files are never touched');
+});

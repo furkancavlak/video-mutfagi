@@ -7,6 +7,8 @@ const anahtar = (() => {
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const sayi = n => n == null ? '–' : Number(n).toLocaleString('tr-TR');
 const dosya = p => `/dosya?p=${encodeURIComponent(p)}&k=${encodeURIComponent(anahtar)}`;
+// a video on the server (panel.js copies it over with scp into a small local cache first)
+const sunucuDosya = p => `/api/sunucu-video?yol=${encodeURIComponent(p)}&k=${encodeURIComponent(anahtar)}`;
 const tarih = (t, o = {}) => new Date(t).toLocaleString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...o });
 const gunTarih = t => new Date(t).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
 const yerel = t => { const d = new Date(t); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
@@ -56,7 +58,7 @@ function bekleyenler() {
   const L = [];
   for (const m of ['yerel', 'sunucu']) {
     const K = kuyrukOf(m); if (!K) continue;
-    for (const j of K.kuyruk.filter(j => j.onay_gerekli)) L.push({ ikon: '⏸', renk: 'sari', baslik: isAd(j), alt: `${makineAd(m)} · ${tarih(j.ne_zaman)} paylaşılacak, onayın bekleniyor`, islem: `${uretimBul(j.mp4) && uretimBul(j.mp4).mp4[0] ? `<button class="dugme ince" data-izle="${esc(uretimBul(j.mp4).mp4[0].yol)}">İzle</button>` : ''}<button class="dugme ince sari" data-onayla="${esc(j.id)}" data-makine="${m}">Onayla</button>` });
+    for (const j of K.kuyruk.filter(j => j.onay_gerekli)) L.push({ ikon: '⏸', renk: 'sari', baslik: isAd(j), alt: `${makineAd(m)} · ${tarih(j.ne_zaman)} paylaşılacak, onayın bekleniyor`, islem: `${m === 'sunucu' && j.mp4 ? `<button class="dugme ince" data-sizle="${esc(j.mp4)}">İzle</button>` : uretimBul(j.mp4) && uretimBul(j.mp4).mp4[0] ? `<button class="dugme ince" data-izle="${esc(uretimBul(j.mp4).mp4[0].yol)}">İzle</button>` : ''}<button class="dugme ince sari" data-onayla="${esc(j.id)}" data-makine="${m}">Onayla</button>` });
     for (const j of K.hatali) L.push({ ikon: '!', renk: 'kirmizi', baslik: isAd(j), alt: `${makineAd(m)} · ${j.kontrol_et ? 'paylaşıldı mı belli değil: Instagram hesabına bak' : 'paylaşılamadı: ' + (j.hata || '')}`, islem: '' });
   }
   for (const u of Uk()) {
@@ -137,7 +139,7 @@ function siraCiz() {
     const d = `data-makine="${makine}"`, u = uretimBul(j.mp4);
     return `<div class="satir"><div class="zaman-kutu">${j.ne_zaman ? esc(tarih(j.ne_zaman, { weekday: undefined })) : '–'}<small>${j.ne_zaman ? esc(kalan(j.ne_zaman)) + (kalan(j.ne_zaman) === 'geçti' ? '' : ' sonra') : ''}</small></div>
       <div class="ad"><span class="baslik"><span class="etiket ${et[0]}">${et[1]}</span>${esc(isAd(j))}</span><small title="${esc(j.hata || j.aciklama)}">${esc(j.hata || j.aciklama)}</small></div>
-      <div class="islem">${j._hatali ? '' : `${makine === 'yerel' && u && u.mp4[0] ? `<button class="dugme ince" data-izle="${esc(u.mp4[0].yol)}">İzle</button>` : ''}
+      <div class="islem">${j._hatali ? '' : `${makine === 'yerel' && u && u.mp4[0] ? `<button class="dugme ince" data-izle="${esc(u.mp4[0].yol)}">İzle</button>` : makine === 'sunucu' && j.mp4 ? `<button class="dugme ince" data-sizle="${esc(j.mp4)}">İzle</button>` : ''}
         ${j.onay_gerekli ? `<button class="dugme ince sari" data-onayla="${esc(j.id)}" ${d}>Onayla</button>` : ''}
         <input type="datetime-local" value="${j.ne_zaman ? yerel(j.ne_zaman) : ''}" data-zaman="${esc(j.id)}" ${d} aria-label="Zaman">
         <button class="dugme ince tehlike" data-iptal="${esc(j.id)}" ${d} title="Sıradan çıkar">✕</button>`}</div></div>`;
@@ -213,7 +215,7 @@ function dzBolum(d, b) {
     ${karar || b.karar_neden ? `<div class="dz-karar ${b.karar === 'kes' ? 'kes' : ''}">${karar ? `<b>${esc(karar)}</b> ` : ''}${esc(b.karar_neden || '')}</div>` : ''}
     <div class="dz-islem">${onayBekler ? `<button class="dugme ince sari" data-onayla="${esc(b.kuyruk_id)}" data-makine="${dzM()}">Onayla</button>` : ''}
       ${iz.devam ? `<button class="dugme ince" data-dkarar="devam" ${dk}>Devam ettir</button>` : ''}${iz.kes ? `<button class="dugme ince tehlike" data-dkarar="kes" ${dk}>Kes</button>` : ''}${iz.tekrar ? `<button class="dugme ince" data-dtekrar="1" ${dk}>Tekrar dene</button>` : ''}
-      ${b.mp4 && dzM() === 'yerel' ? `<button class="dugme ince" data-izle="${esc(b.mp4)}">Videoyu aç</button>` : ''}
+      ${b.mp4 ? `<button class="dugme ince" ${dzM() === 'sunucu' ? 'data-sizle' : 'data-izle'}="${esc(b.mp4)}">Videoyu aç</button>` : ''}
       ${guvenli(b.link) ? `<a class="dugme ince" href="${esc(guvenli(b.link))}" target="_blank" rel="noopener">Reels</a>` : ''}</div></div>`;
 }
 const DZ_DURUM = { aktif: ['yesil', 'sürüyor'], bitti: ['', 'bitti'], kesildi: ['kirmizi', 'kesildi'] };
@@ -317,7 +319,7 @@ async function raporGoster(ad) {
     <div>${r.bulgular.map(b => `<div class="bulgu"><b>${esc(b.an)}</b><div><span class="etiket ${ag[b.agirlik] || ''}">${esc(b.agirlik)}</span>${esc(b.sorun)}<div class="ince-yazi">→ ${esc(b.duzeltme)}</div></div></div>`).join('')}</div>
     ${u.sayfalar.length ? `<div class="sayfalar">${u.sayfalar.map(s => `<a href="${dosya(s)}" target="_blank"><img src="${dosya(s)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}`);
 }
-function videoGoster(p) { pencere(pUst('Video') + `<video id="p-video" src="${dosya(p)}" controls autoplay playsinline style="max-height:70vh"></video>`); }
+function videoGoster(p, sunucu) { pencere(pUst('Video') + (sunucu ? '<div class="ince-yazi">Video sunucudan alınıyor, büyükse biraz sürer…</div>' : '') + `<video id="p-video" src="${sunucu ? sunucuDosya(p) : dosya(p)}" controls autoplay playsinline style="max-height:70vh"></video>`); }
 function sonrakiSaat(K) {
   const saatler = (K && K.saatler.length ? K.saatler : ['19:00']), dolu = (K ? K.kuyruk : []).map(j => +new Date(j.ne_zaman));
   for (let g = 0; g < 30; g++) for (const s of saatler) { const [h, m] = s.split(':').map(Number), d = new Date(); d.setDate(d.getDate() + g); d.setHours(h, m, 0, 0); if (+d > Date.now() + 10 * 6e4 && !dolu.some(t => Math.abs(t - d) < 30 * 6e4)) return d; }
@@ -408,6 +410,7 @@ document.addEventListener('click', e => {
   else if (d.dkarar) dzKarar(d);
   else if (d.dtekrar) dzTekrar(d);
   else if (d.izle) videoGoster(d.izle);
+  else if (d.sizle) videoGoster(d.sizle, true);
   else if (d.ekle) ekleGoster(d.ekle);
   else if (d.is) isBaslat(d.is, { kanal: ['topla', 'puanla', 'ders'].includes(d.is) ? kanal || kanalAd0() : undefined });
   else if (d.dersKaydet !== undefined) { const x = Dk()[0].dersler[+d.dersKaydet]; islem('ders-kaydet', { kanal: Dk()[0].kanal || kanal || O.kanallar[0], ...x }, 'Ders kaydedildi ✓'); }

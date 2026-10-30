@@ -13,7 +13,8 @@
 // The panel never posts and never spends by itself: queue changes go through kuyruk/kuyruk.js, production through
 // konu/radar.js and panel/uret-adim.js. Each paid step (voice, then each Higgsfield step) stops first, shows its price
 // and runs only after its own approval click, up to that price.
-// Server: ayarlar/panel.json → "sunucu" (copy panel/ayar-ornek.json). Reached with your own `ssh`.
+// Server: ayarlar/panel.json → "sunucu" (copy panel/ayar-ornek.json). Reached with your own `ssh`; a server video is
+// viewed through GET /api/sunucu-video?yol=videolar/... (scp into kayit/sunucu-onizleme/, at most 5 files).
 const http = require('http'), fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
 const { spawnSync, spawn } = require('child_process');
 
@@ -302,8 +303,8 @@ function dizilerCevap(kanal) {
   }) }));
   return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null) };
 }
-// route -> server hop goes through this object so tests can stub the ssh call
-const kanca = { sunucuda: (...a) => sunucuda(...a) };
+// route -> server hop goes through this object so tests can stub the ssh / scp call
+const kanca = { sunucuda: (...a) => sunucuda(...a), scp: (args, sure) => spawnSync('scp', args, { encoding: 'utf8', timeout: sure }) };
 const kanalAdi = k => { if (typeof k !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(k)) throw new Error('kanal yok'); return k; };
 const bolumNo = n => { if (!Number.isInteger(n) || n < 1 || n > 3) throw new Error('bölüm numarası 1, 2 ya da 3 olmalı'); return n; };
 const diziId = i => { if (typeof i !== 'string' || !/^[\w.-]{1,80}$/.test(i)) throw new Error('böyle bir dizi yok'); return i; };
@@ -363,12 +364,45 @@ function dosyaVer(req, res, rel) {
   const f = path.resolve(KOK, rel || ''), uz = path.extname(f);
   if (!icinde(f, path.join(KOK, 'videolar')) || !['.mp4', '.jpg', '.png', '.md'].includes(uz) || !fs.existsSync(f)) return gonder(res, 404, { hata: 'dosya yok' });
   if (uz !== '.mp4') return gonder(res, 200, fs.readFileSync(f), TUR[uz]);
+  mp4Akit(req, res, f);
+}
+// an mp4 with Range support (the browser's video element seeks with byte ranges)
+function mp4Akit(req, res, f) {
   const boy = fs.statSync(f).size, r = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
   if (!r) { res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': boy, 'Accept-Ranges': 'bytes' }); return fs.createReadStream(f).pipe(res); }
   const bas = r[1] ? +r[1] : Math.max(0, boy - +r[2]), son = r[1] && r[2] ? Math.min(+r[2], boy - 1) : boy - 1;
   if (bas > son || bas >= boy) { res.writeHead(416, { 'Content-Range': `bytes */${boy}` }); return res.end(); }
   res.writeHead(206, { 'Content-Type': 'video/mp4', 'Content-Length': son - bas + 1, 'Content-Range': `bytes ${bas}-${son}/${boy}`, 'Accept-Ranges': 'bytes' });
   fs.createReadStream(f, { start: bas, end: son }).pipe(res);
+}
+
+// ---------- server videos, viewable before approval: copied with scp (the same ssh settings as sunucuda) into
+// kayit/sunucu-onizleme/, at most 5 files; only this cache's own files (<hash>-<name>.mp4) are ever deleted, oldest first
+const ONIZLEME = path.join(KAYIT, 'sunucu-onizleme'), ONIZLEME_EN_FAZLA = 5, ONIZLEME_AD = /^[0-9a-f]{12}-[\w.-]+\.mp4$/;
+function sunucuVideoYolu(yol) {
+  const y = String(yol || '');
+  if (!/^videolar\/[\w./-]+\.mp4$/.test(y) || y.split('/').some(p => !p || p === '.' || p === '..')) throw new Error('video yolu geçersiz');
+  return y;
+}
+const onizlemeAd = y => crypto.createHash('sha1').update(y).digest('hex').slice(0, 12) + '-' + path.basename(y);
+function onizlemeTemizle(tut) {
+  const f = fs.readdirSync(ONIZLEME).filter(x => ONIZLEME_AD.test(x)).map(x => ({ x, t: fs.statSync(path.join(ONIZLEME, x)).mtimeMs })).sort((a, b) => b.t - a.t);
+  for (const { x } of f.slice(ONIZLEME_EN_FAZLA)) if (path.join(ONIZLEME, x) !== tut) fs.rmSync(path.join(ONIZLEME, x), { force: true });
+}
+function sunucuVideo(yol) {
+  const y = sunucuVideoYolu(yol), S = sunucuAyar();
+  if (!S) throw new Error('Sunucu tanımlı değil (ayarlar/panel.json).');
+  fs.mkdirSync(ONIZLEME, { recursive: true });
+  const f = path.join(ONIZLEME, onizlemeAd(y));
+  if (fs.existsSync(f)) { const t = new Date(); fs.utimesSync(f, t, t); return f; }   // a fresh look counts as recent
+  const gecici = f + '.part';
+  let r;
+  try { r = kanca.scp(['-q', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${S.ssh}:${String(S.kok).replace(/\/+$/, '')}/${y}`, gecici], 600e3); }
+  catch (e) { r = { status: 1, stderr: e.message }; }
+  if (!r || r.status !== 0 || !fs.existsSync(gecici)) { fs.rmSync(gecici, { force: true }); throw new Error('video sunucudan alınamadı: ' + String((r && (r.stderr || r.error)) || '').trim().slice(0, 200)); }
+  fs.renameSync(gecici, f);
+  onizlemeTemizle(f);
+  return f;
 }
 
 // an unknown channel (a stale browser choice) still gets the full unfiltered summary, flagged, so the UI can reset itself
@@ -441,6 +475,7 @@ const sunucuYap = () => http.createServer(async (req, res) => {
     const korumali = u.pathname.startsWith('/api/') || u.pathname === '/dosya';
     if (korumali && (req.headers['x-panel'] || u.searchParams.get('k')) !== ANAHTAR) return gonder(res, 401, { hata: 'Paneli terminaldeki linkle aç.' });
     if (u.pathname === '/dosya') return dosyaVer(req, res, u.searchParams.get('p'));
+    if (u.pathname === '/api/sunucu-video' && req.method === 'GET') return mp4Akit(req, res, sunucuVideo(u.searchParams.get('yol')));
     if (u.pathname.startsWith('/api/')) return gonder(res, 200, await api(req, u));
     const rel = u.pathname === '/' ? 'index.html' : u.pathname.slice(1), f = path.resolve(ARAYUZ, rel);
     if (!icinde(f, ARAYUZ) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) return gonder(res, 404, 'yok', 'text/plain; charset=utf-8');
@@ -448,7 +483,7 @@ const sunucuYap = () => http.createServer(async (req, res) => {
   } catch (e) { gonder(res, e.kod || 400, { hata: e.message }); }
 });
 
-module.exports = { kanca, kuyrukOzet, instagram, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, ANAHTAR };
+module.exports = { kanca, kuyrukOzet, instagram, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
 if (require.main !== module) return;
 
   // ozellik: lets the home panel know this copy has the --dizi* flags
