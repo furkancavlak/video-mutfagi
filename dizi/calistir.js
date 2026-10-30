@@ -42,17 +42,19 @@ function kilitAl(kok, kanal) {
 }
 
 // ---- default collaborators, resolved lazily so missing modules (later tasks) only skip a step
-async function varsayilanSonucAl(mediaId, hesap, kelimeler) {
-  const P = require('../instagram/paylas');
+// factory so tests can pass a fake paylas module: returns {metrik, yorum_devam}; yorum_devam = comments containing a keyword (tr-lowercase)
+const sonucAlYap = P => async (mediaId, hesap, kelimeler) => {
   const metrik = await P.sonuc(mediaId, hesap);
   let yorum_devam = 0;
   const a = P.readAyar(hesap);
   if (a && kelimeler && kelimeler.length) {
     const j = await P.graph('GET', `/${mediaId}/comments`, { fields: 'text', access_token: a.token });
-    yorum_devam = (j.data || []).filter(c => { const t = String(c.text || '').toLocaleLowerCase('tr'); return kelimeler.some(k => t.includes(String(k).toLocaleLowerCase('tr'))); }).length;
+    const kl = kelimeler.map(k => String(k).toLocaleLowerCase('tr'));
+    yorum_devam = (j.data || []).filter(c => { const t = String(c.text || '').toLocaleLowerCase('tr'); return kl.some(k => t.includes(k)); }).length;
   }
   return { metrik, yorum_devam };
-}
+};
+const varsayilanSonucAl = (...a) => sonucAlYap(require('../instagram/paylas'))(...a);
 function varsayilanYeniDizi() {
   const kaynak = require('../dizi/kaynak'), bol = require('../dizi/bol');   // throws MODULE_NOT_FOUND until Tasks 4-5 exist
   let aday = null;
@@ -158,10 +160,20 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
 
     // 3. fill the day
     const bugun = gunIst(simdi);
-    const isler = [...kuyruk.bekleyen, ...kuyruk.paylasilan].filter(j => hesapAd(j.hesap) === hesapAd(hesap) && gunIst(j.paylasildi || j.ne_zaman) === bugun);
     const due = uretilecekler(diziler);
+    // count by episode state (produced but waiting for a slot/approval still fills today) plus unlinked queue jobs dated today
+    const sayilan = new Set(due.map(u => `${u.id}:${u.n}`)), videolar = new Set();
+    for (const d of diziler) for (const b of d.bolumler || []) {
+      if (b.video) videolar.add(b.video);
+      if (['sirada', 'onay-bekliyor', 'uretimde'].includes(b.durum) || (['yayinda', 'olculdu'].includes(b.durum) && b.paylasildi && gunIst(b.paylasildi) === bugun)) sayilan.add(`${d.id}:${b.n}`);
+    }
+    for (const j of [...kuyruk.bekleyen, ...kuyruk.paylasilan]) {
+      const t = j.paylasildi || j.ne_zaman;
+      if (!t || isNaN(new Date(t)) || hesapAd(j.hesap) !== hesapAd(hesap) || (j.video && videolar.has(j.video))) continue;
+      if (gunIst(t) === bugun) sayilan.add('job:' + j.id);
+    }
     const hedef = ayar.onay_donemi ? ayar.onay_gunluk : ayar.gunluk_hedef;
-    let sayi = isler.length + due.length, aktif = diziler.filter(d => d.durum === 'aktif').length;
+    let sayi = sayilan.size, aktif = diziler.filter(d => d.durum === 'aktif').length;
     const eksik = Math.max(0, Math.min((hedef || 0) - sayi, MAX_AKTIF - aktif));
     if (kuru) { sonuc.yeniler = eksik; if (eksik) notlar.push(`yeni dizi planlanan: ${eksik}`); }
     else if (eksik) {
@@ -188,7 +200,9 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       const d = diziler.find(x => x.id === u.id), b = bul(d, u.n);
       try {
         const r = await uretBolum(ctx, d, u.n, { onayGerekli: !!ayar.onay_donemi, kok });
-        if (r && r.durum && b.durum === 'metin') b.durum = r.durum === 'butce-bekliyor' ? 'uretimde' : r.durum;
+        // uretBolum contract: returns {durum, dir?, mp4?}; the state is written whatever the episode's current one
+        if (r && r.durum) b.durum = r.durum === 'butce-bekliyor' ? 'uretimde' : r.durum;
+        if (r && (r.dir || r.mp4) && !b.video) b.video = r.dir || r.mp4;
         if (r && r.durum === 'butce-bekliyor') notlar.push(`${u.id} bölüm ${u.n}: bütçe bekliyor`);
       } catch (e) { notlar.push(`${u.id} bölüm ${u.n}: üretim hatası: ${e.message}`); }
       kaydetSon();
@@ -197,7 +211,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
   } finally { kilit.birak(); }
 }
 
-module.exports = { calistir, uretilecekler, senkronla };
+module.exports = { calistir, sonucAlYap, uretilecekler, senkronla };
 
 if (require.main === module) {
   const kanal = process.argv[2], kuru = process.argv.includes('--kuru');

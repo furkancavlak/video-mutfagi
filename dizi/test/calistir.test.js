@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs'), path = require('path'), os = require('os');
-const { calistir } = require('../calistir');
+const { calistir, sonucAlYap } = require('../calistir');
 const { yukle, kaydet } = require('../dizi');
 
 const SIMDI = new Date('2026-10-30T12:00:00Z');
@@ -102,4 +102,43 @@ test('devam on episode 1 makes episode 2 due; kuru writes nothing', async () => 
   const r = await calistir(ctx({ gunluk_hedef: 1 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({ metrik: { views: 500 } }), uretBolum: uret, yeniDizi: async () => null });
   assert.deepStrictEqual(r.kararlar, [{ id: 'a', n: 1, karar: 'devam' }]);
   assert.deepStrictEqual(uret.calls, ['a:2']);
+});
+
+test('repeat run after production does not create more series', async () => {
+  const k = kok();
+  let n = 0;
+  const yeniDizi = async () => { n++; return { id: 'y' + n, kanal: 'k', durum: 'aktif', bolumler: [bolum(1), bolum(2), bolum(3)] }; };
+  const uret = async (cx, d, i) => ({ durum: 'onay-bekliyor', dir: 'videolar/' + d.id });
+  const opt = { simdi: SIMDI, kok: k, uretBolum: uret, yeniDizi };
+  await calistir(ctx({ onay_donemi: true, onay_gunluk: 2 }), opt);
+  assert.strictEqual(n, 2);
+  const r = await calistir(ctx({ onay_donemi: true, onay_gunluk: 2 }), opt);
+  assert.strictEqual(n, 2);
+  assert.strictEqual(r.yeniler, 0);
+  assert.deepStrictEqual(r.uretilecek, []);
+  assert.strictEqual(yukle(k, 'k').diziler[0].bolumler[0].video, 'videolar/y1');
+});
+
+test('stalled uretimde episode: durum written back, budget wait keeps uretimde', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [{ id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'uretimde' })] }] });
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, uretBolum: async () => ({ durum: 'sirada', mp4: 'a.mp4' }), yeniDizi: async () => null });
+  const b = yukle(k, 'k').diziler[0].bolumler[0];
+  assert.strictEqual(b.durum, 'sirada');
+  assert.strictEqual(b.video, 'a.mp4');
+});
+
+test('queue job without any date does not crash the run', async () => {
+  const k = kok();
+  is(k, 'bekleyen', 'j1', { video: null, hesap: 'dur' });
+  await calistir(ctx({ gunluk_hedef: 1 }), { simdi: SIMDI, kok: k, uretBolum: fakeUret(), yeniDizi: async () => null });
+});
+
+test('default sonucAl counts continue-keyword comments (tr lowercase)', async () => {
+  const yorumlar = ['Devamı ne zaman?', 'harika', '2. BÖLÜM lütfen'];
+  const P = (ayar) => ({ sonuc: async () => ({ views: 5 }), readAyar: () => ayar, graph: async () => ({ data: yorumlar.map(text => ({ text })) }) });
+  const kel = ['devam', 'bölüm'];
+  assert.deepStrictEqual(await sonucAlYap(P({ token: 't' }))('M', 'h', kel), { metrik: { views: 5 }, yorum_devam: 2 });
+  assert.strictEqual((await sonucAlYap(P({ token: 't' }))('M', 'h', [])).yorum_devam, 0);
+  assert.strictEqual((await sonucAlYap(P(null))('M', 'h', kel)).yorum_devam, 0);
 });
