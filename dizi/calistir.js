@@ -84,6 +84,15 @@ function uretilecekler(diziler) {
   return out.sort((a, b) => a._t - b._t).map(({ id, n }) => ({ id, n }));
 }
 
+// a waiting or posted job for this video (posted wins); failed/cancelled ones are never adopted
+const isBul = (kuyruk, video) => kuyruk.paylasilan.find(j => j.video === video) || kuyruk.bekleyen.find(j => j.video === video) || null;
+function benimse(b, j) {
+  Object.assign(b, { video: j.video, kuyruk_id: j.id });
+  delete b.bekleme;
+  if (j.paylasildi) { Object.assign(b, { durum: 'yayinda', paylasildi: j.paylasildi }); if (j.media_id) b.media_id = j.media_id; if (j.link) b.link = j.link; }
+  else b.durum = j.onay_gerekli ? 'onay-bekliyor' : 'sirada';
+}
+
 function senkronla(diziler, kuyruk, notlar) {
   const idx = {};
   for (const k of ['iptal', 'hatali', 'bekleyen', 'paylasilan']) for (const j of kuyruk[k]) if (j.video) idx[j.video] = { k, j };   // later wins: paylasilan > hatali
@@ -199,6 +208,9 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     }
     if (uretBolum) for (const u of liste) {
       const d = diziler.find(x => x.id === u.id), b = bul(d, u.n);
+      // the episode's video folder already has a waiting or posted job (e.g. a run died after queueing): adopt it
+      const j = isBul(kuyrukOku(kok), `videolar/${ctx.kanal}-${d.id}-b${u.n}`);
+      if (j) { benimse(b, j); notlar.push(`${u.id} bölüm ${u.n}: kuyrukta işi var (${j.id}), yeniden üretilmedi`); kaydetSon(); continue; }
       try {
         const r = await uretBolum(ctx, d, u.n, { onayGerekli: !!ayar.onay_donemi, kok });
         // uretBolum contract: returns {durum, dir?, mp4?}; the state is written whatever the episode's current one

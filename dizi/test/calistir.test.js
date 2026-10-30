@@ -241,3 +241,28 @@ test('measurement that keeps failing past bekle_saat + 72 h goes to kontrol_et w
   assert.strictEqual(b.durum, 'yayinda');
   assert.strictEqual(c.durum, 'kontrol_et'); assert.match(c.karar_neden, /media_id/);
 });
+
+test('an existing queue job for the episode video is adopted, never produced again', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [
+    { id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'uretimde' }), bolum(2), bolum(3)] },
+    { id: 'b', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'uretimde', bekleme: 'butce' }), bolum(2), bolum(3)] },
+    { id: 'c', kanal: 'k', durum: 'aktif', bolumler: [bolum(1), bolum(2), bolum(3)] }] });
+  is(k, 'bekleyen', 'j-a', { video: 'videolar/k-a-b1', mp4: 'm', onay_gerekli: true, hesap: 'dur', ne_zaman: SIMDI.toISOString() });
+  is(k, 'paylasilan', 'j-b', { video: 'videolar/k-b-b1', mp4: 'm', hesap: 'dur', paylasildi: saatOnce(2), media_id: 'MB', link: 'LB' });
+  is(k, 'hatali', 'j-c', { video: 'videolar/k-c-b1', mp4: 'm', hesap: 'dur', son_hata: 'x' });   // a failed job is not adopted
+  const uret = fakeUret();
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: uret, yeniDizi: async () => null });
+  assert.deepStrictEqual(uret.calls, ['c:1']);
+  const [a, b] = yukle(k, 'k').diziler.map(d => d.bolumler[0]);
+  assert.deepStrictEqual([a.durum, a.video, a.kuyruk_id], ['onay-bekliyor', 'videolar/k-a-b1', 'j-a']);
+  assert.deepStrictEqual([b.durum, b.video, b.kuyruk_id, b.media_id, b.paylasildi, 'bekleme' in b], ['yayinda', 'videolar/k-b-b1', 'j-b', 'MB', saatOnce(2), false]);
+  // an approved waiting job means the episode is sirada
+  const k2 = kok();
+  kaydet(k2, 'k', { diziler: [{ id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1), bolum(2), bolum(3)] }] });
+  is(k2, 'bekleyen', 'j-a', { video: 'videolar/k-a-b1', mp4: 'm', onay_gerekli: false, hesap: 'dur', ne_zaman: SIMDI.toISOString() });
+  const u2 = fakeUret();
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k2, sonucAl: async () => ({}), uretBolum: u2, yeniDizi: async () => null });
+  assert.deepStrictEqual(u2.calls, []);
+  assert.strictEqual(yukle(k2, 'k').diziler[0].bolumler[0].durum, 'sirada');
+});

@@ -225,3 +225,21 @@ test('kuyrugaYaz: hesap only when given; the oxygbio job shape is unchanged', ()
   assert.strictEqual(b.kaynak, 'dizi');
   assert.strictEqual(b.onay_gerekli, true);
 });
+
+test('kuyrugaYaz: a waiting or posted job with the same video is reused, no second job', () => {
+  const kok = tmp('dizi-ub-cift-');
+  const ilk = U.kuyrugaYaz({ video: 'videolar/k-a-b1', mp4: 'a.mp4', aciklama: 'x', onayGerekli: true, hesap: 'h', kaynak: 'dizi' }, kok);
+  const ikinci = U.kuyrugaYaz({ video: 'videolar/k-a-b1', mp4: 'a.mp4', aciklama: 'x', onayGerekli: true, hesap: 'h', kaynak: 'dizi' }, kok);
+  assert.strictEqual(ikinci, ilk);
+  assert.strictEqual(kuyrukDosyalari(kok).length, 1);
+  // posted: still no new job
+  fs.mkdirSync(path.join(kok, 'kuyruk', 'paylasilan'), { recursive: true });
+  fs.renameSync(ilk, path.join(kok, 'kuyruk', 'paylasilan', path.basename(ilk)));
+  U.kuyrugaYaz({ video: 'videolar/k-a-b1', mp4: 'a.mp4', aciklama: 'x', onayGerekli: true }, kok);
+  assert.strictEqual(kuyrukDosyalari(kok).length, 0);
+  // a failed (hatali) job does not block a new one
+  fs.mkdirSync(path.join(kok, 'kuyruk', 'hatali'), { recursive: true });
+  fs.writeFileSync(path.join(kok, 'kuyruk', 'hatali', 'h1.json'), JSON.stringify({ video: 'videolar/k-x-b1' }));
+  U.kuyrugaYaz({ video: 'videolar/k-x-b1', mp4: 'x.mp4', aciklama: 'x', onayGerekli: true }, kok);
+  assert.strictEqual(kuyrukDosyalari(kok).length, 1);
+});

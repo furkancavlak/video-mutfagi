@@ -514,8 +514,21 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
   }
 }
 
-// Posting queue contract: kuyruk/bekleyen/<YYYYMMDD-HHMM>-<video-adi>.json
+// a waiting or posted job for this video folder (a failed or cancelled one does not count: a retry needs a new job)
+function kuyruktaVar(video, kok = O.KOK) {
+  if (!video) return null;
+  for (const k of ['bekleyen', 'paylasilan']) {
+    const d = path.join(kok, 'kuyruk', k);
+    let ad = []; try { ad = fs.readdirSync(d).filter(f => f.endsWith('.json')); } catch (e) { }
+    for (const f of ad) { try { if (O.okuJson(path.join(d, f)).video === video) return path.join(d, f); } catch (e) { } }
+  }
+  return null;
+}
+// Posting queue contract: kuyruk/bekleyen/<YYYYMMDD-HHMM>-<video-adi>.json. A rerun of a finished video never adds a
+// second job: the existing waiting or posted one is returned instead.
 function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap = null, kaynak = 'konu-radari' }, kok = O.KOK) {
+  const var_ = kuyruktaVar(video, kok);
+  if (var_) return var_;
   const d = path.join(kok, 'kuyruk', 'bekleyen');
   fs.mkdirSync(d, { recursive: true });
   const f = path.join(d, `${O.damga()}-${path.basename(video)}.json`);
@@ -523,4 +536,4 @@ function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap =
   return f;
 }
 
-module.exports = { uret, kodCikar, sureAyari, kuyrugaYaz, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, kodCikar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
