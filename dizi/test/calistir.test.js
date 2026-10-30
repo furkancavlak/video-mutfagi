@@ -83,7 +83,7 @@ test('a second concurrent run reports kilit and does nothing', async () => {
 
 test('episode waiting more than 72 h past the mark escalates to kontrol_et', async () => {
   const k = kok();
-  kaydet(k, 'k', { diziler: [{ id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'yayinda', video: 'v', paylasildi: saatOnce(100), media_id: 'M' })] }] });
+  kaydet(k, 'k', { diziler: [{ id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'yayinda', video: 'v', paylasildi: saatOnce(100), media_id: 'M' }), bolum(2), bolum(3)] }] });
   await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({ metrik: { views: null } }), uretBolum: fakeUret(), yeniDizi: async () => null });
   assert.strictEqual(yukle(k, 'k').diziler[0].bolumler[0].durum, 'kontrol_et');
 });
@@ -286,4 +286,41 @@ test('rejected stories are recorded in reddedilen.json and skipped later; source
   const veri = yukle(k, 'k'); veri.diziler.forEach(d => { d.durum = 'bitti'; d.bolumler.forEach(b => { b.durum = 'olculdu'; }); }); kaydet(k, 'k', veri);
   await calistir(ctx({ gunluk_hedef: 1 }), { simdi: new Date(SIMDI.getTime() + 864e5), kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi: yeniDiziYap({ kaynak: kaynak([{ id: 'eksi-1', tur: 'eksi', puan: 900 }, { id: 'reddit-3', tur: 'reddit', puan: 5 }]), bol }) });
   assert.deepStrictEqual(bolunen, ['reddit-3']);
+});
+
+test('the measured last episode finishes the series as bitti, whatever the decision', async () => {
+  const k = kok();
+  const ep = karar => ({ durum: 'aktif', kanal: 'k', bolumler: [bolum(1, { durum: 'olculdu', karar: 'devam', metrik: { views: 3000 } }), bolum(2, { durum: 'olculdu', karar: 'devam', metrik: { views: 2000 } }), bolum(3, { durum: 'yayinda', video: 'v' + karar, paylasildi: saatOnce(25), media_id: 'M' + karar })] });
+  // past data, so that a weak episode 3 is cut
+  const g = Array.from({ length: 7 }, (_, i) => ({ id: 'g' + i, kanal: 'k', durum: 'bitti', bolumler: [bolum(1, { durum: 'olculdu', metrik: { views: 3000 } }), bolum(2, { durum: 'olculdu', metrik: { views: 2000 } }), bolum(3, { durum: 'olculdu', metrik: { views: 1800 } })] }));
+  kaydet(k, 'k', { diziler: [...g, { id: 'kes', ...ep('kes') }, { id: 'devam', ...ep('devam') }] });
+  const r = await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async id => ({ metrik: { views: id === 'Mkes' ? 100 : 1900 }, yorum_devam: 0 }), uretBolum: fakeUret(), yeniDizi: async () => null });
+  const v = yukle(k, 'k').diziler;
+  assert.deepStrictEqual(r.kararlar.map(x => [x.id, x.karar]).sort(), [['devam', 'devam'], ['kes', 'kes']]);
+  for (const id of ['kes', 'devam']) { const d = v.find(x => x.id === id); assert.deepStrictEqual([d.durum, d.bolumler[2].durum], ['bitti', 'olculdu'], id); }
+});
+
+test('ep 3 kontrol_et with a media_id: Tekrar dene, then the next measurement finishes the series', async () => {
+  const { tekrarDene } = require('../dizi');
+  const k = kok();
+  const d = { id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'olculdu', karar: 'devam', metrik: { views: 3000 } }), bolum(2, { durum: 'olculdu', karar: 'devam', metrik: { views: 2000 } }), bolum(3, { durum: 'kontrol_et', video: 'v3', paylasildi: saatOnce(100), media_id: 'M3', karar_neden: 'ölçülemiyor' })] };
+  tekrarDene(d, 3);
+  kaydet(k, 'k', { diziler: [d] });
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({ metrik: { views: 1500 } }), uretBolum: fakeUret(), yeniDizi: async () => null });
+  let x = yukle(k, 'k').diziler[0];
+  assert.deepStrictEqual([x.durum, x.bolumler[2].durum, x.bolumler[2].metrik.views], ['bitti', 'olculdu', 1500]);
+  // views still missing long after the mark: the last episode does not go back to kontrol_et, the series is done
+  const k2 = kok();
+  const d2 = JSON.parse(JSON.stringify(d)); d2.bolumler[2].durum = 'yayinda'; delete d2.bolumler[2].metrik;
+  kaydet(k2, 'k', { diziler: [d2] });
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k2, sonucAl: async () => ({ metrik: { views: null } }), uretBolum: fakeUret(), yeniDizi: async () => null });
+  x = yukle(k2, 'k').diziler[0];
+  assert.deepStrictEqual([x.durum, x.bolumler[2].durum], ['bitti', 'olculdu']);
+});
+
+test('a stored series whose last episode is already measured is marked bitti (old data, no dead end)', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [{ id: 'a', kanal: 'k', durum: 'kesildi', bolumler: [bolum(1, { durum: 'olculdu' }), bolum(2, { durum: 'olculdu' }), bolum(3, { durum: 'olculdu', karar: 'kes' })] }] });
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi: async () => null });
+  assert.strictEqual(yukle(k, 'k').diziler[0].durum, 'bitti');
 });

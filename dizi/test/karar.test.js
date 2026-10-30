@@ -100,7 +100,7 @@ test('refusals: episode not published, atlandi, the last episode, a finished ser
   const k = seri(['olculdu', 'atlandi', 'atlandi']); k.durum = 'kesildi';
   assert.match(kararHata(k, 2, 'kes'), /yayında değil/);
   assert.match(kararHata(k, 1, 'kes'), /zaten kesilmiş/);
-  assert.match(kararHata(seri(['olculdu', 'olculdu', 'yayinda']), 3, 'kes'), /Son bölüm/);
+  assert.match(kararHata(seri(['olculdu', 'olculdu', 'yayinda']), 3, 'devam'), /Son bölüm/);
   const b = seri(['olculdu', 'olculdu', 'olculdu']); b.durum = 'bitti';
   assert.match(kararHata(b, 1, 'devam'), /bitti/);
   assert.match(kararHata(seri(['olculdu', 'metin', 'metin']), 1, 'devam'), /zaten devam/);
@@ -154,4 +154,62 @@ test('kilitAl: a live pid on this host holds the lock however old; a dead pid or
   assert.match(kilitAl(k, 'k').mesaj, /kilit/, 'a fresh lock from another host is held');
   yaz({ pid: olu, host: 'baska-makine', zaman: eski });
   const b = kilitAl(k, 'k'); assert.ok(b.birak, 'an old lock from another host is stale'); b.birak();
+});
+
+// ---- end of a series: no dead ends
+test('Kes on the last episode finishes the series (bitti), yayinda or kontrol_et', () => {
+  const a = seri(['olculdu', 'olculdu', 'yayinda']);
+  assert.strictEqual(kararHata(a, 3, 'kes'), null);
+  kararUygula(a, 3, 'kes', 'yeter');
+  assert.deepStrictEqual([a.durum, a.bolumler[2].karar, a.bolumler[2].elle], ['bitti', 'kes', true]);
+  const b = seri(['olculdu', 'olculdu', 'kontrol_et'], { 3: { media_id: 'M3' } });
+  assert.strictEqual(kararHata(b, 3, 'kes'), null); assert.strictEqual(tekrarHata(b, 3), null);
+  kararUygula(b, 3, 'kes', 'x');
+  assert.strictEqual(b.durum, 'bitti'); assert.ok(!b.bolumler[2].elle);
+  assert.match(tekrarHata(b, 3), /bitti/);
+});
+
+test('a series cut while an episode was kontrol_et comes back: Devam reactivates it, then Tekrar dene works', () => {
+  for (const n of [1, 3]) {
+    const durumlar = n === 1 ? ['kontrol_et', 'metin', 'metin'] : ['olculdu', 'olculdu', 'kontrol_et'];
+    const s = seri(durumlar, { [n]: { media_id: 'M' } });
+    if (n === 1) kararUygula(s, 1, 'kes', 'x'); else s.durum = 'kesildi';
+    assert.strictEqual(s.durum, 'kesildi');
+    assert.match(tekrarHata(s, n), /kesilmiş/);
+    assert.strictEqual(kararHata(s, n, 'devam'), null, 'devam is offered on the cut series, ep ' + n);
+    kararUygula(s, n, 'devam', 'geri');
+    assert.strictEqual(s.durum, 'aktif'); assert.ok(!s.bolumler[n - 1].elle, 'no decision stored on a kontrol_et episode');
+    if (n === 1) assert.deepStrictEqual(s.bolumler.map(b => b.durum), ['kontrol_et', 'metin', 'metin']);
+    tekrarDene(s, n);
+    assert.strictEqual(s.bolumler[n - 1].durum, 'yayinda');
+  }
+  assert.match(kararHata(seri(['kontrol_et', 'metin', 'metin']), 1, 'devam'), /yalnız Kes/, 'an active series still gets Kes / Tekrar dene only');
+});
+
+test('izin flags: a non-finished series that waits for a human always has a button', () => {
+  const D = ['yayinda', 'olculdu', 'kontrol_et'], SONRA = ['metin', 'atlandi', 'uretimde', 'onay-bekliyor', 'sirada', 'kontrol_et'];
+  const seriler = [];
+  for (let k = 1; k <= 3; k++) for (const son of D) for (const media of [true, false]) for (const durum of ['aktif', 'kesildi']) {
+    const bas = [...Array(k - 1).fill('olculdu'), son];
+    const kuyruklar = k === 3 ? [[]] : SONRA.map(x => [x, ...Array(2 - k).fill(x === 'atlandi' ? 'atlandi' : 'metin')]);
+    for (const geri of kuyruklar) seriler.push({ s: { ...seri([...bas, ...geri], { [k]: media ? { media_id: 'M' } : {} }), durum }, k });
+  }
+  // the scheduler moves these on by itself
+  const otomatik = (s, k) => {
+    const b = s.bolumler;
+    if (s.durum !== 'aktif') return false;
+    if (b.some(x => ['uretimde', 'onay-bekliyor', 'sirada'].includes(x.durum))) return true;
+    return b[k - 1].durum === 'olculdu' && b[k] && b[k].durum === 'metin';
+  };
+  let bakilan = 0;
+  for (const { s, k } of seriler) {
+    if (s.bolumler[s.bolumler.length - 1].durum === 'olculdu') continue;     // finished: the scheduler marks it bitti
+    if (otomatik(s, k)) continue;
+    // unreachable: a series is only cut while its next episode is still text
+    if (s.durum === 'kesildi' && s.bolumler.some(x => ['uretimde', 'onay-bekliyor', 'sirada'].includes(x.durum))) continue;
+    bakilan++;
+    const var_ = s.bolumler.some(b => !kararHata(s, b.n, 'devam') || !kararHata(s, b.n, 'kes') || !tekrarHata(s, b.n));
+    assert.ok(var_, JSON.stringify([s.durum, ...s.bolumler.map(b => b.durum + (b.media_id ? '+m' : ''))]));
+  }
+  assert.ok(bakilan > 20, String(bakilan));
 });

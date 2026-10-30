@@ -161,3 +161,18 @@ test('hesapTemiz trims before and after the @: " @Foo " becomes foo', () => {
   yaz('kanal/kanal_h/konu.json', {}); yaz('kanal/kanal_h/kimlik.json', { hesap: ' @Foo ' });
   assert.equal(P.ekleHesap({ kanal: 'kanal_h' }), 'foo');
 });
+
+test('end of a series through the routes: Kes on ep 3 = bitti; a cut kontrol_et series: Devam, then Tekrar dene', async () => {
+  yaz(DZ, { diziler: [
+    { id: 'e1', kanal: 'kanal_a', baslik: 'x', durum: 'aktif', bolumler: [b(1, 'olculdu'), b(2, 'olculdu'), b(3, 'kontrol_et', { media_id: 'M3' })] },
+    { id: 'e2', kanal: 'kanal_a', baslik: 'y', durum: 'kesildi', bolumler: [b(1, 'kontrol_et', { media_id: 'M1' }), b(2, 'atlandi'), b(3, 'atlandi')] }] });
+  let j = (await istek('GET', '/api/diziler?kanal=kanal_a')).j;
+  assert.deepEqual(j.diziler[0].bolumler[2].izin, { devam: false, kes: true, tekrar: true });
+  assert.deepEqual(j.diziler[1].bolumler[0].izin, { devam: true, kes: false, tekrar: false });
+  assert.equal((await karar('e1', 3, 'kes')).kod, 200);
+  assert.equal(diziOku('e1').durum, 'bitti');
+  assert.equal((await karar('e2', 1, 'devam')).kod, 200);
+  assert.deepEqual(durumlar('e2'), ['aktif', 'kontrol_et', 'metin', 'metin']);
+  assert.equal((await istek('POST', '/api/dizi/tekrar', { kanal: 'kanal_a', id: 'e2', n: 1 })).kod, 200);
+  assert.equal(diziOku('e2').bolumler[0].durum, 'yayinda');
+});

@@ -142,8 +142,12 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     const diziler = veri.diziler, kuyruk = kuyrukOku(kok);
     const kaydetSon = () => { if (!kuru) kaydet(kok, ctx.kanal, veri); };
 
-    // 1. sync
+    // 1. sync; a series whose last episode is already measured (older data) is finished
     senkronla(diziler, kuyruk, notlar);
+    for (const d of diziler) {
+      const b = d.bolumler || [], son = b[b.length - 1];
+      if (d.durum !== 'bitti' && son && son.durum === 'olculdu') { d.durum = 'bitti'; notlar.push(`${d.id}: son bölüm ölçülmüş, dizi bitti olarak işaretlendi`); }
+    }
     kaydetSon();
 
     // 2. measure + decide
@@ -168,18 +172,23 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
           b.metrik = r.metrik || r; b.yorum_devam = r.yorum_devam ?? 0; sonuc.olculen++;
           if (r.not) notlar.push(`${d.id} bölüm ${b.n}: ${r.not}`);
         } catch (e) { olcemedi(`ölçüm hatası: ${e.message}`); continue; }
-        const k = kararVer(d, b.n, diziler, ayar, simdi);
+        const k = kararVer(d, b.n, diziler, ayar, simdi), son = b.n >= d.bolumler.length;
         b.karar = k.karar; b.karar_neden = k.neden;
         if (k.karar === 'bekle') {
-          if (gecen > ayar.bekle_saat + ESKALASYON_SAAT) { b.durum = 'kontrol_et'; b.karar_neden = `${ESKALASYON_SAAT} saatten uzun süredir bekliyor: ${k.neden}`; notlar.push(`${d.id} bölüm ${b.n}: bekleme sınırı aşıldı, kontrol_et`); }
+          const asildi = gecen > ayar.bekle_saat + ESKALASYON_SAAT;
+          // nothing waits on the last episode's decision: past the limit it is closed as measured, never kontrol_et
+          if (asildi && son) { b.durum = 'olculdu'; d.durum = 'bitti'; b.karar_neden = `son bölüm, karar verilemeden kapandı: ${k.neden}`; notlar.push(`${d.id}: son bölüm ölçüldü (${k.neden}), dizi bitti`); continue; }
+          if (asildi) { b.durum = 'kontrol_et'; b.karar_neden = `${ESKALASYON_SAAT} saatten uzun süredir bekliyor: ${k.neden}`; notlar.push(`${d.id} bölüm ${b.n}: bekleme sınırı aşıldı, kontrol_et`); }
           continue;
         }
         b.durum = 'olculdu';
         sonuc.kararlar.push({ id: d.id, n: b.n, karar: k.karar });
-        if (k.karar === 'kes') {
+        // the measured last episode ends the series whatever the decision
+        if (son) d.durum = 'bitti';
+        else if (k.karar === 'kes') {
           d.durum = 'kesildi';
           for (const x of d.bolumler) if (x.n > b.n && !['yayinda', 'olculdu'].includes(x.durum)) x.durum = 'atlandi';
-        } else if (b.n >= 3) d.durum = 'bitti';
+        }
       }
     }
     kaydetSon();

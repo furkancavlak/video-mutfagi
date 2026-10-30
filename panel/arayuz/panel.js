@@ -218,7 +218,7 @@ function dzBolum(d, b) {
       ${b.mp4 ? `<button class="dugme ince" ${dzM() === 'sunucu' ? 'data-sizle' : 'data-izle'}="${esc(b.mp4)}">Videoyu aç</button>` : ''}
       ${guvenli(b.link) ? `<a class="dugme ince" href="${esc(guvenli(b.link))}" target="_blank" rel="noopener">Reels</a>` : ''}</div></div>`;
 }
-const DZ_DURUM = { aktif: ['yesil', 'sürüyor'], bitti: ['', 'bitti'], kesildi: ['kirmizi', 'kesildi'] };
+const DZ_DURUM = { aktif: ['yesil', 'sürüyor'], bitti: ['', 'tamamlandı'], kesildi: ['kirmizi', 'kesildi'] };
 function dizilerCiz() {
   const dzSv = !!O.sunucu && dzSunucuVar();
   $('#dz-makine').innerHTML = ['yerel', ...(dzSv ? ['sunucu'] : [])].map(m => `<button data-dz-makine="${m}" class="${m === dzM() ? 'on' : ''}">${esc(makineAd(m))}</button>`).join('');
@@ -281,9 +281,9 @@ async function dzTekrar(d) {
   catch (err) { bildir(err.message, true); }
 }
 async function dzKarar(d) {
-  const kes = d.dkarar === 'kes';
-  if (kes && !confirm('Bu hikâyenin devamı kesilsin mi? Sonraki bölümler üretilmez.')) return;
-  try { await api('dizi/karar', { kanal, makine: dzM(), id: d.did, n: +d.dn, karar: d.dkarar, neden: kes ? 'Furkan kesti' : 'Furkan devam ettirdi' }); bildir(kes ? 'Kesildi' : 'Devam edecek'); await dizilerYukle(); }
+  const kes = d.dkarar === 'kes', dz = DZ && DZ.diziler.find(x => x.id === d.did), son = dz && +d.dn >= dz.bolumler.length;   // Kes on the last episode just closes the series
+  if (kes && !confirm(son ? 'Bu hikâye tamamlandı olarak kapatılsın mı? Son bölüm artık ölçülmez.' : 'Bu hikâyenin devamı kesilsin mi? Sonraki bölümler üretilmez.')) return;
+  try { await api('dizi/karar', { kanal, makine: dzM(), id: d.did, n: +d.dn, karar: d.dkarar, neden: kes ? 'Furkan kesti' : 'Furkan devam ettirdi' }); bildir(kes ? (son ? 'Hikâye tamamlandı' : 'Kesildi') : 'Devam edecek'); await dizilerYukle(); }
   catch (err) { bildir(err.message, true); }
 }
 

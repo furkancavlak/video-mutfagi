@@ -22,15 +22,19 @@ function elleKarar(dizi, n, karar, neden) {
 // ---- manual decisions (panel). The caller holds kilitAl. A decision must change something and stays overridable only
 // until the next episode has been produced.
 const sonrakiAcik = b => !b || b.durum === 'metin' || b.durum === 'atlandi' || (b.durum === 'uretimde' && !b.video);
+// The last episode takes Kes (the series is then bitti); Devam only to reactivate a cut series. A kontrol_et episode takes Kes or Tekrar dene; on a cut
+// series it also takes Devam, which only reactivates the series so Tekrar dene works again.
+const sonBolum = (d, n) => n >= (d.bolumler || []).length;
 function kararHata(d, n, karar) {
   const b = bul(d, n);
   if (!b) return `bölüm ${n} yok`;
   if (!['yayinda', 'olculdu', 'kontrol_et'].includes(b.durum)) return 'Bu bölüm henüz yayında değil; karar yayından sonra verilir';
   if (d.durum !== 'aktif' && d.durum !== 'kesildi') return 'Bu dizi bitti';
-  if (n >= (d.bolumler || []).length) return 'Son bölümden sonra devam edecek bölüm yok';
-  if (!sonrakiAcik(bul(d, n + 1))) return 'Sonraki bölüm üretime girdi; karar artık değiştirilemez';
-  if (b.durum === 'kontrol_et' && karar !== 'kes') return 'Kontrol bekleyen bölümde yalnız Kes ya da Tekrar dene var';
+  if (b.durum === 'kontrol_et' && karar === 'devam') return d.durum === 'kesildi' ? null : 'Kontrol bekleyen bölümde yalnız Kes ya da Tekrar dene var';
   if (karar === 'kes' && d.durum === 'kesildi') return 'Bu dizi zaten kesilmiş';
+  // devam on a cut series' last episode only reactivates it (it is measured, then bitti)
+  if (sonBolum(d, n)) return karar === 'kes' || d.durum === 'kesildi' ? null : 'Son bölümden sonra devam edecek bölüm yok';
+  if (!sonrakiAcik(bul(d, n + 1))) return 'Sonraki bölüm üretime girdi; karar artık değiştirilemez';
   if (karar === 'devam' && d.durum === 'aktif' && (b.durum === 'olculdu' || (b.elle && b.karar === 'devam'))) return 'Bu hikâye zaten devam edecek';
   return null;
 }
@@ -38,16 +42,19 @@ function tekrarHata(d, n) {
   const b = bul(d, n);
   if (!b) return `bölüm ${n} yok`;
   if (b.durum !== 'kontrol_et') return 'Yalnız kontrol bekleyen bölüm yeniden denenir';
-  if (d.durum !== 'aktif') return 'Dizi kesilmiş: önce devam ettir';
+  if (d.durum === 'kesildi') return 'Dizi kesilmiş: önce devam ettir';
+  if (d.durum !== 'aktif') return 'Bu dizi bitti';
   return null;
 }
-// applies the decision and its consequence on the series; kontrol_et + kes only cuts the series
+// applies the decision and its consequence on the series; on a kontrol_et episode no decision is stored (kes cuts or,
+// on the last episode, finishes the series; devam reactivates it)
 function kararUygula(d, n, karar, neden) {
   const e = kararHata(d, n, karar);
   if (e) throw new Error(e);
   const b = bul(d, n);
   if (b.durum !== 'kontrol_et') elleKarar(d, n, karar, neden);
-  if (karar === 'kes') { d.durum = 'kesildi'; for (const x of d.bolumler) if (x.n > n && x.durum === 'metin') x.durum = 'atlandi'; }
+  if (karar === 'kes' && sonBolum(d, n)) d.durum = 'bitti';
+  else if (karar === 'kes') { d.durum = 'kesildi'; for (const x of d.bolumler) if (x.n > n && x.durum === 'metin') x.durum = 'atlandi'; }
   else { d.durum = 'aktif'; for (const x of d.bolumler) if (x.n > n && x.durum === 'atlandi') x.durum = 'metin'; }
   return b;
 }
