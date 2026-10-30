@@ -16,6 +16,7 @@ const fs = require('fs'), path = require('path');
 const { spawnSync } = require('child_process');
 const O = require('./ortak');
 const LLM = require('./llm');
+const Kut = require('../uretim/kutuphane');
 const H = require('./havuz');
 const A = require('./otomasyon');
 const ESYA = require('../uretim/sablonlar/esya');
@@ -233,6 +234,17 @@ async function paralel(isler, n) {
   for (let i = 0; i < Math.max(1, n); i++) calisan.push(bir());
   await Promise.all(calisan);
 }
+// blind still review (adapted from ersinkoc/YoutubeStudio, with permission: packages/agents/src/review.ts assetGuess):
+// a reviewer who does not know the script says what a frame shows; a cheap text call compares that with what was being
+// said at that second. A key object or event it did not recognise is a heavy fault of that chunk.
+// the words heard around second t (a little before it: the frame shows what was just said)
+const anlarMetni = (Z, t) => Z.kelimeler.filter(k => k.a >= t - 4 && k.a <= t + .5).map(k => k.w).join(' ');
+const korSorunlari = eksikler => (Array.isArray(eksikler) ? eksikler : []).filter(x => x && x.beklenen && x.saniye != null && !isNaN(+x.saniye)).map(x => ({
+  saniye: +(+x.saniye).toFixed(1), agirlik: 'yuksek', kor: true,
+  sorun: `Metnin söylediği "${x.beklenen}" karede tanınmıyor; metni bilmeyen denetçi şunu gördü: ${x.gorulen || '(hiçbir şey)'}`,
+  duzeltme: `"${x.beklenen}" o an büyük, net ve tek bakışta tanınır biçimde görünsün`,
+}));
+
 // the channel's hard scene rules (gorsel_dil.kurallar), put at the top of the scene prompt
 const kesinKurallar = gd => (Array.isArray((gd || {}).kurallar) && gd.kurallar.length) ? gd.kurallar.map(k => '- ' + k).join('\n') : '- (kanalın ek kuralı yok)';
 
@@ -373,7 +385,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
         formul: md('dersler/FORMUL.md'), renkler: ctx.kimlik.renkler || {}, gorsel_dil: gdMetin, kurallar: kesinKurallar(gd),
         karakter: fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.',
         motor: basYorum(path.join(O.KOK, 'uretim', 'motor.js')), sure: Z.toplam.toFixed(1), marka: (Z.sting[0] || 0).toFixed(2),
-        ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'),
+        ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'), kutuphane: Kut.istemMetni(ctx.dir, video.dizi || null),
       };
       const satirListesi = p => video.satirlar.map((_, i) => satirMetni(i, P.length === 1 || p.satirlar.includes(i))).join('\n');
       const sureler = [];
@@ -410,26 +422,41 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
         const sayfalar = fs.readdirSync(kareDir).filter(f => /^contact-sheet.*\.jpg$/.test(f)).sort().map(f => path.join(kareDir, f));
         yaz(`Sahne kareleri kontrol ediliyor (${saniyeler.length} kare)…`);
         const t2 = Date.now();
-        let d;
+        // the scored review and the blind one (what is on the frame, without the script) run side by side
+        const denetimModeli = llm.model_denetim || llm.model_metin, sayfaListesi = sayfalar.map(f => path.resolve(f)).join(', ');
+        const korDenetim = async () => {
+          if (llm.kor_denetim === false) return [];
+          const k = await sor(LLM.istem('kare-kor', { sayfalar: sayfaListesi }), { is: 'kare-kor', resimler: sayfalar, model: denetimModeli, efor: 'low' });
+          const kareler = (k && Array.isArray(k.kareler) ? k.kareler : []).filter(x => x && x.saniye != null && !isNaN(+x.saniye));
+          if (!kareler.length) return [];
+          const m = await sor(LLM.istem('kare-karsilastir', { kareler: kareler.map(x => `- ${(+x.saniye).toFixed(1)} sn | söylenen: "${anlarMetni(Z, +x.saniye)}" | kör denetçinin gördüğü: ${x.goruyorum || '(boş)'}`).join('\n') }),
+            { is: 'kare-karsilastir', model: denetimModeli, efor: 'low' });
+          return korSorunlari(m && m.eksikler);
+        };
+        let d, kor = [];
         try {
-          d = await sor(LLM.istem('sahne-denetim', {
-            sayfalar: sayfalar.map(f => path.resolve(f)).join(', '), gorsel_dil: gdMetin,
-            satirlar: video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(1)}-${Z.satirlar[i].son.toFixed(1)} sn]: ${s.metin}`).join('\n'),
-          }), { is: 'sahne-denetim', resimler: sayfalar, model: llm.model_denetim || llm.model_metin, efor: llm.efor_sahne === 'low' ? 'low' : 'medium' });
+          [d, kor] = await Promise.all([
+            sor(LLM.istem('sahne-denetim', {
+              sayfalar: sayfaListesi, gorsel_dil: gdMetin,
+              satirlar: video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(1)}-${Z.satirlar[i].son.toFixed(1)} sn]: ${s.metin}`).join('\n'),
+            }), { is: 'sahne-denetim', resimler: sayfalar, model: denetimModeli, efor: llm.efor_sahne === 'low' ? 'low' : 'medium' }),
+            korDenetim().catch(e => { yaz('  Kör denetim yapılamadı: ' + e.message); return []; }),
+          ]);
         } catch (e) {
           // a text-only model cannot look at the stills: keep the attempt that ran, unreviewed, and say so
           if (!/image|resim|vision|görsel/i.test(e.message)) throw e;
           yaz('  Bu model resim göremiyor: sahne kontrolsüz kullanılıyor.');
           return { ok: true, tur: tur + 1, puan: null, kalan: ['- Sahne kontrol edilmedi: seçilen model resim göremiyor. Paylaşmadan önce videoyu baştan sona izle.'], sureler };
         }
-        Object.assign(olcum, { denetim_sn: Math.round((Date.now() - t2) / 1000), puan: d.puan });
+        Object.assign(olcum, { denetim_sn: Math.round((Date.now() - t2) / 1000), puan: d.puan, kor: kor.length });
         puan = d.puan;
-        const agir = (d.sorunlar || []).filter(x => x.agirlik !== 'dusuk');
+        // a key object the blind reviewer did not recognise is a heavy fault of that chunk
+        const agir = [...(d.sorunlar || []).filter(x => x.agirlik !== 'dusuk'), ...kor];
         const satir = x => `- ${x.saniye != null ? x.saniye + ' sn: ' : ''}${x.sorun} → ${x.duzeltme || ''}`;
         const kalan = agir.map(satir);
         olcum.agir = agir.length;
         if (!en || (+d.puan || 0) > en.puan || ((+d.puan || 0) === en.puan && agir.length < en.sorunlar.length)) en = { kod, puan: +d.puan || 0, sorunlar: kalan, tur: tur + 1 };
-        yaz(`  puan ${d.puan ?? '?'}/10, ağır sorun ${agir.length}`);
+        yaz(`  puan ${d.puan ?? '?'}/10, ağır sorun ${agir.length}${kor.length ? ` (kör denetimden ${kor.length})` : ""}`);
         if (!agir.length) return { ok: true, tur: tur + 1, puan, kalan: [], sureler };
         // only the chunks whose time window holds a heavy issue are written again
         sorunlar = sorunDagit(agir, P).map(l => l.map(satir));
@@ -513,6 +540,8 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       const r = await formulSahne();
       if (!r.ok) throw new Dur('insan', `Sahne kodu ${sahneAyari(llm).turlar} denemede de çalışmadı` + ' (kare alınamadı):\n' + r.sorunlar.join('\n') + `\nSon deneme: ${rel(path.join(dir, 'sahneler.js'))}. Düzelt ya da sil, sonra aynı komutla devam et.`);
       if (r.kalan.length) yaz(`Sahne en iyi denemeyle (tur ${r.tur}, puan ${r.puan}/10) kullanılıyor; kontrolün kalan notları (paylaşmadan önce bak):\n` + r.kalan.map(x => '  ' + x).join('\n'));
+      // the library characters this episode used (kit karakterler.json → bolumler)
+      try { Kut.kullanimEkle(ctx.dir, Kut.kullanilanlar(fs.readFileSync(path.join(dir, 'sahneler.js'), 'utf8'), Kut.liste(ctx.dir, video.dizi || null)), rel(dir)); } catch (e) { }
       isaretle('sahne', { tur: r.tur, puan: r.puan, kalan: r.kalan, turlar: r.sureler });
     }
     // stills-only runs (timing the scene stage on an existing voice) stop here: no render, no queue job
@@ -636,4 +665,4 @@ function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap =
   return f;
 }
 
-module.exports = { uret, isHesabi, kodCikar, sahneZamanAsimi, sahneAyari, parcala, parcaIstemi, birlestir, sorunDagit, paralel, kesinKurallar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, isHesabi, kodCikar, sahneZamanAsimi, anlarMetni, korSorunlari, sahneAyari, parcala, parcaIstemi, birlestir, sorunDagit, paralel, kesinKurallar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };

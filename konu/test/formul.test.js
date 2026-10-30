@@ -92,7 +92,7 @@ test('scene writing: own time limit (konu.json llm.sahne_zaman_asimi_dk, default
 test('scene prompts: channel rules (gorsel_dil.kurallar) and the four bans reach writer and reviewer', () => {
   const LLM = require('../llm');
   const gd = { cizgi: 'düz', kurallar: ['UYDURMA YAZI YOK: KURAL123'] };
-  const yaz = LLM.istem('sahne-yaz', { formul: '', renkler: {}, gorsel_dil: gd, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '', kurallar: U.kesinKurallar(gd), parca: '' });
+  const yaz = LLM.istem('sahne-yaz', { formul: '', renkler: {}, gorsel_dil: gd, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '', kurallar: U.kesinKurallar(gd), parca: '', kutuphane: '' });
   assert.match(yaz, /KURAL123/);
   assert.match(yaz, /`kurallar` varsa her madde kesindir/);
   for (const re of [/Dolgu sahne yok/, /Metinde geçmeyen slogan/, /tam opak/, /ince çizgi/]) assert.match(yaz, re);
@@ -169,7 +169,51 @@ test('kesinKurallar: channel rules as a list at the top of the scene prompt', ()
   assert.strictEqual(U.kesinKurallar({ kurallar: ['A', 'B'] }), '- A\n- B');
   assert.match(U.kesinKurallar({}), /ek kuralı yok/);
   const LLM = require('../llm');
-  const s = LLM.istem('sahne-yaz', { formul: '', renkler: {}, gorsel_dil: {}, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '', kurallar: '- KURAL9', parca: 'PARCA7' });
+  const s = LLM.istem('sahne-yaz', { formul: '', renkler: {}, gorsel_dil: {}, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '', kurallar: '- KURAL9', parca: 'PARCA7', kutuphane: 'KUTUP3' });
   assert.ok(s.indexOf('KURAL9') < s.indexOf('## Kurallar (uy)') && s.indexOf('PARCA7') < s.indexOf('## Motor'), 'hard rules and the chunk note come first');
   assert.match(s, /Havada asılı nesne yok/);
+});
+
+// ---- blind still review and character library (adapted from ersinkoc/YoutubeStudio, with permission)
+test('anlarMetni: the words heard just before a still; korSorunlari: every unrecognised key object is a heavy issue', () => {
+  const Z = { kelimeler: [{ w: 'arkasından', a: 60 }, { w: 'baktım', a: 61 }, { w: 'bir', a: 62.5 }, { w: 'arabayla', a: 63 }, { w: 'uzaklaşıyordu', a: 63.6 }, { w: 'sonra', a: 70 }] };
+  assert.strictEqual(U.anlarMetni(Z, 64), 'arkasından baktım bir arabayla uzaklaşıyordu');
+  const s = U.korSorunlari([{ saniye: '64.04', beklenen: 'uzaklaşan araba', gorulen: 'boş yol ve bir adam' }, { saniye: 5 }, null, { beklenen: 'x' }]);
+  assert.strictEqual(s.length, 1);
+  assert.deepStrictEqual([s[0].saniye, s[0].agirlik, s[0].kor], [64, 'yuksek', true]);
+  assert.match(s[0].sorun, /"uzaklaşan araba" karede tanınmıyor.*boş yol ve bir adam/);
+  assert.deepStrictEqual(U.korSorunlari(undefined), []);
+  // the blind prompts carry no script, the compare prompt does
+  const LLM = require('../llm');
+  assert.doesNotMatch(LLM.istem('kare-kor', { sayfalar: 'a.jpg' }), /söylenen/);
+  assert.match(LLM.istem('kare-karsilastir', { kareler: '- 64.0 sn | söylenen: "araba"' }), /"eksikler"/);
+});
+
+test('kutuphane: approved characters of the channel and of this story only, sandboxed, usage noted', () => {
+  const Kut = require(path.join(KOK, 'uretim', 'kutuphane'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kutuphane-')), kd = path.join(dir, 'karakterler');
+  fs.mkdirSync(kd);
+  fs.writeFileSync(path.join(kd, 'kiz.js'), "// Kız: the girl\n//   kutuphane.kiz({ x, y })\nmodule.exports = function ({ C }) { return o => `<g data-x=\"${o.x}\" fill=\"${C.ink}\"></g>`; };\n");
+  fs.writeFileSync(path.join(kd, 'kotu.js'), "module.exports = function () { return require('fs'); };\n");
+  fs.writeFileSync(path.join(kd, 'karakterler.json'), JSON.stringify({ karakterler: [
+    { id: 'anlatici', ad: 'Anlatıcı', gorunum: 'yeşil kapüşonlu', kullanim: 'karakter.adam({ x, y })', onay: true, bolumler: [] },
+    { id: 'kiz', ad: 'Kız', gorunum: 'kırmızı üst', dosya: 'kiz.js', dizi: 'd1', onay: true, bolumler: [] },
+    { id: 'taslak', ad: 'Taslak', dosya: 'kiz.js', onay: false },
+    { id: 'Kotu Id', ad: 'x', dosya: 'kiz.js', onay: true },
+  ] }));
+  assert.deepStrictEqual(Kut.liste(dir, 'd1').map(k => k.id), ['anlatici', 'kiz']);
+  assert.deepStrictEqual(Kut.liste(dir, 'd2').map(k => k.id), ['anlatici'], 'a story character stays in its story');
+  assert.deepStrictEqual(Kut.liste(path.join(dir, 'yok'), 'd1'), []);
+  const k = Kut.yukle(dir, 'd1', { C: { ink: '#23283B' } });
+  assert.deepStrictEqual(Object.keys(k), ['kiz']);
+  assert.strictEqual(k.kiz({ x: 5 }), '<g data-x="5" fill="#23283B"></g>');
+  const m = Kut.istemMetni(dir, 'd1');
+  assert.match(m, /### Kız \(bu hikâyenin tekrar eden kişisi\): kutuphane\.kiz\(\{ \.\.\. \}\)/);
+  assert.match(m, /kutuphane\.kiz\(\{ x, y \}\)/, 'the file manual is included');
+  assert.match(m, /karakter\.adam\(\{ x, y \}\)/);
+  assert.match(Kut.istemMetni(path.join(dir, 'yok')), /hazır karakter yok/);
+  const ids = Kut.kullanilanlar("const a = kutuphane.kiz({x:1}); karakter.adam({})", Kut.liste(dir, 'd1'));
+  assert.deepStrictEqual(ids, ['anlatici', 'kiz']);
+  Kut.kullanimEkle(dir, ids, 'videolar/k-d1-b2'); Kut.kullanimEkle(dir, ids, 'videolar/k-d1-b2');
+  assert.deepStrictEqual(Kut.oku(dir).karakterler.find(x => x.id === 'kiz').bolumler, ['videolar/k-d1-b2']);
 });

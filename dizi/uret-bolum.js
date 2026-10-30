@@ -53,7 +53,7 @@ function hazirYap(dizi, n) {
     ad: `${dizi.id}-b${n}`, baslik: `${dizi.baslik_kisa || dizi.baslik} · Bölüm ${n}`,
     satirlar: satirlaraBol(b.metin).map(metin => ({ rol: 'anlatici', metin })),
     anlaticilar: { anlatici: dizi.anlatici.ses },
-    video_ek: { bolum: n, toplam_bolum: dizi.bolumler.length, etiket: `${String(dizi.baslik_kisa || dizi.baslik).toLocaleUpperCase('tr')} · BÖLÜM ${n}` },
+    video_ek: { dizi: dizi.id, bolum: n, toplam_bolum: dizi.bolumler.length, etiket: `${String(dizi.baslik_kisa || dizi.baslik).toLocaleUpperCase('tr')} · BÖLÜM ${n}` },
     aciklama_instagram: aciklamaYaz(b.metin, n, dizi.bolumler.length),
   };
 }
