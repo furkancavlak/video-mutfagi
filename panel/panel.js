@@ -253,6 +253,31 @@ async function instagram(yenile, hesap, P) {
   return is;
 }
 
+// follower count for the calendar's numbers (read only, cached 15 min in memory); null when the API does not give it
+const takipciOnbellek = new Map();
+async function takipci(hesap, P) {
+  hesap = hesapGuvenli(hesapTemiz(hesap));
+  const kendi = hesap && hesap !== HESAP0 ? hesap : null, ad = kendi || HESAP0, e = takipciOnbellek.get(ad);
+  if (e && Date.now() - e.t < 15 * 60e3) return e.j;
+  P = P || igPaylas(); const a = P && P.readAyar(kendi || undefined);
+  if (!a) return { bagli: false, takipci: null };
+  const m = await P.graph('GET', '/me', { fields: 'followers_count', access_token: a.token }).catch(() => null);
+  const j = { bagli: true, takipci: m && Number.isFinite(Number(m.followers_count)) ? Number(m.followers_count) : null, zaman: new Date().toISOString() };
+  takipciOnbellek.set(ad, { t: Date.now(), j });
+  return j;
+}
+
+// a calendar tile's still: the first saved frame of a video folder (videolar/<ad> only), else its end card
+function kapakYolu(v) {
+  const d = path.resolve(KOK, String(v || '')), c = path.join(d, 'cikti');
+  if (path.dirname(d) !== path.join(KOK, 'videolar') || !fs.existsSync(c) || !fs.statSync(c).isDirectory()) return null;
+  for (const k of fs.readdirSync(c).filter(x => /^kareler-/.test(x)).sort()) {
+    const f = fs.statSync(path.join(c, k)).isDirectory() && fs.readdirSync(path.join(c, k)).filter(x => /^frame-[\w.-]*\.png$/.test(x)).sort()[0];
+    if (f) return path.join(c, k, f);
+  }
+  return fs.existsSync(path.join(c, 'son-kare.png')) ? path.join(c, 'son-kare.png') : null;
+}
+
 // how a channel reaches the language model: 'claude-cli' (the user's Claude subscription) or 'api' (pay as you go)
 const yzYolu = k => { try { return require(path.join(KOK, 'konu', 'llm.js')).yolSec((okuJ(path.join(KOK, 'kanal', k, 'konu.json'), {}) || {}).llm || {}); } catch { return null; } };
 
@@ -425,6 +450,7 @@ async function api(req, u) {
   if (GET && yol === 'isler') return isListesi();
   if (GET && yol === 'instagram') return instagram(u.searchParams.has('yenile'), u.searchParams.get('hesap'));
   if (GET && yol === 'dersler') return okuJ(DERSLER, []);
+  if (GET && yol === 'takipci') return takipci(u.searchParams.get('hesap'));
   if (GET && yol === 'diziler') return sunucu ? sunucuJson('--diziler', kanalAdi(u.searchParams.get('kanal'))) : dizilerCevap(u.searchParams.get('kanal'));
   if (!GET && yol === 'dizi/karar') return sunucu ? sunucuJson('--dizi-karar', diziKararGovde(b)) : diziKarar(b);
   if (!GET && yol === 'dizi/tekrar') return sunucu ? sunucuJson('--dizi-tekrar', diziTekrarGovde(b)) : diziTekrar(b);
@@ -479,6 +505,7 @@ const sunucuYap = () => http.createServer(async (req, res) => {
     if (korumali && (req.headers['x-panel'] || u.searchParams.get('k')) !== ANAHTAR) return gonder(res, 401, { hata: 'Paneli terminaldeki linkle aç.' });
     if (u.pathname === '/dosya') return dosyaVer(req, res, u.searchParams.get('p'));
     if (u.pathname === '/api/sunucu-video' && req.method === 'GET') return mp4Akit(req, res, sunucuVideo(u.searchParams.get('yol')));
+    if (u.pathname === '/api/kapak' && req.method === 'GET') { const f = kapakYolu(u.searchParams.get('v')); return f ? gonder(res, 200, fs.readFileSync(f), 'image/png') : gonder(res, 404, { hata: 'kapak yok' }); }
     if (u.pathname.startsWith('/api/')) return gonder(res, 200, await api(req, u));
     const rel = u.pathname === '/' ? 'index.html' : u.pathname.slice(1), f = path.resolve(ARAYUZ, rel);
     if (!icinde(f, ARAYUZ) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) return gonder(res, 404, 'yok', 'text/plain; charset=utf-8');
@@ -486,7 +513,7 @@ const sunucuYap = () => http.createServer(async (req, res) => {
   } catch (e) { gonder(res, e.kod || 400, { hata: e.message }); }
 });
 
-module.exports = { kanca, kuyrukOzet, instagram, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
+module.exports = { kanca, kuyrukOzet, instagram, takipci, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
 if (require.main !== module) return;
 
   // ozellik: lets the home panel know this copy has the --dizi* flags
