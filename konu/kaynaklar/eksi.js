@@ -51,10 +51,14 @@ const entryAyristir = html => entryleriAyristir(html)[0] || null;
 const debeEntryIdleri = html => [...new Set([...html.matchAll(/href="\/entry\/(\d+)/g)].map(m => m[1]))];
 
 
-// default fetcher: robots.txt respected, browser UA, throws "HTTP <n>" on non-200
-async function tarayiciGetir(url, { headers = {}, aralikMs = 4000 } = {}) {
-  if (!(await robotsKontrol(url, 'eksi'))) throw new Error('robots.txt izin vermiyor');
-  const r = await getir(url, { kaynak: 'eksi', aralikMs, basliklar: { 'User-Agent': TARAYICI_UA, ...headers } });
+// default fetcher: robots.txt respected, throws "HTTP <n>" on non-200. Cloudflare answers a Chrome User-Agent sent over
+// Node's TLS with a 403 challenge (fingerprint mismatch) but serves the radar's honest one, so that goes first and the
+// browser UA only after a 403. istemci/robots are injectable for tests.
+async function tarayiciGetir(url, { headers = {}, aralikMs = 4000, istemci = getir, robots = robotsKontrol } = {}) {
+  if (!(await robots(url, 'eksi'))) throw new Error('robots.txt izin vermiyor');
+  const { 'User-Agent': _ua, ...kalan } = headers;
+  let r = await istemci(url, { kaynak: 'eksi', aralikMs, basliklar: kalan });
+  if (r.durum === 403) r = await istemci(url, { kaynak: 'eksi', aralikMs, basliklar: { ...kalan, 'User-Agent': TARAYICI_UA } });
   if (r.durum !== 200) throw new Error(`HTTP ${r.durum}`);
   return r.metin;
 }

@@ -98,3 +98,16 @@ test('adaylar: changed Ekşi markup (empty parse) leaves notes, no crash', async
   assert.ok(r.notlar.some(n => /ekşi debe.*bulunamadı/i.test(n)), r.notlar.join(' | '));
   assert.ok(r.notlar.some(n => /ekşi başlık.*bulunamadı/i.test(n)), r.notlar.join(' | '));
 });
+
+// Cloudflare answers a Chrome User-Agent sent over Node's TLS with a 403 challenge, but serves the radar's honest one
+test('tarayiciGetir asks with the honest User-Agent first and the browser one only after a 403', async () => {
+  const istekler = [];
+  const istemci = async (url, o) => { istekler.push(o.basliklar['User-Agent'] || null); return { durum: istekler.length === 1 ? 403 : 200, metin: 'ok' }; };
+  assert.strictEqual(await eksi.tarayiciGetir('https://eksisozluk.com/entry/1', { headers: { 'User-Agent': eksi.TARAYICI_UA }, istemci, robots: async () => true }), 'ok');
+  assert.deepStrictEqual(istekler, [null, eksi.TARAYICI_UA]);
+  istekler.length = 0;
+  const tamam = async (url, o) => { istekler.push(o.basliklar['User-Agent'] || null); return { durum: 200, metin: 'bir' }; };
+  assert.strictEqual(await eksi.tarayiciGetir('https://eksisozluk.com/entry/1', { headers: { 'User-Agent': eksi.TARAYICI_UA }, istemci: tamam, robots: async () => true }), 'bir');
+  assert.deepStrictEqual(istekler, [null]);
+  await assert.rejects(eksi.tarayiciGetir('https://eksisozluk.com/entry/1', { istemci: async () => ({ durum: 403, metin: '' }), robots: async () => true }), /HTTP 403/);
+});
