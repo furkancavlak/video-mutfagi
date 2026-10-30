@@ -26,3 +26,16 @@ test('kaldir removes only the queue line', () => {
   sus(() => zamanlayici('kaldir', { spawn: d.spawn, win: false }));
   assert.deepEqual(d.tab.split('\n').filter(Boolean), [DIZI]);
 });
+
+test('a failed crontab -l aborts kur and kaldir (nothing written); "no crontab" counts as empty; blank lines are kept', () => {
+  const yaz = [];
+  const bozuk = (a, x = {}) => { if (a[0] === '-l') return { status: 1, stdout: '', stderr: 'crontab: permission denied' }; yaz.push(x.input); return { status: 0 }; };
+  for (const alt of ['kur', 'kaldir']) assert.throws(() => sus(() => zamanlayici(alt, { spawn: (c, a, x) => bozuk(a, x), win: false })), /crontab okunamadı/);
+  assert.equal(yaz.length, 0);
+  const bos = [];
+  sus(() => zamanlayici('kur', { spawn: (c, a, x = {}) => a[0] === '-l' ? { status: 1, stdout: '', stderr: 'no crontab for u' } : (bos.push(x.input), { status: 0 }), win: false, node: '/n/node' }));
+  assert.equal(bos.length, 1); assert.ok(bos[0].startsWith('*/5 * * * *'));
+  const d = sahte('# a\n\n# b\n' + ESKI + '\n');
+  sus(() => zamanlayici('kur', { spawn: d.spawn, win: false, node: '/n/node' }));
+  assert.ok(d.tab.startsWith('# a\n\n# b\n*/5 * * * *'));
+});

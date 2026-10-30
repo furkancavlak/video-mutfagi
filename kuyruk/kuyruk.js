@@ -212,6 +212,13 @@ function zamanlayiciVarMi() {
 }
 function zamanlayici(alt, o = {}) {
   const sp = o.spawn || spawnSync, win = o.win ?? WIN;
+  // only "no crontab for <user>" means empty; any other failure aborts (writing back a partial read would wipe the crontab)
+  const kronOku = () => {
+    const r = sp('crontab', ['-l'], { encoding: 'utf8' });
+    if (r.status === 0) return r.stdout || '';
+    if (/no crontab/i.test(String(r.stderr || ''))) return '';
+    throw new Error('crontab okunamadı: ' + String(r.stderr || r.error || 'bilinmeyen hata').trim().slice(0, 200));
+  };
   const node = o.node || process.execPath, betik = path.join(__dirname, 'kuyruk.js');
   if (alt === 'kur') {
     fs.mkdirSync(path.dirname(LOG), { recursive: true });
@@ -224,15 +231,16 @@ Register-ScheduledTask -TaskName '${GOREV}' -Action $a -Trigger $t -Settings $s 
       if (r.status !== 0) fail('zamanlayıcı kurulamadı: ' + (r.stderr || r.stdout).trim().slice(0, 400));
     } else {
       const satir = kronSatiri(KOK, node, betik.split(path.sep).join('/'), LOG);
-      const eski = sp('crontab', ['-l'], { encoding: 'utf8' }).stdout || '';
-      const r = sp('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js')).concat(satir).join('\n') + '\n', encoding: 'utf8' });
+      const kalan = kronOku().split('\n').filter(l => !l.includes('kuyruk/kuyruk.js'));   // blank lines inside are kept
+      while (kalan.length && !kalan[kalan.length - 1].trim()) kalan.pop();
+      const r = sp('crontab', ['-'], { input: kalan.concat(satir).join('\n') + '\n', encoding: 'utf8' });
       if (r.status !== 0) fail('crontab yazılamadı: ' + r.stderr);
     }
     console.log(`Zamanlayıcı kuruldu: her 5 dakikada bir "calistir" çalışır. Kayıt: ${path.relative(KOK, LOG)}`);
     if (!/sunucu/i.test(ayar().makine_turu || '')) console.log('Ev bilgisayarı: paylaşım saatinde bilgisayar AÇIK ve UYANIK olmalı. Kapalıysa video açılınca, gecikmeli paylaşılır. Her gün `node kuyruk/kuyruk.js durum` ile bak.');
   } else if (alt === 'kaldir') {
     if (win) sp('schtasks', ['/Delete', '/TN', GOREV, '/F']);
-    else { const eski = sp('crontab', ['-l'], { encoding: 'utf8' }).stdout || ''; sp('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js')).join('\n') + '\n' }); }
+    else { const kalan = kronOku().split('\n').filter(l => !l.includes('kuyruk/kuyruk.js')); while (kalan.length && !kalan[kalan.length - 1].trim()) kalan.pop(); sp('crontab', ['-'], { input: kalan.join('\n') + '\n' }); }
     console.log('Zamanlayıcı kaldırıldı. Kuyruktaki videolar duruyor, artık kendiliğinden paylaşılmayacak.');
   } else console.log(zamanlayiciVarMi() ? 'Zamanlayıcı kurulu.' : 'Zamanlayıcı KURULU DEĞİL: kuyruk kendiliğinden paylaşmaz. Kur: node kuyruk/kuyruk.js zamanlayici kur');
 }
