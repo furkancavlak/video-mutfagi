@@ -11,9 +11,13 @@ const hikaye = n => ({ id: 'eksi-1', tur: 'eksi', url: 'https://x/1', baslik: 'b
 // episodes 2+ open with a one-sentence recap paragraph, as the prompt asks
 const ozetli = (i, govde, ozet = 'Önceki bölümde kapı çalmıştı.') => i ? `${ozet}\n\n${govde}` : govde;
 const bolCikti = (n, adet = 3) => ({ baslik_kisa: 'Kısa', anlatici: { cinsiyet: 'erkek', yas: 'genc', ton: 'sakin' }, bolumler: Array.from({ length: adet }, (_, i) => ({ metin: ozetli(i, kelimeler(n)) })), degisen_isimler: { Ali: 'Kemal' } });
-function stub(sadakat, bolum) {
-  const f = async (istem) => { f.calls.push(istem); return { metin: JSON.stringify(/"gecti"/.test(istem) ? sadakat() : bolum()) }; };
-  f.calls = [];
+// split + fidelity calls go to f.calls; the story check (hikaye-mi, always first) to f.kontrol
+function stub(sadakat, bolum, hikaye = () => ({ hikaye: true, neden: 'anı' })) {
+  const f = async (istem) => {
+    if (/"hikaye": true, "neden"/.test(istem)) { f.kontrol.push(istem); return { metin: JSON.stringify(hikaye()) }; }
+    f.calls.push(istem); return { metin: JSON.stringify(/"gecti"/.test(istem) ? sadakat() : bolum()) };
+  };
+  f.calls = []; f.kontrol = [];
   return f;
 }
 
@@ -129,4 +133,24 @@ test('example text from the kit is passed into the prompt', async () => {
   const c = stub(() => ({ gecti: true, eklenenler: [] }), () => bolCikti(160));
   await bol(ctx({ ornek_bolum: 'o.txt' }, d), hikaye(500), { calistir: c });
   assert.match(c.calls[0], /ORNEKMETIN123/);
+});
+
+test('an essay or review is "hikaye_degil" after the story check alone, nothing split', async () => {
+  const c = stub(() => ({ gecti: true, eklenenler: [] }), () => bolCikti(140), () => ({ hikaye: false, neden: 'kitap-film karşılaştırması' }));
+  const r = await bol(ctx(), hikaye(1500), { calistir: c });
+  assert.deepStrictEqual([r.ok, r.neden, r.ayrinti], [false, 'hikaye_degil', 'kitap-film karşılaştırması']);
+  assert.strictEqual(c.kontrol.length, 1); assert.strictEqual(c.calls.length, 0);
+  assert.match(c.kontrol[0], /film\/kitap\/dizi incelemesi/);
+  // a malformed answer is no pass
+  const c2 = stub(() => ({ gecti: true, eklenenler: [] }), () => bolCikti(140), () => ({}));
+  assert.strictEqual((await bol(ctx(), hikaye(500), { calistir: c2 })).neden, 'hikaye_degil');
+});
+
+test('hikayeMi: a real anecdote passes; the check runs once before the split', async () => {
+  const { hikayeMi } = require('../bol');
+  const c = stub(() => ({ gecti: true, eklenenler: [] }), () => bolCikti(140));
+  assert.deepStrictEqual(await hikayeMi(ctx(), hikaye(300), { calistir: c }), { hikaye: true, neden: 'anı' });
+  const c2 = stub(() => ({ gecti: true, eklenenler: [] }), () => bolCikti(140));
+  assert.strictEqual((await bol(ctx(), hikaye(500), { calistir: c2 })).ok, true);
+  assert.strictEqual(c2.kontrol.length, 1);
 });

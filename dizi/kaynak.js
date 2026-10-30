@@ -8,7 +8,8 @@ const { uyu } = require('../konu/kaynaklar/ag');
 const { KOK } = require('../konu/ortak');
 const { yukle } = require('./dizi');
 
-const VARSAYILAN = { subredditler: ['tifu', 'AmItheAsshole', 'relationship_advice', 'confession', 'pettyrevenge'], eksi_basliklar: [], eksi_min_fav: 300, min_kelime: 420, aralik_ms: 2000, reddit_adet: 5, eksi_adet: 10 };
+const VARSAYILAN = { subredditler: ['tifu', 'AmItheAsshole', 'relationship_advice', 'confession', 'pettyrevenge'], eksi_basliklar: [], eksi_min_fav: 300, min_kelime: 250, aralik_ms: 2000, reddit_adet: 5, eksi_adet: 10 };
+// min_kelime 250 = bol.js MIN_KAYNAK: a story the splitter can split is a candidate (30.10: no fixed episode length)
 const kelimeSay = s => (String(s).match(/\S+/g) || []).length;
 const engelMi = e => /HTTP (403|429|503)/.test(String(e && e.message));
 

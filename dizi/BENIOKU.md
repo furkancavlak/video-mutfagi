@@ -14,7 +14,7 @@ Test: `node --test "dizi/test/*.test.js"`
 
 ## Kaynaklar (kaynak.js)
 
-- `adaylar(ctx, {simdi, getir, kok}) -> {ogeler, notlar}`: Ekşi (debe + `kaynak.eksi_basliklar`) ve Reddit (`kaynak.subredditler`) tam metinli adaylar. Ayarlar `ctx.ayar.dizi.kaynak`: `eksi_min_fav` (300), `min_kelime` (420), `aralik_ms`. Hikaye id: `eksi-<entry>` / `reddit-<post>`; kullanılmış id (`dizi.id` veya `dizi.kaynak.id`) elenir. Kaynak hatası not olur, fırlatmaz.
+- `adaylar(ctx, {simdi, getir, kok}) -> {ogeler, notlar}`: Ekşi (debe + `kaynak.eksi_basliklar`) ve Reddit (`kaynak.subredditler`) tam metinli adaylar. Ayarlar `ctx.ayar.dizi.kaynak`: `eksi_min_fav` (300), `min_kelime` (250, bol.js ile aynı), `aralik_ms`. Hikaye id: `eksi-<entry>` / `reddit-<post>`; kullanılmış id (`dizi.id` veya `dizi.kaynak.id`) elenir. Kaynak hatası not olur, fırlatmaz.
 
 ## Bölüm üretimi (uret-bolum.js)
 

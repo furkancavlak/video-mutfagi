@@ -1,6 +1,7 @@
 // Splits a found story into 2-5 faithful episodes (model) and checks nothing was invented (second model call).
 // The story's own turns set the cuts and the episode count; length is guidance (~1 min), never a rejection. Rejected:
-// a source too short to split at all (kisa), a broken shape after one retry (bicim), invention after one retry (sadakat).
+// a source too short to split at all (kisa), no story at all (hikaye_degil, own first call), a broken shape after one retry (bicim),
+// invention after one retry (sadakat).
 const fs = require('fs'), path = require('path');
 const LLM = require('../konu/llm');
 const { cumleler } = require('./uret-bolum');
@@ -51,6 +52,13 @@ function bicimHatalari(o) {
   return h;
 }
 
+// is it a real-life anecdote with events, a turn and an outcome? -> {hikaye, neden}. Also used by the story pool.
+async function hikayeMi(ctx, hikaye, { calistir } = {}) {
+  const llm = ctx.ayar && ctx.ayar.llm;
+  const r = await LLM.sor(LLM.istem('hikaye-mi', { baslik: hikaye.baslik || '', metin: hikaye.metin }), { ayar: llm, model: llm && llm.model_metin, efor: 'low', json: true, calistir, is: 'hikaye-mi' });
+  return { hikaye: !!(r && r.hikaye === true), neden: String((r && r.neden) || '').slice(0, 200) };
+}
+
 async function bol(ctx, hikaye, { calistir } = {}) {
   const kelime = say(hikaye.metin);
   if (kelime < MIN_KAYNAK) return { ok: false, neden: 'kisa', ayrinti: `${kelime} kelime (bölünmek için en az ${MIN_KAYNAK})` };
@@ -61,19 +69,24 @@ async function bol(ctx, hikaye, { calistir } = {}) {
   const denetle = o => LLM.sor(LLM.istem('hikaye-sadakat', { kaynak: hikaye.metin, bolumler: o.bolumler.map((b, i) => `Bölüm ${i + 1}:\n${b.metin}`).join('\n\n') }), { ...ortak, is: 'hikaye-sadakat' });
   const bicimNotu = h => '## Önceki denemenin biçim hataları (düzelt)\n\n' + h.map(x => '- ' + x).join('\n');
   const red = (cikti, h) => ({ ok: false, neden: 'bicim', ayrinti: { hatalar: h, kelimeler: cikti && Array.isArray(cikti.bolumler) ? cikti.bolumler.map(b => say(b && b.metin)) : [] } });
-  // one split, retried once with its own shape problems
-  const bolVeDuzelt = async not => {
-    let c = await bolun(not), h = bicimHatalari(c);
+  // a split with shape problems is asked for once more, with them listed
+  const duzelt = async (not, c) => {
+    let h = bicimHatalari(c);
     if (h.length) { c = await bolun([not, bicimNotu(h)].filter(Boolean).join('\n\n')); h = bicimHatalari(c); }
     return { c, h };
   };
 
-  let { c: cikti, h } = await bolVeDuzelt('');
+  // an essay, review or opinion piece is no story (debe 30.10: a Tolkien essay): decided before any split
+  const k = await hikayeMi(ctx, hikaye, { calistir });
+  if (!k.hikaye) return { ok: false, neden: 'hikaye_degil', ayrinti: k.neden };
+  let cikti = await bolun(''), h;
+  ({ c: cikti, h } = await duzelt('', cikti));
   if (h.length) return red(cikti, h);
   let s = await denetle(cikti);
   if (!s.gecti) {
     const liste = Array.isArray(s.eklenenler) ? s.eklenenler : [];
-    ({ c: cikti, h } = await bolVeDuzelt('## Önceki denemenin düzeltilecek hataları\n\nBir önceki bölümlemede kaynakta olmayan şunlar vardı; bunları çıkar, yalnız kaynakta yazanı anlat:\n' + liste.map(x => '- ' + x).join('\n')));
+    const not = '## Önceki denemenin düzeltilecek hataları\n\nBir önceki bölümlemede kaynakta olmayan şunlar vardı; bunları çıkar, yalnız kaynakta yazanı anlat:\n' + liste.map(x => '- ' + x).join('\n');
+    ({ c: cikti, h } = await duzelt(not, await bolun(not)));
     if (h.length) return red(cikti, h);
     s = await denetle(cikti);
     if (!s.gecti) return { ok: false, neden: 'sadakat', ayrinti: Array.isArray(s.eklenenler) ? s.eklenenler : [] };
@@ -89,4 +102,4 @@ async function bol(ctx, hikaye, { calistir } = {}) {
   return { ok: true, dizi };
 }
 
-module.exports = { bol, sesSec, bicimHatalari, MIN_KAYNAK, MAX_SAYI };
+module.exports = { bol, hikayeMi, sesSec, bicimHatalari, MIN_KAYNAK, MAX_SAYI };

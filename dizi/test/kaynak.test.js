@@ -58,7 +58,7 @@ test('adaylar: Ekşi 403 becomes a note, Reddit items survive', async () => {
   assert.ok(r.notlar.some(n => /ekşi.*403/i.test(n)), r.notlar.join(' | '));
 });
 
-test('adaylar: 420-word rule, Ekşi fav exception, debe + eksi_basliklar ids', async () => {
+test('adaylar: 250-word rule (bol.js MIN_KAYNAK), Ekşi fav exception, debe + eksi_basliklar ids', async () => {
   const degis = (id, fav) => entryHtml.replace('data-id="71877842"', `data-id="${id}"`).replace('data-favorite-count="5425"', `data-favorite-count="${fav}"`);
   const getir = async url => {
     if (/\/debe/.test(url)) return debeHtml;
