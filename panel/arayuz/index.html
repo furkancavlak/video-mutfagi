@@ -11,22 +11,58 @@
 </head>
 <body>
 <header class="ust">
-  <div class="logo"><span class="logo-i">▶</span>Video Mutfağı</div>
+  <div class="logo"><span class="logo-i">▶</span><span class="logo-ad">Video Mutfağı</span></div>
   <nav class="sekmeler" id="sekmeler">
-    <button data-s="bugun" class="on">Bugün</button>
-    <button data-s="fikirler">Fikirler</button>
-    <button data-s="uretim">Üretim</button>
-    <button data-s="diziler">Diziler</button>
-    <button data-s="sira">Sıra</button>
-    <button data-s="takvim">Takvim</button>
-    <button data-s="sonuclar">Sonuçlar</button>
+    <button data-s="takvim" class="on">Takvim</button>
+    <button data-s="hikayeler">Hikâyeler</button>
+    <button data-s="ayarlar">Ayarlar</button>
+    <button class="gelismis-dugme" id="gelismis-dugme" aria-expanded="false">Gelişmiş</button>
   </nav>
   <select id="kanal-sec" class="sec kanal-sec" aria-label="Kanal" title="Hangi kanal"></select>
-  <button class="isler-dugme" id="isler-dugme" title="Arka planda çalışan işler"><span id="isler-say">0</span> iş</button>
+  <button class="isler-dugme" id="isler-dugme" title="Arka planda çalışan işler" hidden><span id="isler-say">0</span> iş</button>
 </header>
+<nav class="alt-sekmeler" id="alt-sekmeler" hidden>
+  <span class="ince-yazi">Gelişmiş:</span>
+  <button data-s="bugun">Bekleyenler</button>
+  <button data-s="fikirler">Fikirler</button>
+  <button data-s="uretim">Üretim</button>
+  <button data-s="sira">Sıra</button>
+  <button data-s="sonuclar">Sonuçlar</button>
+</nav>
 
 <main>
-  <section id="s-bugun" class="sayfa on">
+  <!-- home: calendar + numbers -->
+  <section id="s-takvim" class="sayfa on">
+    <div id="bekleyen-serit"></div>
+    <div class="takvim-ust">
+      <h1 id="takvim-baslik">Takvim</h1>
+      <div class="secici" id="gorunum"><button data-gorunum="ay">Ay</button><button data-gorunum="hafta">Hafta</button></div>
+      <div class="ok-grup"><button class="ok" data-h="-1" aria-label="Önceki">‹</button><button class="dugme ince" data-h="0">Bugün</button><button class="ok" data-h="1" aria-label="Sonraki">›</button></div>
+    </div>
+    <div class="lejant" id="lejant"></div>
+    <div id="takvim"></div>
+    <h2 class="bolum">Rakamlar</h2>
+    <div id="istatistik"></div>
+  </section>
+
+  <section id="s-hikayeler" class="sayfa">
+    <div class="baslik-satir"><h1>Hikâyeler</h1><span class="say" id="dz-say"></span>
+      <div class="secici" id="dz-makine" hidden></div></div>
+    <details id="dz-son" class="kart dz-son"></details>
+    <div id="dz-liste" class="liste"></div>
+  </section>
+
+  <section id="s-ayarlar" class="sayfa">
+    <div class="baslik-satir"><h1>Ayarlar</h1></div>
+    <h2 class="bolum" id="dz-ayar-baslik">Hikâyelerin devamı</h2>
+    <form id="dz-ayar" class="kart dz-ayar" novalidate></form>
+    <div id="dz-ayar-yok" class="liste-bos" hidden>Bu kanalda hikâye dizisi yok, ayarlanacak bir şey yok.</div>
+    <h2 class="bolum">Paylaşım</h2>
+    <div id="paylasim-ayar" class="kart paylasim-ayar"></div>
+  </section>
+
+  <!-- advanced pages: unchanged tools -->
+  <section id="s-bugun" class="sayfa">
     <div class="makineler" id="makineler"></div>
     <h2 class="bolum">Senden bekleyenler</h2>
     <div id="bekleyenler" class="liste"></div>
@@ -53,28 +89,12 @@
     <div id="uretim-liste" class="liste"></div>
   </section>
 
-  <section id="s-diziler" class="sayfa">
-    <div class="baslik-satir"><h1>Diziler</h1><span class="say" id="dz-say"></span>
-      <div class="secici" id="dz-makine" hidden></div></div>
-    <div id="dz-son" class="kart dz-son"></div>
-    <div id="dz-liste" class="liste"></div>
-    <h2 class="bolum" id="dz-ayar-baslik">Devam ayarları</h2>
-    <form id="dz-ayar" class="kart dz-ayar" novalidate></form>
-  </section>
-
   <section id="s-sira" class="sayfa">
     <div class="baslik-satir"><h1>Sıra</h1>
       <div class="secici" id="makine-sec"></div>
     </div>
     <div id="sira-saglik" class="saglik-satir"></div>
     <div id="sira-liste" class="liste"></div>
-  </section>
-
-  <section id="s-takvim" class="sayfa">
-    <div class="baslik-satir"><h1>Takvim</h1>
-      <div class="ok-grup"><button class="ok" data-h="-1">‹</button><span id="takvim-ay"></span><button class="ok" data-h="1">›</button></div>
-    </div>
-    <div id="takvim" class="takvim"></div>
   </section>
 
   <section id="s-sonuclar" class="sayfa">
@@ -93,6 +113,7 @@
 </aside>
 
 <dialog id="pencere"><div id="pencere-ic"></div></dialog>
+<div id="ipucu" class="ipucu" hidden></div>
 <div id="bildirim" class="bildirim" role="status"></div>
 <script src="panel.js"></script>
 </body>

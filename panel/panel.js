@@ -290,7 +290,7 @@ function asamalar(kanal) {
     const A = U.adimlar, t = Object.values(A).map(x => x && Date.parse(x.zaman)).filter(Number.isFinite);
     for (const f of fs.readdirSync(dir)) { try { t.push(fs.statSync(path.join(dir, f)).mtimeMs); } catch {} }
     out[`videolar/${ad}`] = { kanal: U.kanal || null, bitti: Object.fromEntries(Object.entries(ASAMA).map(([k, f]) => [k, !!(f(A) || A.render)])),
-      kuyruk: !!A.kuyruk, bekleyen: U.bekleyen && U.bekleyen.adim ? String(U.bekleyen.adim) : null, son: t.length ? new Date(Math.max(...t)).toISOString() : null };
+      kuyruk: !!A.kuyruk, kapak: !!kapakYolu(`videolar/${ad}`), bekleyen: U.bekleyen && U.bekleyen.adim ? String(U.bekleyen.adim) : null, son: t.length ? new Date(Math.max(...t)).toISOString() : null };
   }
   return out;
 }

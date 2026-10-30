@@ -83,6 +83,7 @@ test('asamalar: stage marks per video folder from uretim.json, filtered by chann
   assert.deepEqual(a['videolar/v-bitmis'].bitti, { metin: true, ses: true, sahneler: true, video: true }, 'a rendered video has every earlier stage');
   assert.equal(a['videolar/v-bitmis'].kuyruk, true);
   assert.equal(a['videolar/v-kapi'].bekleyen, 'gorsel');
+  assert.equal(a['videolar/v-yarim'].kapak, false); assert.equal(P.asamalar()['videolar/v-baska'].kapak, false);
   assert.deepEqual(Object.keys(P.asamalar()).sort(), ['videolar/v-baska', 'videolar/v-bitmis', 'videolar/v-kapi', 'videolar/v-yarim']);
   assert.throws(() => P.asamalar('../kacak'), /kanal yok/);
 });
