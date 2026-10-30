@@ -268,8 +268,11 @@ async function yukle() {
   const no = ++yukleNo;                           // a slower, older load must not overwrite a newer channel's data
   try {
     [O, F, U, D, J] = await Promise.all([api('ozet' + kq()), api('fikirler'), api('uretim'), api('dersler'), api('isler')]);
-    if (!O.kanallar.some(k => k.ad === kanal)) { kanal = kanalAd0(); if (kanal) O = await api('ozet' + kq()); }
-    if (no !== yukleNo) return;   // first start or a channel that is gone
+    if (O.kanalYok || !O.kanallar.some(k => k.ad === kanal)) {            // first start or a saved channel that is gone: default, forget it, load once more
+      if (O.kanalYok) { try { localStorage.removeItem('vm-kanal'); } catch {} }
+      kanal = kanalAd0(); if (kanal) O = await api('ozet' + kq());
+    }
+    if (no !== yukleNo) return;
   } catch (e) { if (no !== yukleNo) return; $('main').innerHTML = `<div class="liste-bos" style="margin-top:40px">${esc(e.message)}</div>`; return; }
   hepsi();
   if (O.sunucu) api('sunucu' + kq()).then(s => { if (no === yukleNo) SV = s; }).catch(e => { if (no === yukleNo) SV = { hata: 'Sunucuya ulaşılamadı: ' + e.message }; }).finally(() => { if (no === yukleNo) hepsi(); });

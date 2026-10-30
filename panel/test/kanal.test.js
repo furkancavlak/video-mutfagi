@@ -74,3 +74,17 @@ test('ekleHesap: account follows the channel, no account refuses, oxygbio stays 
   assert.throws(() => P.ekleHesap({ kanal: 'kanal_c', hesap: 'oxygbio' }), /hesabı tanımlı değil/);
   assert.equal(P.ekleHesap({ hesap: 'Hesap_B' }), 'hesap_b');       // old call without channel, lowercased
 });
+
+test('ozetCevap: an unknown channel still returns the channel list, flagged and unfiltered', () => {
+  const o = P.ozetCevap('silinmis_kanal');
+  assert.equal(o.kanalYok, true);
+  assert.deepEqual(o.kanallar.map(k => k.ad).sort(), ['kanal_a', 'kanal_b', 'kanal_c']);
+  assert.deepEqual(o.yerel.kuyruk.map(j => j.id).sort(), ['j-b', 'j-eski', 'j-x']);
+  assert.equal(P.ozetCevap('kanal_b').kanalYok, false);
+  assert.equal(P.ozetCevap().kanalYok, false);
+});
+
+test('ekleHesap validates the account read from kimlik', () => {
+  yaz('kanal/kanal_bozuk/kimlik.json', { hesap: 'a b/../c' }); yaz('kanal/kanal_bozuk/konu.json', {});
+  assert.throws(() => P.ekleHesap({ kanal: 'kanal_bozuk' }), /geçersiz/);
+});

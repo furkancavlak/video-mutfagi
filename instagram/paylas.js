@@ -18,7 +18,7 @@ const { spawn } = require('child_process');
 const API = 'https://graph.instagram.com/' + (process.env.IG_API_VERSION || 'v23.0');
 const AYAR_DIR = path.join(os.homedir(), '.video-mutfagi');
 // one token file per account: oxygbio (default) keeps the original name, others get instagram-<hesap>.json
-const ayarYolu = hesap => path.join(AYAR_DIR, !hesap || hesap === 'oxygbio' ? 'instagram.json' : `instagram-${hesap}.json`);
+const ayarYolu = hesap => { const h = String(hesap || '').replace(/^@/, '').trim().toLowerCase(); return path.join(AYAR_DIR, !h || h === 'oxygbio' ? 'instagram.json' : `instagram-${h}.json`); };
 const KAYIT = path.join(__dirname, '..', 'kayit', 'paylasimlar.jsonl');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));

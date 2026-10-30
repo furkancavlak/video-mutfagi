@@ -113,11 +113,10 @@ function sunucuda(komut, sure = 60e3) {
 }
 // account for a queue add: a named channel must have one (never falls back to oxygbio); without a channel the old `hesap` field is used
 function ekleHesap(b) {
-  const x = b.kanal ? kanalHesap(String(b.kanal)) : hesapGuvenli(hesapTemiz(b.hesap));
+  const x = hesapGuvenli(b.kanal ? kanalHesap(String(b.kanal)) : hesapTemiz(b.hesap));
   if (b.kanal && !x) throw new Error('Bu kanalın Instagram hesabı tanımlı değil');
   return x && x !== HESAP0 ? x : null;
 }
-const hesapArg = ekleHesap;
 function sunucuyaEkle({ mp4, aciklama, zaman, onay_gerekli, hesap, kanal }) {
   const hesapEk = ekleHesap({ hesap, kanal });
   const S = sunucuAyar(); if (!S) throw new Error('Sunucu tanımlı değil.');
@@ -270,13 +269,16 @@ function dosyaVer(req, res, rel) {
   fs.createReadStream(f, { start: bas, end: son }).pipe(res);
 }
 
+// an unknown channel (a stale browser choice) still gets the full unfiltered summary, flagged, so the UI can reset itself
+function ozetCevap(kanal) {
+  const S = sunucuAyar(), yok = !!kanal && !kanallar().includes(kanal);
+  return { yerel: kuyrukOzet(yok ? undefined : kanal), kanalYok: yok, sunucu: S ? { ad: S.ad || 'Sunucu' } : null, kanallar: kanalBilgi(), yz: Object.fromEntries(kanallar().map(k => [k, yzYolu(k)])) };
+}
+
 async function api(req, u) {
   const yol = u.pathname.slice(5), GET = req.method === 'GET', b = GET ? {} : await govdeOku(req);
   const sunucu = (b.makine || u.searchParams.get('makine')) === 'sunucu';
-  if (GET && yol === 'ozet') {
-    const S = sunucuAyar();
-    return { yerel: kuyrukOzet(u.searchParams.get('kanal') || undefined), sunucu: S ? { ad: S.ad || 'Sunucu' } : null, kanallar: kanalBilgi(), yz: Object.fromEntries(kanallar().map(k => [k, yzYolu(k)])) };
-  }
+  if (GET && yol === 'ozet') return ozetCevap(u.searchParams.get('kanal') || undefined);
   if (GET && yol === 'sunucu') { const k = u.searchParams.get('kanal'); if (k && !kanallar().includes(k)) throw new Error('kanal yok'); return JSON.parse(sunucuda('panel/panel.js --ozet' + (k ? ' --kanal ' + q(k) : ''))); }
   if (GET && yol === 'fikirler') return fikirler();
   if (GET && yol === 'uretim') return uretimler();
@@ -325,7 +327,7 @@ async function api(req, u) {
   throw Object.assign(new Error('yok'), { kod: 404 });
 }
 
-module.exports = { kuyrukOzet, instagram, kanalBilgi, ekleHesap };
+module.exports = { kuyrukOzet, instagram, kanalBilgi, ekleHesap, ozetCevap };
 if (require.main !== module) return;
 
 if (process.argv.includes('--ozet')) {

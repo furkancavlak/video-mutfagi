@@ -51,7 +51,7 @@ function zamanCoz(s) {
 
 // per-account settings: a.hesaplar[hesap] overrides the global hours/limit; default account is oxygbio
 const HESAP0 = 'oxygbio';
-const hesapAd = h => h || HESAP0;
+const hesapAd = h => String(h || '').replace(/^@/, '').trim().toLowerCase() || HESAP0;
 function hesapAyar(a, hesap) {
   const o = (a.hesaplar || {})[hesapAd(hesap)] || {};
   return { paylasim_saatleri: o.paylasim_saatleri || a.paylasim_saatleri, gunluk_en_fazla: o.gunluk_en_fazla ?? a.gunluk_en_fazla };
