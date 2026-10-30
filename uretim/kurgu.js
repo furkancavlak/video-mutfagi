@@ -29,10 +29,12 @@ else {
   const karakter = fs.existsSync(kf) ? K.guvenliYukle(kf)({ C, f: K.f1 }) : null;
   S = K.guvenliYukle(sahneFile)({ C, T, at: K.at, f: K.f1, r2, rnd, W: K.W, H: K.H, M, karakter });
 }
-const cap = K.altyazi(T, video, C), mk = K.marka(T, kimlik, C);
+// caption look and closing card follow the channel (kimlik.json → gorsel.altyazi, marka.kapanis)
+const cap = K.altyazi(T, video, C, kimlik), mk = K.marka(T, kimlik, C, { video, kimlikDir });
 
 const cikti = path.join(dir, 'cikti'), hfDir = path.join(cikti, 'hf-ucretsiz');
-K.sayfaYaz(hfDir, { C, END: T.END, css: S.css || '', baslik: ad + ' ucretsiz', katmanlar: [S.html, mk.html, cap.html], tl: [...S.tl, ...mk.tl, ...cap.tl] });
+K.sayfaYaz(hfDir, { C, END: T.END, css: [S.css || '', cap.css, mk.css].filter(Boolean).join('\n'), baslik: ad + ' ucretsiz', katmanlar: [S.html, mk.html, cap.html], tl: [...S.tl, ...mk.tl, ...cap.tl] });
+for (const v of mk.varliklar || []) fs.copyFileSync(v.kaynak, path.join(hfDir, 'assets', v.ad));   // e.g. the closing card's image
 
 if (process.argv.includes('--render')) K.renderEt(hfDir, path.join(dir, 'ses', 'mix.wav'), path.join(cikti, `${ad}-ucretsiz.mp4`));
 else {

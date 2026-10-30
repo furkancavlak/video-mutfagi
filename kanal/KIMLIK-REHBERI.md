@@ -41,6 +41,8 @@ Ajan aşağıdaki sırayı kullanıcıyla birlikte yürütür. Her adımda kulla
 - **Köşe etiketi:** Videonun boyunca köşede duran kısa yazı. Örnek: "NE OLURDU?".
 - **Kapanış çağrısı:** İki satır. Örnek: "SIRADAKİ YER NE OLSUN?" / "YORUMA YAZ".
 - **Renkler:** `paper` açık zemin, `ink` yazı, `coral` vurgu, `o2` marka rengi. Zemin açık olmalı.
+- **Kanalın kendi kapanış kartı (isteğe bağlı, dizi/hikâye kanalları için):** `marka.ses: null` açılış/kapanış marka sesini kapatır. `marka.kapanis: "kapanis.js"` kanal klasöründeki kartı videonun sonuna ekler (`kapanis({ C, at, bas, sonraki, hesap }) -> { html, tl, sure, muzik, gorsel }`, `karakter.js` gibi korumalı alanda çalışır); `marka.kapanis_muzigi` kartla birlikte çalan müzik dosyası, `marka.hesap` kartta yazan hesap adı. Bu durumda köşe etiketi yerine üstte `video.json → etiket · BÖLÜM n` etiketi durur (`bolum`, `toplam_bolum`: son bölümde kart "devamı" demez).
+- **Altyazı görünümü:** `gorsel.altyazi`: `"kutu"` (varsayılan, açık kutu içinde) ya da `"kontur"` (sahnenin üstünde beyaz Anton, kalın koyu kontur, söylenen kelime pembe).
 
 ## 6. Görsel katman
 

@@ -29,3 +29,5 @@ ikinci-beyin/kasa/
 stil/*/ornekler/
 stil/*/kareler/
 stil/*/karsilastirma/
+# private channel kits: copied in from their own repos, never committed here
+kanal/dur_anlatayim/

@@ -14,7 +14,7 @@ const fs = require('fs'), path = require('path');
 const { execFileSync, execFile } = require('child_process');
 const K = require('./cekirdek');
 
-const { dir, video, kimlik, ad } = K.videoYukle(process.argv[2]);
+const { dir, video, kimlik, kimlikDir, ad } = K.videoYukle(process.argv[2]);
 const adim = process.argv[3], onay = process.argv.includes('--onay');
 const arg = n => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : null; };
 const U = K.okuJson(path.join(dir, 'ucretli.json'), 'ucretli.json');
@@ -143,13 +143,14 @@ function kurgu() {
     if (E[i + 1]) b = Math.min(b, T.ifade(E[i + 1].bas) - .05);       // chips never stack
     tl.push(`gsap.set('.c${i}',{opacity:0,y:24});tl.to('.c${i}',{opacity:1,y:0,duration:.4,ease:'power3.out'},${K.at(a)});tl.to('.c${i}',{opacity:0,duration:.2},${K.at(b - .2)});`);
   });
-  const cap = K.altyazi(T, video, C), mk = K.marka(T, kimlik, C);
+  const cap = K.altyazi(T, video, C, kimlik), mk = K.marka(T, kimlik, C, { video, kimlikDir });
   const css = `#bgw{position:absolute;inset:0;overflow:hidden;transform-origin:50% 45%}#bgw video{position:absolute;left:0;top:0;width:${K.W}px;height:${K.H}px}
 .chip{position:absolute;left:0;right:0;margin:0 auto;width:max-content;max-width:900px;top:300px;font:400 70px/1.05 "AntonTR";letter-spacing:.02em;color:${C.ink};background:rgba(247,243,234,.94);border-radius:22px;padding:20px 32px 16px;box-shadow:0 12px 34px rgba(60,45,25,.22);text-align:center}.chip span{color:${C.coral}}`;
   K.sayfaYaz(hfDir, {
-    C, END: T.END, css, baslik: ad + ' ucretli', tl: [...tl, ...mk.tl, ...cap.tl],
+    C, END: T.END, css: [css, cap.css, mk.css].filter(Boolean).join('\n'), baslik: ad + ' ucretli', tl: [...tl, ...mk.tl, ...cap.tl],
     katmanlar: [`<div id="bgw"><video id="bg" src="assets/bg.mp4" muted playsinline data-start="0" data-duration="${T.END.toFixed(3)}" data-track-index="0"></video></div>`, html, mk.html, cap.html],
   });
+  for (const v of mk.varliklar || []) fs.copyFileSync(v.kaynak, path.join(hfDir, 'assets', v.ad));
   if (process.argv.includes('--render')) K.renderEt(hfDir, path.join(dir, 'ses', 'mix.wav'), path.join(dir, 'cikti', `${ad}-ucretli.mp4`));
   else {
     const kare = arg('--kare');

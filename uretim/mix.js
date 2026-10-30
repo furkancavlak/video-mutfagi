@@ -7,12 +7,15 @@
 // Writes <video>/ses/mix.wav and <video>/ses/zaman.json (line starts, global word times, sting hits, chimes).
 // The sting is not played after the hook: its riser starts under the hook's last words, the hit lands right
 // after the sentence, and the voice comes back ~0.75 s later over the ducked tail (like a video transition).
+// A channel without a sting (kimlik.json → marka.ses: null) gets none; with a closing card (marka.kapanis) the card
+// starts 0.5 s after the narration ends (zaman.json → kapanis), its music (marka.kapanis_muzigi) comes in with it and the
+// video ends with the card.
 const fs = require('fs'), path = require('path');
 const { spawnSync } = require('child_process');
-const { videoYukle, okuJson, sh, sure, fail, KOK } = require('./cekirdek');
+const { videoYukle, okuJson, sh, sure, fail, KOK, kapanisYukle, palet, at: atS } = require('./cekirdek');
 const { hizala } = require('./hizala');
 
-const { dir, video, kimlik } = videoYukle(process.argv[2]);
+const { dir, video, kimlik, kimlikDir } = videoYukle(process.argv[2]);
 const SR = 48000, TEMPO = video.hiz || 1;
 const sesDir = path.join(dir, 'ses'), tmp = path.join(sesDir, 'tmp');
 fs.mkdirSync(tmp, { recursive: true });
@@ -21,9 +24,13 @@ const lines = Object.keys(words).sort();
 if (lines.length !== video.satirlar.length) fail(`video.json'da ${video.satirlar.length} satır var ama kelimeler.json'da ${lines.length}. Eksik satır sesi ya da eski dosya olabilir.`);
 
 // brand sting from the channel identity (riser length = time from file start to the hit)
-const sting = path.join(tmp, 'sting.wav');
-if (!fs.existsSync(sting)) sh('node', [path.join(KOK, 'marka', 'marka-sesi.js'), kimlik.marka.ses, sting]);
+const STING = !!kimlik.marka.ses, sting = path.join(tmp, 'sting.wav');
+if (STING && !fs.existsSync(sting)) sh('node', [path.join(KOK, 'marka', 'marka-sesi.js'), kimlik.marka.ses, sting]);
 const RISE = kimlik.marka.yukselis || 0.85;
+// the channel's closing card: only its length and music cue are needed here
+const kart = kapanisYukle(kimlik, kimlikDir);
+const muzik = kart && kimlik.marka.kapanis_muzigi ? path.join(kimlikDir, kimlik.marka.kapanis_muzigi) : null;
+if (muzik && !fs.existsSync(muzik)) fail(`kapanış müziği yok: ${muzik} (kimlik.json → marka.kapanis_muzigi)`);
 
 // announcer "bing-bong" chime (two decaying bells)
 function chime(file) {
@@ -95,10 +102,17 @@ lines.forEach((f, i) => {
     Z.kelimeler.push({ w, a: +(start + a / TEMPO).toFixed(3), b: +(start + b / TEMPO).toFixed(3), kim, satir: i });
   }
   const end = start + proc[f].d;
-  if (i === 0) {                                  // hook -> woven sting
+  if (i === 0 && STING) {                         // hook -> woven sting
     const hit = end + 0.1; ev.push([sting, hit - RISE, 0.55, 'fx']); Z.sting.push(+hit.toFixed(3)); t = hit + 0.75;
-  } else if (i === lines.length - 1) {            // closing sting after the punchline
-    const hit = end + 0.45; ev.push([sting, hit - RISE, 0.55, 'fx']); Z.sting.push(+hit.toFixed(3)); t = hit + 2.4;
+  } else if (i === lines.length - 1) {
+    if (STING) {                                  // closing sting after the punchline
+      const hit = end + 0.45; ev.push([sting, hit - RISE, 0.55, 'fx']); Z.sting.push(+hit.toFixed(3)); t = hit + 2.4;
+    } else if (kart) {                            // channel closing card + its outro music (ends on its own)
+      const bas = end + 0.5, k = kart({ C: palet(kimlik), at: atS, bas, sonraki: null, hesap: kimlik.marka.hesap });
+      const m = k.muzik || { bas: bas - 0.1, ses: 0.7 };
+      if (muzik) ev.push([muzik, Math.max(0, m.bas), m.ses, 'fx']);
+      Z.kapanis = +bas.toFixed(3); t = bas + k.sure;
+    } else t = end + 1;
   } else t = end + (isA || anons.has(rol(lines[i + 1])) ? 0.35 : 0.22);
 });
 Z.toplam = +t.toFixed(3);
@@ -108,10 +122,12 @@ const inputs = ev.flatMap(e => ['-i', e[0]]);
 const voiceIdx = ev.map((e, i) => (e[3] === 'ses' ? i : -1)).filter(i => i >= 0);
 const fxIdx = ev.map((e, i) => (e[3] === 'fx' ? i : -1)).filter(i => i >= 0);
 let g = ev.map((e, i) => `[${i}:a]aresample=${SR},aformat=channel_layouts=stereo,volume=${e[2]},adelay=${Math.round(e[1] * 1000)}|${Math.round(e[1] * 1000)},apad=whole_dur=${Z.toplam}[e${i}]`).join(';');
-g += `;${voiceIdx.map(i => `[e${i}]`).join('')}amix=inputs=${voiceIdx.length}:normalize=0,asplit[v][vk]`;
-g += `;${fxIdx.map(i => `[e${i}]`).join('')}amix=inputs=${fxIdx.length}:normalize=0[fx]`;
-g += `;[fx][vk]sidechaincompress=threshold=0.03:ratio=6:attack=20:release=350[fxd];[v][fxd]amix=inputs=2:normalize=0,atrim=0:${Z.toplam},loudnorm=I=-14:TP=-1.5[o]`;
+if (fxIdx.length) {
+  g += `;${voiceIdx.map(i => `[e${i}]`).join('')}amix=inputs=${voiceIdx.length}:normalize=0,asplit[v][vk]`;
+  g += `;${fxIdx.map(i => `[e${i}]`).join('')}amix=inputs=${fxIdx.length}:normalize=0[fx]`;
+  g += `;[fx][vk]sidechaincompress=threshold=0.03:ratio=6:attack=20:release=350[fxd];[v][fxd]amix=inputs=2:normalize=0,atrim=0:${Z.toplam},loudnorm=I=-14:TP=-1.5[o]`;
+} else g += `;${voiceIdx.map(i => `[e${i}]`).join('')}amix=inputs=${voiceIdx.length}:normalize=0,atrim=0:${Z.toplam},loudnorm=I=-14:TP=-1.5[o]`;   // no sting, chime or music
 sh('ffmpeg', ['-loglevel', 'error', '-y', ...inputs, '-filter_complex', g, '-map', '[o]', '-ar', String(SR), path.join(sesDir, 'mix.wav')]);
 fs.writeFileSync(path.join(sesDir, 'zaman.json'), JSON.stringify(Z, null, 1));
-console.log(`mix.wav hazır: ${Z.toplam} sn | marka vuruşları ${Z.sting.join(', ')} | anons ${Z.chime.join(', ') || '-'}`);
-console.log('Dinle: açılış sesi kancanın son kelimelerinin ALTINDA yükselmeli, cümle biter bitmez vurmalı.');
+console.log(`mix.wav hazır: ${Z.toplam} sn | marka vuruşları ${Z.sting.join(', ') || '-'} | anons ${Z.chime.join(', ') || '-'}${Z.kapanis != null ? ` | kapanış kartı ${Z.kapanis}` : ''}`);
+if (STING) console.log('Dinle: açılış sesi kancanın son kelimelerinin ALTINDA yükselmeli, cümle biter bitmez vurmalı.');
