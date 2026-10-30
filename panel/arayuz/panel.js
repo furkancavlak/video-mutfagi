@@ -391,7 +391,7 @@ function grafik(P) {
   return `<div class="kart grafik-kart"><div class="gk-ust"><b>Son ${L.length} videonun izlenmesi</b><span class="ince-yazi">eskiden yeniye · üstüne gel, ayrıntı çıksın</span></div>
     <svg class="gk" viewBox="0 0 ${W} ${H}" role="img" aria-label="Son ${L.length} videonun izlenme sayıları"><line x1="0" x2="${W}" y1="${H - alt}" y2="${H - alt}" class="gk-taban"/>${cubuk}</svg></div>`;
 }
-// dur_anlatayim-style series: each story as a row of episode dots with their views
+// story-series channels: each story as a row of episode dots with their views
 function hikayeSeridi() {
   const L = DZ && !DZ.hata ? DZ.diziler.filter(d => d.durum === 'aktif') : [];
   if (!L.length) return '';

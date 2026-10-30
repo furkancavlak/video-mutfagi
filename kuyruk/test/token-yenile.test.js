@@ -27,13 +27,13 @@ test('zamaniGeldi: younger than 24 h or within 7 days of the last refresh is too
 });
 
 test('due account is refreshed: new token and yenilendi written, others untouched, token never in the result', async () => {
-  const { dir, durumF } = ortam({ 'instagram.json': { token: 'ESKI-A', username: 'oxygbio', kaydedildi: once(9) }, 'instagram-dur_anlatayim.json': { token: 'ESKI-B', kaydedildi: once(2) } });
+  const { dir, durumF } = ortam({ 'instagram.json': { token: 'ESKI-A', username: 'oxygbio', kaydedildi: once(9) }, 'instagram-hesap_b.json': { token: 'ESKI-B', kaydedildi: once(2) } });
   const getir = sahte({ access_token: 'YENI-A', expires_in: 5184000 });
   const r = await Y.otoYenile({ simdi: SIMDI, dir, durumF, getir });
-  assert.deepStrictEqual(r.map(x => [x.hesap, x.sonuc]).sort(), [['dur_anlatayim', 'erken'], ['oxygbio', 'yenilendi']]);
+  assert.deepStrictEqual(r.map(x => [x.hesap, x.sonuc]).sort(), [['hesap_b', 'erken'], ['oxygbio', 'yenilendi']]);
   const a = oku(path.join(dir, 'instagram.json'));
   assert.deepStrictEqual([a.token, a.username, a.yenilendi], ['YENI-A', 'oxygbio', new Date(SIMDI).toISOString()]);
-  assert.strictEqual(oku(path.join(dir, 'instagram-dur_anlatayim.json')).token, 'ESKI-B');
+  assert.strictEqual(oku(path.join(dir, 'instagram-hesap_b.json')).token, 'ESKI-B');
   assert.strictEqual(getir.urls.length, 1); assert.match(getir.urls[0], /grant_type=ig_refresh_token&access_token=ESKI-A$/);
   const d = fs.readFileSync(durumF, 'utf8') + JSON.stringify(r);
   assert.ok(!/ESKI|YENI/.test(d), 'no token in the state file or the result');
@@ -52,12 +52,12 @@ test('at most one try per account per 24 h', async () => {
 });
 
 test('failure keeps the old token, shows a health warning without the token, success clears it', async () => {
-  const { dir, durumF } = ortam({ 'instagram-dur_anlatayim.json': { token: 'GIZLI-123', kaydedildi: once(20) } });
+  const { dir, durumF } = ortam({ 'instagram-hesap_b.json': { token: 'GIZLI-123', kaydedildi: once(20) } });
   const r = await Y.otoYenile({ simdi: SIMDI, dir, durumF, getir: sahte({ error: { message: 'Invalid token GIZLI-123' } }) });
   assert.strictEqual(r[0].sonuc, 'hata');
-  assert.strictEqual(oku(path.join(dir, 'instagram-dur_anlatayim.json')).token, 'GIZLI-123', 'old token untouched');
+  assert.strictEqual(oku(path.join(dir, 'instagram-hesap_b.json')).token, 'GIZLI-123', 'old token untouched');
   const u = Y.uyarilar(durumF);
-  assert.strictEqual(u.length, 1); assert.match(u[0], /^Instagram anahtarı yenilenemedi \(@dur_anlatayim\)/);
+  assert.strictEqual(u.length, 1); assert.match(u[0], /^Instagram anahtarı yenilenemedi \(@hesap_b\)/);
   assert.ok(!/GIZLI/.test(u[0] + fs.readFileSync(durumF, 'utf8')), 'the token is masked');
   assert.deepStrictEqual(Y.uyarilar(durumF, 'oxygbio'), [], 'filtered by account');
   // network error: same handling
