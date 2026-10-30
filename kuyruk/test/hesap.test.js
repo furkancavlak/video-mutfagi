@@ -81,3 +81,19 @@ test('sonrakiSlot uses the channel hours and limit', () => {
   const dolu = [{ t: at(1, 12), hesap: 'ornek_hesap' }, { t: at(1, 17), hesap: 'ornek_hesap' }];
   assert.equal(sonrakiSlot(GENEL, dolu, 'ornek_hesap', simdi, k), at(2, 12), 'limit 2 in the approval period');
 });
+
+test('ayarYolu: the account name is normalised and validated; anything else throws', () => {
+  assert.ok(ayarYolu(' @Hesap_B ').endsWith('instagram-hesap_b.json'));
+  assert.ok(ayarYolu('@oxygbio').endsWith('instagram.json'));
+  for (const h of ['../x', 'a/b', 'a b', 'a\\b', '..\\x', 'x;y']) assert.throws(() => ayarYolu(h), /hesap/, h);
+});
+
+test('onayZamani: approving a job whose time has passed moves it to the next free slot; a future time stays', () => {
+  const { onayZamani } = require('../kuyruk.js');
+  const a = { paylasim_saatleri: ['12:00', '19:00'], gunluk_en_fazla: 2 };
+  const simdi = new Date(2026, 10, 1, 13, 0).getTime(), at = (d, h) => new Date(2026, 10, d, h, 0).toISOString();
+  assert.equal(onayZamani({ ne_zaman: at(1, 19) }, a, [], simdi), at(1, 19));
+  assert.equal(onayZamani({ ne_zaman: at(1, 12) }, a, [], simdi), at(1, 19));
+  assert.equal(onayZamani({ ne_zaman: null }, a, [], simdi), at(1, 19));
+  assert.equal(onayZamani({ ne_zaman: at(1, 12), hesap: 'hesap_b' }, a, [{ t: at(1, 19), hesap: 'hesap_b' }], simdi), at(2, 12));
+});

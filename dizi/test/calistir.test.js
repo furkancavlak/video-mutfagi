@@ -324,3 +324,14 @@ test('a stored series whose last episode is already measured is marked bitti (ol
   await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi: async () => null });
   assert.strictEqual(yukle(k, 'k').diziler[0].durum, 'bitti');
 });
+
+test('a missing onay_donemi means the approval period is on (onay_gunluk, onayGerekli)', async () => {
+  const k = kok();
+  const { onay_donemi, ...ayar } = AYAR;
+  let n = 0; const opts = [];
+  const yeniDizi = async () => { n++; return { id: 'y' + n, kanal: 'k', durum: 'aktif', bolumler: [bolum(1), bolum(2), bolum(3)] }; };
+  const uret = async (cx, d, i, o) => { opts.push(o.onayGerekli); return { durum: 'onay-bekliyor' }; };
+  await calistir({ kanal: 'k', kimlik: { hesap: 'dur' }, ayar: { dizi: { ...ayar, gunluk_hedef: 3, onay_gunluk: 1 } } }, { simdi: SIMDI, kok: k, uretBolum: uret, yeniDizi, sonucAl: async () => ({}) });
+  assert.strictEqual(n, 1);
+  assert.deepStrictEqual(opts, [true]);
+});

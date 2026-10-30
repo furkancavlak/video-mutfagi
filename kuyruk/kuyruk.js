@@ -82,6 +82,21 @@ function saatAta(a) {
   }
 }
 
+// approving a job whose time has already passed moves it to the account's next free slot (otherwise it would go out
+// at once, off its hours); a future time is kept. dolu: the other jobs, as for sonrakiSlot.
+function onayZamani(j, a, dolu, simdi = Date.now(), kok = KOK) {
+  if (j.ne_zaman && new Date(j.ne_zaman).getTime() > simdi) return j.ne_zaman;
+  return sonrakiSlot(a, dolu, j.hesap, simdi, kok);
+}
+function onayla(id) {
+  const f = bul(id || ''), j = okuJ(f), a = ayar(), ad = path.basename(f, '.json');
+  const dolu = [...isler(D.paylasilan).filter(x => x.paylasildi).map(x => ({ t: x.paylasildi, hesap: x.hesap })), ...isler().filter(x => x.id !== ad && x.ne_zaman).map(x => ({ t: x.ne_zaman, hesap: x.hesap }))];
+  const t = onayZamani(j, a, dolu);
+  const { sonraki_deneme, ...veri } = j;
+  yazJ(f, { ...(t === j.ne_zaman ? j : veri), ne_zaman: t, onay_gerekli: false, onaylandi: new Date().toISOString() });
+  console.log(t === j.ne_zaman ? `Onaylandı, ${tarih(t)} saatinde paylaşılacak.` : `Onaylandı. Saati geçmişti${j.ne_zaman ? ' (' + tarih(j.ne_zaman) + ')' : ''}, sıradaki boş saate alındı: ${tarih(t)}.`);
+}
+
 function ekle() {
   const mp4 = process.argv[3]; if (!mp4 || !fs.existsSync(mp4)) fail('video dosyası yok: ' + mp4);
   const a = ayar(), aciklama = arg('--aciklama') || '';
@@ -266,12 +281,12 @@ function durumGoster() {
   console.log(uyari.length ? '\nDİKKAT:\n' + uyari.map(u => '  • ' + u).join('\n') : '\nHer şey yolunda.');
 }
 
-module.exports = { sonrakiSlot, gunlukSayi, hesapAyar, kronSatiri, zamanlayici };
+module.exports = { sonrakiSlot, onayZamani, gunlukSayi, hesapAyar, kronSatiri, zamanlayici };
 const k = process.argv[2];
 if (require.main === module) (async () => {
   if (k === 'ekle') ekle();
   else if (k === 'liste') liste();
-  else if (k === 'onayla') { const f = bul(process.argv[3] || ''), j = okuJ(f); yazJ(f, { ...j, onay_gerekli: false, onaylandi: new Date().toISOString() }); console.log(`Onaylandı, ${tarih(j.ne_zaman)} saatinde paylaşılacak.`); }
+  else if (k === 'onayla') onayla(process.argv[3]);
   else if (k === 'iptal') { tasi(bul(process.argv[3] || ''), D.iptal, { iptal: new Date().toISOString() }); console.log('İptal edildi (kuyruk/iptal/).'); }
   else if (k === 'calistir') await calistir();
   else if (k === 'sonuclar') await sonuclar();

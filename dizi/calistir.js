@@ -207,7 +207,8 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       if (!t || isNaN(new Date(t)) || hesapAd(j.hesap) !== hesapAd(hesap) || (j.video && videolar.has(j.video))) continue;
       if (gunIst(t) === bugun) sayilan.add('job:' + j.id);
     }
-    const hedef = ayar.onay_donemi ? ayar.onay_gunluk : ayar.gunluk_hedef;
+    const onayDonemi = ayar.onay_donemi !== false;   // a missing onay_donemi means approval is on
+    const hedef = onayDonemi ? ayar.onay_gunluk : ayar.gunluk_hedef;
     let sayi = sayilan.size, aktif = diziler.filter(d => d.durum === 'aktif').length;
     const eksik = Math.max(0, Math.min((hedef || 0) - sayi, MAX_AKTIF - aktif));
     if (kuru) { sonuc.yeniler = eksik; if (eksik) notlar.push(`yeni dizi planlanan: ${eksik}`); }
@@ -237,7 +238,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       const j = isBul(kuyrukOku(kok), `videolar/${ctx.kanal}-${d.id}-b${u.n}`);
       if (j) { benimse(b, j); notlar.push(`${u.id} bölüm ${u.n}: kuyrukta işi var (${j.id}), yeniden üretilmedi`); kaydetSon(); continue; }
       try {
-        const r = await uretBolum(ctx, d, u.n, { onayGerekli: !!ayar.onay_donemi, kok });
+        const r = await uretBolum(ctx, d, u.n, { onayGerekli: onayDonemi, kok });
         // uretBolum contract: returns {durum, dir?, mp4?}; the state is written whatever the episode's current one
         if (r && r.durum) b.durum = r.durum === 'butce-bekliyor' ? 'uretimde' : r.durum;
         // the panel shows this chip; it clears as soon as production gets past the budget gate
