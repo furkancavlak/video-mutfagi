@@ -35,3 +35,8 @@ kanal/*
 !kanal/oxygbio/
 !kanal/sablon/
 !kanal/*.md
+# episode folders of private channels (story series etc.) never go public: only the template and the sample
+# channel's videos are tracked. A tracked file stays tracked; a new public sample needs `git add -f`.
+videolar/*
+!videolar/_sablon/
+!videolar/oxygbio-*/
