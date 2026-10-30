@@ -244,3 +244,23 @@ test('kuyrugaYaz: a waiting or posted job with the same video is reused, no seco
   U.kuyrugaYaz({ video: 'videolar/k-x-b1', mp4: 'x.mp4', aciklama: 'x', onayGerekli: true }, kok);
   assert.strictEqual(kuyrukDosyalari(kok).length, 1);
 });
+
+test('isHesabi: normalised like the panel; oxygbio gets no hesap; a series channel needs a valid account', () => {
+  const c = (hesap, dizi) => ({ kimlik: { hesap }, ayar: dizi ? { dizi: {} } : {} });
+  assert.strictEqual(U.isHesabi(c('@oxygbio')), null);
+  assert.strictEqual(U.isHesabi(c(' @Foo_Bar ')), 'foo_bar');
+  assert.strictEqual(U.isHesabi(c('@kanal_adi', true)), 'kanal_adi');
+  assert.strictEqual(U.isHesabi(c('')), null);
+  for (const h of ['', '@', undefined, '@bad name', '@a/b']) {
+    assert.throws(() => U.isHesabi(c(h, true)), e => e instanceof U.Dur && e.tur === 'insan' && e.message === 'kanalın Instagram hesabı tanımlı değil', String(h));
+  }
+});
+
+test('a series episode on a channel without an account stops for a human before anything is spent or queued', async () => {
+  const kok = tmp('dizi-ub-hesapsiz-'), ctx = { ...kanalCtx({ hesap: '' }), ayar: { otomasyon: { katman: 'formul' }, llm: {}, dizi: { gunluk_hedef: 1 } } }, d = dizi();
+  sesHazir(path.join(kok, 'videolar', 'k-eksi-42-b1'), 2, 'anlatici');
+  const r = await uretBolum(ctx, d, 1, { kok, yaz: sessiz, calistir: async () => { throw new Error('model must not be called'); } });
+  assert.strictEqual(r.durum, 'kontrol_et');
+  assert.match(d.bolumler[0].karar_neden, /kanalın Instagram hesabı tanımlı değil/);
+  assert.deepStrictEqual(kuyrukDosyalari(kok), []);
+});

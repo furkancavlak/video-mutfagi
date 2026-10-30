@@ -180,6 +180,16 @@ function kodCikar(metin) {
 // the leading // comment block of a file is its manual
 const basYorum = f => { const out = []; for (const l of fs.readFileSync(f, 'utf8').split('\n')) { if (!l.startsWith('//')) break; out.push(l.replace(/^\/\/ ?/, '')); } return out.join('\n'); };
 
+// the queue job's account: kimlik.hesap normalised like the panel and dizi/calistir.js (strip @, trim, lowercase).
+// The default account (oxygbio) gets no hesap field, as before. A series channel (konu.json → dizi) must name a valid
+// account: without one its episodes would be posted from oxygbio.
+function isHesabi(ctx) {
+  const h = String((ctx.kimlik || {}).hesap || '').trim().replace(/^@/, '').trim().toLowerCase();
+  const gecerli = /^[\w.-]+$/.test(h) ? h : null, dizi = ctx.ayar && ctx.ayar.dizi;
+  if (!gecerli && dizi && typeof dizi === 'object') throw new Dur('insan', 'kanalın Instagram hesabı tanımlı değil');
+  return gecerli && gecerli !== 'oxygbio' ? gecerli : null;
+}
+
 // ---- the run
 async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir, not = null, hazir = null, kok = O.KOK, sesKontrol } = {}) {
   if (hazir && !/^[\w.-]+$/.test(hazir.ad || '')) O.hata(`hazir.ad geçersiz: "${hazir.ad}" (harf, rakam, - _ . olmalı)`);
@@ -219,6 +229,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
   yaz(`\nVideo klasörü: ${fikir.video}`);
 
   try {
+    const hesap = isHesabi(ctx);          // first: nothing is spent on a video that has no account to go to
     const videoF = path.join(dir, 'video.json'), ucretliF = path.join(dir, 'ucretli.json');
     // --not "...": the reader didn't like the script; rewrite it with their note (only before the voice is paid for)
     let onceki = null;
@@ -496,8 +507,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
 
     // 14. hand-off to the posting queue (kuyruk/ is built separately; we only drop the job file)
     // yayinDk: the job is timed N minutes after the video is finished (otherwise the queue picks the next free slot)
-    // the job names its account (kimlik.hesap, an Instagram account name like "ornek_hesap"; "@oxygbio" is a handle, not one)
-    const hesap = /^[\w.]+$/.test(ctx.kimlik.hesap || '') ? ctx.kimlik.hesap : null;
+    // the job names its account (isHesabi, checked at the start; none for the default account)
     const relK = f => path.relative(kok, f).split(path.sep).join('/');
     const is = kuyrugaYaz({ video: relK(dir), mp4: relK(mp4), aciklama: video.aciklama_instagram || video.baslik, onayGerekli, neZaman: typeof neZaman === 'number' ? new Date(Date.now() + neZaman * 60e3).toISOString() : neZaman, hesap, kaynak: hazir ? 'dizi' : undefined }, kok);
     isaretle('kuyruk', { is: rel(is) });
@@ -536,4 +546,4 @@ function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap =
   return f;
 }
 
-module.exports = { uret, kodCikar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, isHesabi, kodCikar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
