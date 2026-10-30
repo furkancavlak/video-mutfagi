@@ -9,6 +9,7 @@
 // To redo one line: delete only that line's file and run again.
 const fs = require('fs'), path = require('path');
 const { videoYukle, anahtar, fail } = require('./cekirdek');
+const SH = require('./ses-harcama');
 
 const { dir, video, kimlik } = videoYukle(process.argv[2]);
 const onay = process.argv.includes('--onay');
@@ -38,6 +39,9 @@ if (!eksik.length) process.exit(0);
   // eleven_v3 audio tags like [excited] are not spoken but do count as characters
   if (karakter > kalan) fail('Bu ay kalan karakter yetmiyor. Metni kısalt ya da planı yükselt.');
   if (!onay) { console.log('\nHiçbir şey üretilmedi. Onaylıyorsan aynı komutu sonuna --onay ekleyerek çalıştır.'); return; }
+  // the real charge goes to ses/harcama.json (per-request header, else the subscription counter before/after)
+  const once = s.character_count, basliklar = [];
+  try { fs.unlinkSync(SH.dosya(dir)); } catch (e) { }   // never a stale record from an earlier run
   for (const x of eksik) {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${x.ses}?output_format=mp3_44100_128`, {
       method: 'POST', headers: { ...h, 'content-type': 'application/json' },
@@ -48,9 +52,15 @@ if (!eksik.length) process.exit(0);
       if (/voice_not_found/.test(t)) fail(`${x.n}: ses bulunamadı (${x.ses}). Paylaşılan (shared) sesler önce ElevenLabs'te "Add to my voices" ile kütüphaneye eklenmeli.`);
       fail(`${x.n}: ElevenLabs hatası ${r.status}: ${t}`);
     }
+    basliklar.push(SH.basliktanKarakter(r.headers));
     fs.writeFileSync(x.dosya, Buffer.from(await r.arrayBuffer()));
     console.log(`${x.n}-${x.rol} hazır`);
   }
+  let sonra = null;
+  try { await new Promise(ok => setTimeout(ok, 1500)); const s2 = await (await fetch('https://api.elevenlabs.io/v1/user/subscription', { headers: h })).json(); sonra = s2.character_count; } catch (e) { }
+  const harcama = SH.hesapla({ basliklar, once, sonra, tahmin: karakter });
+  fs.writeFileSync(SH.dosya(dir), JSON.stringify({ ...harcama, tahmin: karakter, once, sonra, zaman: new Date().toISOString() }, null, 2));
+  console.log(`ElevenLabs gerçek harcama: ${harcama.karakter} karakter (${harcama.kaynak}${harcama.tahmini ? ', tahmini' : ''}; metin uzunluğu ${karakter}).`);
   console.log('\nŞimdi her satırı dinle. Beğenmediğin satırın dosyasını sil, tekrar çalıştır (yalnız o satır yeniden üretilir).');
   console.log('Sonraki adım: python uretim/kelime.py ' + path.relative(process.cwd(), dir));
 })();

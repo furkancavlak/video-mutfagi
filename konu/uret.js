@@ -505,6 +505,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     if (!bitti('ses')) {
       const eksik = video.satirlar.filter((s, i) => !fs.existsSync(path.join(sesDir, `${String(i + 1).padStart(2, '0')}-${s.rol}.mp3`)));
       const karakter = eksik.reduce((a, s) => a + s.metin.length, 0);
+      let harcanan = null;
       yaz(`\n💳 SES: ${eksik.length} satır, ~${karakter} ElevenLabs karakteri.`);
       const sesBilgi = sesKontrol ? sesKontrol(dir) : node('uretim/ses.js', [dir], { yakala: true });   // stdout + stderr
       if (sesBilgi.cikti) yaz(sesBilgi.cikti.split('\n').map(l => '   ' + l).join('\n'));
@@ -523,10 +524,13 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
         if (!sesBilgi.ok) throw new Dur('insan', 'ses.js çalışmadı (anahtar ya da kota). Çıktı yukarıda.');
         const r = node('uretim/ses.js', [dir, '--onay']);
         if (!r.ok) throw new Dur('insan', 'Ses üretimi yarıda kaldı (ElevenLabs). Çıktı yukarıda; tekrar çalıştırınca eksik satırlardan devam eder.');
-        O.harcamaYaz(ctx, 'karakter', karakter, ad);
+        // the ledger gets the real ElevenLabs charge (uretim/ses.js → ses/harcama.json); the script length only as a marked estimate
+        const gercek = require('../uretim/ses-harcama').oku(dir, karakter);
+        O.harcamaYaz(ctx, 'karakter', gercek.karakter, ad, { kaynak: gercek.kaynak, metin_uzunlugu: karakter, ...(gercek.tahmini ? { tahmini: true } : {}) });
+        harcanan = gercek;
         if (!O.satirlarOku(path.join(ctx.kayit, 'harcama.jsonl')).some(x => x.tur === 'video' && x.video === ad)) O.harcamaYaz(ctx, 'video', 1, ad);
       }
-      isaretle('ses', { karakter });
+      isaretle('ses', { karakter: harcanan ? harcanan.karakter : karakter, metin_uzunlugu: karakter, ...(harcanan && harcanan.tahmini ? { tahmini: true } : {}) });
     }
 
     // 6-7. word times + mix (free)
