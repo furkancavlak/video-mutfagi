@@ -51,7 +51,7 @@ const zamanMetni = z => {
 
 // ---------- accounts: a job without `hesap` belongs to oxygbio; kimlik.hesap may be '@handle'
 const HESAP0 = 'oxygbio';
-const hesapTemiz = h => String(h || '').replace(/^@/, '').trim().toLowerCase() || null;
+const hesapTemiz = h => String(h || '').trim().replace(/^@/, '').trim().toLowerCase() || null;   // same rule as dizi/calistir.js hesapAd
 const isHesap = j => hesapTemiz(j.hesap) || HESAP0;
 // account of a channel; only for a name in kanal/ (never builds a path from raw input); null = the channel has none
 const kanalHesap = k => { if (!kanallar().includes(k)) throw new Error('kanal yok'); return kanalHesapOku(k); };
@@ -289,24 +289,44 @@ function bolumMp4(video, isMp4) {
 }
 function dizilerCevap(kanal) {
   if (!kanallar().includes(kanal)) throw new Error('kanal yok');
-  const ayar = (okuJ(path.join(KOK, 'kanal', kanal, 'konu.json'), {}) || {}).dizi || {};
+  const konuDizi = (okuJ(path.join(KOK, 'kanal', kanal, 'konu.json'), {}) || {}).dizi, ayar = konuDizi && typeof konuDizi === 'object' && !Array.isArray(konuDizi) ? konuDizi : {};
+  const D = DiziDepo();
   const bek = isler('bekleyen');
-  const diziler = (DiziDepo().yukle(KOK, kanal).diziler || []).map(d => ({ ...d, bolumler: (d.bolumler || []).map(({ metin, ...b }) => {
+  const diziler = (D.yukle(KOK, kanal).diziler || []).map(d => ({ ...d, bolumler: (d.bolumler || []).map(({ metin, ...b }) => {
     const j = b.video ? bek.find(x => x.video === b.video) : null;
-    return { ...b, kelime: String(metin || '').split(/\s+/).filter(Boolean).length, mp4: bolumMp4(b.video, j && j.mp4), kuyruk_id: j ? j.id : null, kuyruk_onay_gerekli: j ? !!j.onay_gerekli : null };
+    return { ...b, kelime: String(metin || '').split(/\s+/).filter(Boolean).length, mp4: bolumMp4(b.video, j && j.mp4), kuyruk_id: j ? j.id : null, kuyruk_onay_gerekli: j ? !!j.onay_gerekli : null,
+      izin: { devam: !D.kararHata(d, b.n, 'devam'), kes: !D.kararHata(d, b.n, 'kes'), tekrar: !D.tekrarHata(d, b.n) } };   // the same checks the POST routes use
   }) }));
-  return { ayar, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null) };
+  return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null) };
 }
 const DiziDepo = () => require('../dizi/dizi.js');
+// manual decisions run under the scheduler's lock, so a running calistir cannot overwrite them
+function kilitli(kanal, fn) {
+  const D = DiziDepo(), k = D.kilitAl(KOK, kanal);
+  if (k.mesaj) throw Object.assign(new Error('Zamanlayıcı şu an çalışıyor, birkaç dakika sonra tekrar dene'), { kod: 409 });
+  try { return fn(D); } finally { k.birak(); }
+}
+function diziBul(D, b) {
+  if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
+  if (!Number.isInteger(b.n) || b.n < 1 || b.n > 3) throw new Error('bölüm numarası 1, 2 ya da 3 olmalı');
+  const veri = D.yukle(KOK, b.kanal), d = (veri.diziler || []).find(x => x.id === b.id);
+  if (!d) throw new Error('böyle bir dizi yok');
+  return { veri, d };
+}
 function diziKarar(b) {
   if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
   if (!Number.isInteger(b.n) || b.n < 1 || b.n > 3) throw new Error('bölüm numarası 1, 2 ya da 3 olmalı');
   if (!['devam', 'kes'].includes(b.karar)) throw new Error('karar devam ya da kes olmalı');
-  const D = DiziDepo(), veri = D.yukle(KOK, b.kanal), d = (veri.diziler || []).find(x => x.id === b.id);
-  if (!d) throw new Error('böyle bir dizi yok');
-  D.elleKarar(d, b.n, b.karar, String(b.neden || '').replace(/\s+/g, ' ').trim().slice(0, 200) || (b.karar === 'kes' ? 'elle kesildi' : 'elle devam ettirildi'));
-  D.kaydet(KOK, b.kanal, veri);
-  return { ok: true };
+  return kilitli(b.kanal, D => {
+    const { veri, d } = diziBul(D, b);
+    D.kararUygula(d, b.n, b.karar, String(b.neden || '').replace(/\s+/g, ' ').trim().slice(0, 200) || (b.karar === 'kes' ? 'elle kesildi' : 'elle devam ettirildi'));
+    D.kaydet(KOK, b.kanal, veri);
+    return { ok: true };
+  });
+}
+function diziTekrar(b) {
+  if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
+  return kilitli(b.kanal, D => { const { veri, d } = diziBul(D, b); D.tekrarDene(d, b.n); D.kaydet(KOK, b.kanal, veri); return { ok: true }; });
 }
 // only the given keys change; the rest of konu.json is kept (read, merge, write to a temp file, rename)
 function diziAyarYaz(b) {
@@ -354,6 +374,7 @@ async function api(req, u) {
   if (GET && yol === 'dersler') return okuJ(DERSLER, []);
   if (GET && yol === 'diziler') return dizilerCevap(u.searchParams.get('kanal'));
   if (!GET && yol === 'dizi/karar') return diziKarar(b);
+  if (!GET && yol === 'dizi/tekrar') return diziTekrar(b);
   if (!GET && yol === 'dizi/ayar') return diziAyarYaz(b);
   if (!GET && yol === 'is') return isBaslat(b.tur, b);
   // ideas

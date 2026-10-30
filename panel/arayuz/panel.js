@@ -198,12 +198,12 @@ function dzEtiket(b) {
 function dzBolum(d, b) {
   const [r, y] = dzEtiket(b), onayBekler = b.durum === 'onay-bekliyor' && b.kuyruk_id && b.kuyruk_onay_gerekli === true;
   const karar = b.karar && b.karar !== 'bekle' ? `${b.karar === 'kes' ? 'kes' : 'devam'}${b.elle ? ' (elle)' : ''}` : null;
-  const dk = `data-did="${esc(d.id)}" data-dn="${b.n}"`;
-  return `<div class="dz-bolum"><div class="dz-bolum-ust"><b>Bölüm ${b.n}</b><span class="etiket ${r}">${esc(y)}</span>${b.bekleme === 'butce' ? '<span class="etiket sari">bütçe bekliyor</span>' : ''}</div>
+  const iz = b.izin || {}, dk = `data-did="${esc(d.id)}" data-dn="${esc(b.n)}"`;
+  return `<div class="dz-bolum"><div class="dz-bolum-ust"><b>Bölüm ${esc(b.n)}</b><span class="etiket ${r}">${esc(y)}</span>${b.bekleme === 'butce' ? '<span class="etiket sari">bütçe bekliyor</span>' : ''}</div>
     <div class="ince-yazi">${b.metrik && b.metrik.views != null ? sayi(b.metrik.views) + ' izlenme' : b.paylasildi ? 'sayılar henüz yok' : (b.kelime ? sayi(b.kelime) + ' kelime' : '')}${b.paylasildi ? ' · ' + esc(tarih(b.paylasildi, { weekday: undefined })) : ''}</div>
     ${karar || b.karar_neden ? `<div class="dz-karar ${b.karar === 'kes' ? 'kes' : ''}">${karar ? `<b>${esc(karar)}</b> ` : ''}${esc(b.karar_neden || '')}</div>` : ''}
     <div class="dz-islem">${onayBekler ? `<button class="dugme ince sari" data-onayla="${esc(b.kuyruk_id)}" data-makine="yerel">Onayla</button>` : ''}
-      ${b.durum === 'yayinda' ? `<button class="dugme ince" data-dkarar="devam" ${dk}>Devam ettir</button><button class="dugme ince tehlike" data-dkarar="kes" ${dk}>Kes</button>` : ''}
+      ${iz.devam ? `<button class="dugme ince" data-dkarar="devam" ${dk}>Devam ettir</button>` : ''}${iz.kes ? `<button class="dugme ince tehlike" data-dkarar="kes" ${dk}>Kes</button>` : ''}${iz.tekrar ? `<button class="dugme ince" data-dtekrar="1" ${dk}>Tekrar dene</button>` : ''}
       ${b.mp4 ? `<button class="dugme ince" data-izle="${esc(b.mp4)}">Videoyu aç</button>` : ''}
       ${guvenli(b.link) ? `<a class="dugme ince" href="${esc(guvenli(b.link))}" target="_blank" rel="noopener">Reels</a>` : ''}</div></div>`;
 }
@@ -224,15 +224,18 @@ function dizilerCiz() {
 }
 // plain questions; percent in the form, a ratio in konu.json
 function dzAyarCiz() {
-  const a = (DZ && DZ.ayar) || {}, v = x => x == null ? '' : esc(x);
+  const var_ = !!(DZ && DZ.ayar_var);   // a channel without a dizi block has nothing to edit: no form, nothing to send
+  $('#dz-ayar').hidden = !var_; $('#dz-ayar-baslik').hidden = !var_;
+  if (!var_) { $('#dz-ayar').innerHTML = ''; dzKirli = false; return; }
+  const a = (DZ && DZ.ayar) || {}, v = x => x == null || typeof x === 'object' ? '' : esc(x), lst = x => Array.isArray(x) ? x.join(', ') : '';
   $('#dz-ayar').innerHTML = `<label>Günde kaç bölüm paylaşılsın?<input type="number" name="gunluk_hedef" min="1" max="5" step="1" value="${v(a.gunluk_hedef)}"></label>
     <label class="kutu dz-onay"><input type="checkbox" name="onay_donemi" ${a.onay_donemi ? 'checked' : ''}> Her bölümü önce ben onaylayayım (onay dönemi)</label>
     <label>Onay döneminde günde kaç bölüm hazırlansın?<input type="number" name="onay_gunluk" min="1" max="5" step="1" value="${v(a.onay_gunluk)}"></label>
-    <label>Hangi saatlerde paylaşılsın? (virgülle: 12:00, 17:00)<input type="text" name="saatler" value="${v((a.saatler || []).join(', '))}"></label>
+    <label>Hangi saatlerde paylaşılsın? (virgülle: 12:00, 17:00)<input type="text" name="saatler" value="${esc(lst(a.saatler))}"></label>
     <label>Bir hikâyenin devamı için kaç saat bekleyelim?<input type="number" name="bekle_saat" min="6" max="72" step="1" value="${v(a.bekle_saat)}"></label>
-    <label>Devam için izlenme, öncekilerin ortalamasının en az yüzde kaçı olsun?<input type="number" name="esik_oran" min="10" max="100" step="1" value="${a.esik_oran == null ? '' : Math.round(a.esik_oran * 100)}"></label>
+    <label>Devam için izlenme, öncekilerin ortalamasının en az yüzde kaçı olsun?<input type="number" name="esik_oran" min="10" max="100" step="1" value="${typeof a.esik_oran === 'number' ? Math.round(a.esik_oran * 1000) / 10 : ''}"></label>
     <label>İlk kaç hikâye hiç kesilmesin?<input type="number" name="ilk_dizi_sayisi" min="0" max="50" step="1" value="${v(a.ilk_dizi_sayisi)}"></label>
-    <label>Yorumlarda hangi sözler “devamı gelsin” demek? (virgülle)<input type="text" name="yorum_kelimeleri" value="${v((a.yorum_kelimeleri || []).join(', '))}"></label>
+    <label>Yorumlarda hangi sözler “devamı gelsin” demek? (virgülle)<input type="text" name="yorum_kelimeleri" value="${esc(lst(a.yorum_kelimeleri))}"></label>
     <label>Kaç kişi isterse hikâye kesilmesin?<input type="number" name="yorum_min" min="1" max="50" step="1" value="${v(a.yorum_min)}"></label>
     <div class="dz-kaydet"><span class="dz-hata" id="dz-hata" role="alert"></span><button class="dugme sari" type="submit">Kaydet</button></div>`;
   dzKirli = false;
@@ -256,6 +259,10 @@ async function dzKaydet(e) {
   const h = $('#dz-hata'); h.textContent = '';
   try { await api('dizi/ayar', { kanal, ayar: dzAyarOku() }); dzKirli = false; bildir('Ayarlar kaydedildi ✓'); await dizilerYukle(); }
   catch (err) { h.textContent = err.message; bildir(err.message, true); }
+}
+async function dzTekrar(d) {
+  try { await api('dizi/tekrar', { kanal, id: d.did, n: +d.dn }); bildir('Bölüm yeniden denenecek'); await dizilerYukle(); }
+  catch (err) { bildir(err.message, true); }
 }
 async function dzKarar(d) {
   const kes = d.dkarar === 'kes';
@@ -385,6 +392,7 @@ document.addEventListener('click', e => {
   else if (d.metin) metinGoster(d.metin).catch(err => bildir(err.message, true));
   else if (d.rapor) raporGoster(d.rapor).catch(err => bildir(err.message, true));
   else if (d.dkarar) dzKarar(d);
+  else if (d.dtekrar) dzTekrar(d);
   else if (d.izle) videoGoster(d.izle);
   else if (d.ekle) ekleGoster(d.ekle);
   else if (d.is) isBaslat(d.is, { kanal: ['topla', 'puanla', 'ders'].includes(d.is) ? kanal || kanalAd0() : undefined });

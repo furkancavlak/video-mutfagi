@@ -1,10 +1,10 @@
 // Hourly series scheduler run: sync posted episodes from the queue, measure, decide continue/cut, fill the day, ask for due episodes.
 //   node dizi/calistir.js <kanal> [--kuru]      (--kuru = plan only: no writes, no production, no network)
 const fs = require('fs'), path = require('path');
-const { yukle, kaydet, kararVer } = require('./dizi');
+const { yukle, kaydet, kararVer, kilitAl } = require('./dizi');
 const ortak = require('../konu/ortak');
 
-const MAX_AKTIF = 3, ESKALASYON_SAAT = 72, KILIT_SAAT = 6;
+const MAX_AKTIF = 3, ESKALASYON_SAAT = 72;
 const bul = (d, n) => (d.bolumler || []).find(b => b.n === n);
 const saatFark = (simdi, t) => (new Date(simdi).getTime() - new Date(t).getTime()) / 3600e3;
 const gunIst = t => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date(t));   // YYYY-MM-DD
@@ -19,26 +19,6 @@ function kuyrukOku(kok) {
     for (const f of ad) { try { out[k].push({ id: f.replace(/\.json$/, ''), ...JSON.parse(fs.readFileSync(path.join(d, f), 'utf8').replace(/^﻿/, '')) }); } catch (e) { } }
   }
   return out;
-}
-
-// ---- per-channel lock (kayit/dizi/<kanal>/.kilit); a dead pid or a file older than 6 h is stale
-function kilitAl(kok, kanal) {
-  const f = path.join(kok, 'kayit', 'dizi', kanal, '.kilit');
-  fs.mkdirSync(path.dirname(f), { recursive: true });
-  for (let i = 0; i < 2; i++) {
-    try {
-      const fd = fs.openSync(f, 'wx'); fs.writeSync(fd, JSON.stringify({ pid: process.pid, zaman: new Date().toISOString() })); fs.closeSync(fd);
-      return { birak: () => { try { if (JSON.parse(fs.readFileSync(f, 'utf8')).pid === process.pid) fs.unlinkSync(f); } catch (e) { } } };
-    } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-      let k = null; try { k = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (x) { }
-      let yasiyor = !!k && Date.now() - Date.parse(k.zaman) < KILIT_SAAT * 3600e3;
-      if (yasiyor) { try { process.kill(k.pid, 0); } catch (x) { yasiyor = x.code === 'EPERM'; } }
-      if (yasiyor) return { mesaj: `kilit: başka bir dizi işi sürüyor (pid ${k.pid}, ${k.zaman})` };
-      try { fs.unlinkSync(f); } catch (x) { }
-    }
-  }
-  return { mesaj: 'kilit: kilit dosyası alınamadı' };
 }
 
 // ---- default collaborators (all injectable)
@@ -125,7 +105,9 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
   const sonuc = { olculen: 0, kararlar: [], uretilecek: [], yeniler: 0, notlar: [] };
   const notlar = sonuc.notlar, ayar = (ctx.ayar && ctx.ayar.dizi) || {}, hesap = (ctx.kimlik && ctx.kimlik.hesap) || null;
   const kilit = kuru ? { birak() { } } : kilitAl(kok, ctx.kanal);
-  if (kilit.mesaj) { notlar.push(kilit.mesaj); return sonuc; }
+  // last run for the panel; written on every non-dry exit, also when the run throws or the lock refused it
+  const sonKosu = () => { if (kuru) return; try { ortak.yazJson(path.join(kok, 'kayit', 'dizi', ctx.kanal, 'son-kosu.json'), { zaman: new Date(simdi).toISOString(), notlar: sonuc.notlar, kararlar: sonuc.kararlar, uretilecek: sonuc.uretilecek }); } catch (e) { } };
+  if (kilit.mesaj) { notlar.push(kilit.mesaj); sonKosu(); return sonuc; }
   try {
     let veri = yukle(kok, ctx.kanal);
     if (kuru) veri = JSON.parse(JSON.stringify(veri));
@@ -144,15 +126,14 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       for (const b of (d.bolumler || []).slice().sort((x, y) => x.n - y.n)) {
         if (b.durum !== 'yayinda' || !b.paylasildi) continue;
         const gecen = saatFark(simdi, b.paylasildi);
-        if (!b.elle && !(gecen >= ayar.bekle_saat)) continue;
-        if (!b.elle) {
-          if (kuru) { notlar.push(`ölçülecek: ${d.id} bölüm ${b.n}`); sonuc.olculen++; continue; }
-          if (!b.media_id) { notlar.push(`${d.id} bölüm ${b.n}: media_id yok, ölçülemedi`); continue; }
-          try {
-            const r = (await sonucAl(b.media_id, hesap, ayar.yorum_kelimeleri || [])) || {};
-            b.metrik = r.metrik || r; b.yorum_devam = r.yorum_devam ?? 0; sonuc.olculen++;
-          } catch (e) { notlar.push(`${d.id} bölüm ${b.n}: ölçüm hatası: ${e.message}`); continue; }
-        }
+        if (!(gecen >= ayar.bekle_saat)) continue;
+        // `elle` only overrides the decision (kararVer), never the measurement: the next episode needs this one's views
+        if (kuru) { notlar.push(`ölçülecek: ${d.id} bölüm ${b.n}`); sonuc.olculen++; continue; }
+        if (!b.media_id) { notlar.push(`${d.id} bölüm ${b.n}: media_id yok, ölçülemedi`); continue; }
+        try {
+          const r = (await sonucAl(b.media_id, hesap, ayar.yorum_kelimeleri || [])) || {};
+          b.metrik = r.metrik || r; b.yorum_devam = r.yorum_devam ?? 0; sonuc.olculen++;
+        } catch (e) { notlar.push(`${d.id} bölüm ${b.n}: ölçüm hatası: ${e.message}`); continue; }
         const k = kararVer(d, b.n, diziler, ayar, simdi);
         b.karar = k.karar; b.karar_neden = k.neden;
         if (k.karar === 'bekle') {
@@ -204,7 +185,6 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     const liste = uretilecekler(diziler);
     sonuc.uretilecek = liste;
     if (kuru) { for (const u of liste) notlar.push(`üretilecek: ${u.id} bölüm ${u.n}`); return sonuc; }
-    const sonKosu = () => ortak.yazJson(path.join(kok, 'kayit', 'dizi', ctx.kanal, 'son-kosu.json'), { zaman: new Date(simdi).toISOString(), notlar: sonuc.notlar, kararlar: sonuc.kararlar, uretilecek: sonuc.uretilecek });
     if (liste.length && !uretBolum) {
       try { uretBolum = require('./uret-bolum').uretBolum; } catch (e) { notlar.push(eksikModul(e)); }
     }
@@ -222,9 +202,9 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       } catch (e) { notlar.push(`${u.id} bölüm ${u.n}: üretim hatası: ${e.message}`); }
       kaydetSon();
     }
-    sonKosu();
     return sonuc;
-  } finally { kilit.birak(); }
+  } catch (e) { notlar.push(`çalışma hatası: ${e.message}`); throw e; }
+  finally { kilit.birak(); sonKosu(); }
 }
 
 module.exports = { calistir, sonucAlYap, uretilecekler, senkronla, yeniDiziYap, sirayaKoy };

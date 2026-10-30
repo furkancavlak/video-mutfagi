@@ -64,3 +64,73 @@ test('yukle/kaydet round-trip, empty store when missing', () => {
   assert.strictEqual(yukle(kok, 'k').diziler[0].id, 'a');
   assert.ok(fs.existsSync(path.join(kok, 'kayit', 'dizi', 'k', 'diziler.json')));
 });
+
+// ---- manual decisions with their consequence (panel)
+const { kararHata, kararUygula, tekrarHata, tekrarDene, kilitAl } = require('../dizi');
+const seri = (durumlar, ekstra = {}) => ({ id: 's', durum: 'aktif', bolumler: durumlar.map((d, i) => ({ n: i + 1, metin: 'x', durum: d, ...(ekstra[i + 1] || {}) })) });
+
+test('kes on a yayinda episode cuts the series and skips later text episodes', () => {
+  const s = seri(['yayinda', 'metin', 'metin']);
+  kararUygula(s, 1, 'kes', 'neden');
+  assert.deepStrictEqual([s.durum, ...s.bolumler.map(b => b.durum)], ['kesildi', 'yayinda', 'atlandi', 'atlandi']);
+  assert.deepStrictEqual([s.bolumler[0].elle, s.bolumler[0].karar], [true, 'kes']);
+});
+
+test('devam on a cut series reactivates it and restores the skipped episodes', () => {
+  const s = seri(['olculdu', 'atlandi', 'atlandi']); s.durum = 'kesildi'; s.bolumler[0].karar = 'kes';
+  kararUygula(s, 1, 'devam', 'x');
+  assert.deepStrictEqual([s.durum, ...s.bolumler.map(b => b.durum)], ['aktif', 'olculdu', 'metin', 'metin']);
+  assert.strictEqual(s.bolumler[0].karar, 'devam');
+});
+
+test('yayinda + devam on an active series is stored once, a repeat is refused', () => {
+  const s = seri(['yayinda', 'metin', 'metin']);
+  kararUygula(s, 1, 'devam', 'x');
+  assert.match(kararHata(s, 1, 'devam'), /zaten devam/);
+});
+
+test('the next episode may be metin, atlandi or uretimde without a video; anything further is refused', () => {
+  assert.strictEqual(kararHata(seri(['yayinda', 'uretimde', 'metin']), 1, 'kes'), null);
+  assert.match(kararHata(seri(['yayinda', 'uretimde', 'metin'], { 2: { video: 'v' } }), 1, 'kes'), /üretime girdi/);
+  for (const d of ['sirada', 'onay-bekliyor', 'yayinda', 'olculdu', 'kontrol_et']) assert.match(kararHata(seri(['yayinda', d, 'metin']), 1, 'kes'), /üretime girdi/, d);
+});
+
+test('refusals: episode not published, atlandi, the last episode, a finished series, a repeated kes', () => {
+  assert.match(kararHata(seri(['metin', 'metin', 'metin']), 1, 'kes'), /yayında değil/);
+  const k = seri(['olculdu', 'atlandi', 'atlandi']); k.durum = 'kesildi';
+  assert.match(kararHata(k, 2, 'kes'), /yayında değil/);
+  assert.match(kararHata(k, 1, 'kes'), /zaten kesilmiş/);
+  assert.match(kararHata(seri(['olculdu', 'olculdu', 'yayinda']), 3, 'kes'), /Son bölüm/);
+  const b = seri(['olculdu', 'olculdu', 'olculdu']); b.durum = 'bitti';
+  assert.match(kararHata(b, 1, 'devam'), /bitti/);
+  assert.match(kararHata(seri(['olculdu', 'metin', 'metin']), 1, 'devam'), /zaten devam/);
+  assert.throws(() => kararUygula(seri(['metin', 'metin', 'metin']), 1, 'kes', 'x'), /yayında değil/);
+  assert.match(kararHata(seri(['yayinda']), 9, 'kes'), /yok/);
+});
+
+test('kontrol_et: Kes cuts the series without storing a decision; devam is refused', () => {
+  const s = seri(['kontrol_et', 'metin', 'metin']);
+  assert.match(kararHata(s, 1, 'devam'), /yalnız Kes/);
+  kararUygula(s, 1, 'kes', 'x');
+  assert.deepStrictEqual([s.durum, ...s.bolumler.map(b => b.durum)], ['kesildi', 'kontrol_et', 'atlandi', 'atlandi']);
+  assert.ok(!s.bolumler[0].elle);
+});
+
+test('tekrarDene: with a media_id back to yayinda (video kept), without one back to metin (video/link dropped)', () => {
+  const a = seri(['kontrol_et', 'metin', 'metin'], { 1: { media_id: 'M', video: 'v', link: 'L', karar_neden: 'hata', bekleme: 'butce' } });
+  tekrarDene(a, 1);
+  assert.deepStrictEqual([a.bolumler[0].durum, a.bolumler[0].video, a.bolumler[0].media_id, a.bolumler[0].karar_neden, a.bolumler[0].bekleme], ['yayinda', 'v', 'M', undefined, undefined]);
+  const b = seri(['kontrol_et', 'metin', 'metin'], { 1: { video: 'v', link: 'L', karar_neden: 'hata' } });
+  tekrarDene(b, 1);
+  assert.deepStrictEqual([b.bolumler[0].durum, 'video' in b.bolumler[0], 'link' in b.bolumler[0]], ['metin', false, false]);
+  assert.match(tekrarHata(seri(['yayinda', 'metin', 'metin']), 1), /kontrol bekleyen/);
+  const c = seri(['kontrol_et', 'metin', 'metin']); c.durum = 'kesildi';
+  assert.match(tekrarHata(c, 1), /kesilmiş/);
+});
+
+test('kilitAl is shared: a second holder gets a message, release frees it', () => {
+  const k = fs.mkdtempSync(path.join(os.tmpdir(), 'dizi-kilit-'));
+  const a = kilitAl(k, 'k'); assert.ok(a.birak);
+  assert.match(kilitAl(k, 'k').mesaj, /kilit/);
+  a.birak(); assert.ok(kilitAl(k, 'k').birak);
+});

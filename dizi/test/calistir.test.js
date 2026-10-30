@@ -178,3 +178,41 @@ test('account names are normalised when matching queue jobs (@Foo == foo)', asyn
   const r = await calistir(c, { simdi: SIMDI, kok: k, kuru: true });
   assert.strictEqual(r.yeniler, 0, 'the job already fills the daily target');
 });
+
+test('elle devam never skips the measurement: ep1 gets its metric and ep2 is decided normally', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [...gecmis(), { id: 'a', kanal: 'k', durum: 'aktif', bolumler: [
+    bolum(1, { durum: 'yayinda', video: 'v-a1', paylasildi: saatOnce(28), media_id: 'M1', elle: true, karar: 'devam', karar_neden: 'elle' }),
+    bolum(2, { durum: 'yayinda', video: 'v-a2', paylasildi: saatOnce(21), media_id: 'M2' }), bolum(3)] }] });
+  const gelen = [];
+  const r = await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async id => { gelen.push(id); return { metrik: { views: id === 'M1' ? 3000 : 2500 }, yorum_devam: 0 }; }, uretBolum: fakeUret(), yeniDizi: async () => null });
+  assert.deepStrictEqual(gelen, ['M1', 'M2']);
+  const a = yukle(k, 'k').diziler.find(d => d.id === 'a');
+  assert.deepStrictEqual(a.bolumler.map(b => b.durum), ['olculdu', 'olculdu', 'sirada']);   // ep3 is produced right after
+  assert.strictEqual(a.bolumler[0].metrik.views, 3000);
+  assert.strictEqual(a.bolumler[0].elle, true);
+  assert.strictEqual(a.bolumler[1].karar, 'devam');
+  assert.ok(!/izlenmesi yok|bekle/.test(a.bolumler[1].karar_neden), a.bolumler[1].karar_neden);
+  assert.deepStrictEqual(r.kararlar.map(x => x.n), [1, 2]);
+});
+
+test('elle episode inside the wait window is not measured yet', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [{ id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'yayinda', video: 'v', paylasildi: saatOnce(5), media_id: 'M1', elle: true, karar: 'devam' })] }] });
+  let cagri = 0;
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async () => { cagri++; return {}; }, uretBolum: fakeUret(), yeniDizi: async () => null });
+  assert.strictEqual(cagri, 0);
+});
+
+test('son-kosu.json is also written when the run throws or the lock refuses it', async () => {
+  const k = kok(), f = path.join(k, 'kayit', 'dizi', 'k', 'son-kosu.json');
+  fs.mkdirSync(path.join(k, 'kayit', 'dizi', 'k'), { recursive: true });
+  fs.writeFileSync(path.join(k, 'kayit', 'dizi', 'k', 'diziler.json'), '{ bozuk');
+  await assert.rejects(() => calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, uretBolum: fakeUret(), yeniDizi: async () => null }));
+  assert.ok(JSON.parse(fs.readFileSync(f, 'utf8')).notlar.some(n => /çalışma hatası/.test(n)));
+  assert.ok(!fs.existsSync(path.join(k, 'kayit', 'dizi', 'k', '.kilit')), 'lock released');
+  fs.unlinkSync(f);
+  fs.writeFileSync(path.join(k, 'kayit', 'dizi', 'k', '.kilit'), JSON.stringify({ pid: process.pid, zaman: new Date().toISOString() }));
+  await calistir(ctx(), { simdi: SIMDI, kok: k });
+  assert.ok(JSON.parse(fs.readFileSync(f, 'utf8')).notlar.some(n => /kilit/.test(n)));
+});
