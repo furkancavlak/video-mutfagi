@@ -95,7 +95,10 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
           h = { id: x.id, tur: 'eksi', url: x.link, baslik: e.baslik || x.baslik, metin: e.metin, puan: e.fav ?? x.fav, dil: 'tr' };
         } catch (e) {
           not(`havuz ${x.id}: entry alınamadı: ${e.message}`);
-          if (/HTTP 404|bulunamadı/.test(e.message)) { Object.assign(x, { durum: 'elendi', neden: 'entry artık yok' }); kaydetH(); }
+          // Ekşi is blocking us: stop for this run instead of trying the whole pool
+          if (/HTTP (403|429|503)/.test(e.message)) break;
+          // only a real 404 drops the story; a changed or challenge page must not empty the pool
+          if (/HTTP 404/.test(e.message)) { Object.assign(x, { durum: 'elendi', neden: 'entry artık yok' }); kaydetH(); }
           continue;
         }
         const r = await bol.bol(ctx, h, {});
