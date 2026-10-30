@@ -15,6 +15,7 @@ Terminalde bir link çıkar, tarayıcı kendiliğinden açılır. Kapatmak için
 | Bugün | Bilgisayarının (ve sunucunun) durumu. Senden bekleyen her şey düğmesiyle: onaylar, takılan videolar, okunacak metinler, sıraya girmemiş videolar. |
 | Fikirler | Konu radarının bulduğu fikirler. Seç, reddet, kendi fikrini ekle, "Metnini yaz". |
 | Üretim | Her video hangi adımda: metin, ses, video, kalite kontrolü. Metni oku, raporu aç, "Onayla ve devam". |
+| Diziler | Hikâye dizileri (seçili kanal): her dizi için kaynak, ses ve 3 bölüm. Bölümün durumu, izlenmesi ve devam/kes kararı görünür. "Onayla" (onay bekleyen bölüm, sıradaki işi onaylar), "Devam ettir" / "Kes" (yayındaki bölüm için elle karar), "Videoyu aç". Üstte "Son çalışma": zamanlayıcının son koşusunun notları (bütçe beklemesi dahil). Altta "Devam ayarları": günlük bölüm, onay dönemi, saatler, bekleme süresi, eşik yüzdesi, kesilmeyecek ilk hikâye sayısı, yorum kelimeleri. "Kaydet" yalnız `kanal/<kanal>/konu.json` içindeki `dizi` ayarlarını değiştirir, diğer ayarlara dokunmaz; aralık dışı değer reddedilir. |
 | Sıra | Paylaşım sırası. Saat değiştir, onayla, sıradan çıkar. Sunucu tanımlıysa ikisi arasında geçiş. |
 | Takvim | Paylaşılanlar (yeşil) ve planlananlar (sarı). |
 | Sonuçlar | Instagram'daki rakamlar ve "Ne öğrendik" kartı. Ders, rakamlardan yapay zekâyla çıkar. "Kaydet": ikinci beyin kuruluysa dersi oraya karar olarak yazar (ajan her oturumda okur), kurulu değilse `kanal/<kanal>/dersler.md` dosyasına. Metin yazan yapay zekâ bu dosyayı kendiliğinden okumaz. |

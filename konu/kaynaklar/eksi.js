@@ -1,7 +1,7 @@
-// Ekşi Sözlük: public topic lists (gündem, debe, channel pages such as kanal/bilim). Only topic TITLES and the
-// day's entry counts are read, never entry text or author names. robots.txt is checked before each page.
+// Ekşi Sözlük: public topic lists (gündem, debe, channel pages such as kanal/bilim). The radar reads only topic TITLES and the
+// day's entry counts; entry text is fetched one by one only for the story sources (entryGetir). robots.txt is checked before each page.
 // Titles go to the language model like every other source; a channel can opt out with llm_e_gonder: false.
-const { getir, robotsKontrol, icerikSinyali, duzMetin, KaynakHatasi, uyu } = require('./ag');
+const { getir, robotsKontrol, icerikSinyali, duzMetin, varlikCoz, KaynakHatasi, uyu } = require('./ag');
 
 const KOK = 'https://eksisozluk.com';
 const sayfaUrl = s => s === 'gundem' ? `${KOK}/basliklar/gundem` : s === 'debe' ? `${KOK}/debe` : s.startsWith('kanal/') ? `${KOK}/basliklar/${encodeURI(s)}` : null;
@@ -21,6 +21,53 @@ function listeAyristir(html, sayfa) {
     out.push({ baslik, yol: href.split('?')[0], entry_bugun: sayi ? +sayi : null, sira: out.length + 1, sayfa });
   }
   return out;
+}
+
+// ---- single entries (story sources, dizi/kaynak.js). Entry text is read only for explicitly chosen entries.
+// Plain clients get 403 from Ekşi's Cloudflare; a browser User-Agent gets 200 (decided by the channel owner).
+const TARAYICI_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+const entryUrl = id => `${KOK}/entry/${id}`;
+
+// Entry <li data-id=...> blocks of an entry or topic page -> [{id, baslik, metin, fav, yazar, tarih}]
+function entryleriAyristir(html) {
+  const bs = html.match(/<h1 id="title"[^>]*data-title="([^"]*)"/);
+  const baslik = bs ? varlikCoz(bs[1]).trim() : '';
+  const out = [];
+  for (const m of html.matchAll(/<li\b([^>]*\bdata-id="(\d+)"[^>]*)>([\s\S]*?)<\/li>/g)) {
+    const [, oz, id, ic] = m;
+    const c = ic.match(/<div class="content">([\s\S]*?)<\/div>/);
+    if (!c) continue;
+    const metin = varlikCoz(c[1].replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''))
+      .split('\n').map(s => s.replace(/[ \t ]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    const fav = +(oz.match(/data-favorite-count="(\d+)"/) || [])[1] || 0;
+    const yazar = varlikCoz((oz.match(/data-author="([^"]*)"/) || [])[1] || '');
+    const tarih = ((ic.match(/class="entry-date[^"]*"[^>]*>([^<]+)</) || [])[1] || '').trim() || null;   // "04.11.2017 18:34[ ~ edit]"
+    out.push({ id, baslik, metin, fav, yazar, tarih });
+  }
+  return out;
+}
+const entryAyristir = html => entryleriAyristir(html)[0] || null;
+
+// Entry ids linked from the debe page (/entry/<id>?debe=true), in page order
+const debeEntryIdleri = html => [...new Set([...html.matchAll(/href="\/entry\/(\d+)/g)].map(m => m[1]))];
+
+
+// default fetcher: robots.txt respected, throws "HTTP <n>" on non-200. Cloudflare answers a Chrome User-Agent sent over
+// Node's TLS with a 403 challenge (fingerprint mismatch) but serves the radar's honest one, so that goes first and the
+// browser UA only after a 403. istemci/robots are injectable for tests.
+async function tarayiciGetir(url, { headers = {}, aralikMs = 4000, istemci = getir, robots = robotsKontrol } = {}) {
+  if (!(await robots(url, 'eksi'))) throw new Error('robots.txt izin vermiyor');
+  const { 'User-Agent': _ua, ...kalan } = headers;
+  let r = await istemci(url, { kaynak: 'eksi', aralikMs, basliklar: kalan });
+  if (r.durum === 403) r = await istemci(url, { kaynak: 'eksi', aralikMs, basliklar: { ...kalan, 'User-Agent': TARAYICI_UA } });
+  if (r.durum !== 200) throw new Error(`HTTP ${r.durum}`);
+  return r.metin;
+}
+
+async function entryGetir(id, { getir: g = tarayiciGetir } = {}) {
+  const e = entryAyristir(await g(entryUrl(id), { headers: { 'User-Agent': TARAYICI_UA } }));
+  if (!e) throw new Error(`entry ${id} sayfada bulunamadı (site yapısı değişmiş olabilir)`);
+  return e;
 }
 
 async function topla(ayar = {}) {
@@ -55,4 +102,4 @@ async function topla(ayar = {}) {
   return { ogeler, notlar };
 }
 
-module.exports = { topla, listeAyristir };
+module.exports = { topla, listeAyristir, entryAyristir, entryleriAyristir, entryGetir, debeEntryIdleri, entryUrl, tarayiciGetir, TARAYICI_UA };

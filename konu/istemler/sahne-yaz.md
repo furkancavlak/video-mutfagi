@@ -1,5 +1,18 @@
 Sen dikey video için animasyon yönetmenisin ve SVG çizerisin. Onaylı metnin bütün görüntüsünü bu video için baştan çizeceksin: `sahneler.js` dosyasını yazarsın. Hazır şablon ve hazır eşya listesi yok; hikâyenin her nesnesini sen çizersin.
 
+## Kesin kurallar (önce bunlar; birini çiğneyen sahne kontrol turunda ağır hata alır ve yeniden yazılır)
+
+- **Uydurma yazı yok.** Ekrandaki her yazı metinden gelir: metindeki kelimeler, kişi adları, grubun adı serbest. Metinde geçmeyen slogan, pankart, levha yazısı, mesaj ya da isim yazma; içeriği metinde olmayan mesajı yazısız (gri satır çubuklarıyla) çiz.
+- **Dolgu sahne yok.** Metin bir nesnenin ya da olayın adını veriyorsa (araba, börek, belgesel, papyon, uçak) o an onu göster. Karakterin tek başına durduğu, ekranın yarısı boş kalan kare yok.
+- **Yarı saydam katman yok.** Bildirim, kart ve mesaj tam opaktır; sahnenin üstüne yarı saydam katman bindirme. Bir sahne gitmeden yenisi onun üstüne karışarak gelmez.
+- **İnce tam genişlik çizgi yok.** Ekranı soldan sağa kesen ince çizgi çizme (masa kenarı, raf, ayraç dahil); kenar gerekiyorsa en az 24 px kalın dolu şekil kullan.
+- **Havada asılı nesne yok.** Her nesne bir elde ya da bir yüzeyde (masa, zemin, raf, koltuk, bagaj bandı) durur; tutan el görünmeyen valiz, bardak ya da telefon havada süzülmez. Bulut, kuş, düşünce balonu, bildirim kartı ve mesaj balonu bunun dışındadır.
+
+Kanalın kendi kesin kuralları:
+{{kurallar}}
+
+{{parca}}
+
 ## Kurallar (uy)
 
 {{formul}}
@@ -10,6 +23,8 @@ Renkler (`C` içinde gelir): {{renkler}}
 
 Görsel dil:
 {{gorsel_dil}}
+
+Görsel dilde `kurallar` varsa her madde kesindir: birini çiğneyen sahne kontrol turunda ağır hata alır.
 
 ## Kanalın karakteri
 

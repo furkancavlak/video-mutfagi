@@ -72,12 +72,25 @@ function tohum(seed = 5) { let s = seed; const rnd = () => (s = (s * 16807) % 21
 // ---- palette + brand from the identity file
 function palet(kimlik) { return Object.assign({ paper: '#F4EEDF', ink: '#1F2A30', coral: '#E8553A', o2: '#1FA9BE' }, kimlik.renkler || {}); }
 
-// ---- captions: 1-4 words per card, the spoken word lights up; announcer lines get a dark speaker card.
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 // Whisper mishears some joined words; video.json "duzeltme" maps heard -> written (e.g. "yerde": "yer de").
-function altyazi(T, video, C) {
-  const { Z } = T, FIX = video.duzeltme || {}, HIT = Z.sting[0];
+const duzeltici = FIX => w => { const m = w.match(/^(.*?)([.,?!…]*)$/); const k = m[1].toLocaleLowerCase('tr'); if (!FIX[k]) return w; const v = FIX[k]; return (m[1][0] === m[1][0].toLocaleUpperCase('tr') ? v[0].toLocaleUpperCase('tr') + v.slice(1) : v) + m[2]; };
+
+// short font names used by channel kits (scene parts, closing card, stroke captions); the files are the same ones sayfaYaz copies
+const KISA_FONT = `@font-face{font-family:AN;src:url(assets/fonts/Anton-latin.woff2);unicode-range:U+0000-00FF,U+0131,U+2000-206F}
+@font-face{font-family:AN;src:url(assets/fonts/Anton-latin-ext.woff2);unicode-range:U+0100-02AF,U+1E00-1E9F}
+@font-face{font-family:IT;font-weight:600;src:url(assets/fonts/InterTight-600-latin.woff2);unicode-range:U+0000-00FF,U+0131,U+2000-206F}
+@font-face{font-family:IT;font-weight:600;src:url(assets/fonts/InterTight-600-latin-ext.woff2);unicode-range:U+0100-02AF,U+1E00-1E9F}
+@font-face{font-family:IT;font-weight:800;src:url(assets/fonts/InterTight-800-latin.woff2);unicode-range:U+0000-00FF,U+0131,U+2000-206F}
+@font-face{font-family:IT;font-weight:800;src:url(assets/fonts/InterTight-800-latin-ext.woff2);unicode-range:U+0100-02AF,U+1E00-1E9F}`;
+
+// ---- captions: the channel picks the look (kimlik.json → gorsel.altyazi): 'kutu' (default) or 'kontur'.
+// kutu: 1-4 words per card in a light box, the spoken word lights up; announcer lines get a dark speaker card.
+function altyazi(T, video, C, kimlik) {
+  if ((((kimlik || {}).gorsel || {}).altyazi) === 'kontur') return altyaziKontur(T, video, C);
+  const { Z } = T, HIT = Z.sting[0];
   const anons = new Set(video.anons_rolleri || []);
-  const fixw = w => { const m = w.match(/^(.*?)([.,?!…]*)$/); const k = m[1].toLocaleLowerCase('tr'); if (!FIX[k]) return w; const v = FIX[k]; return (m[1][0] === m[1][0].toLocaleUpperCase('tr') ? v[0].toLocaleUpperCase('tr') + v.slice(1) : v) + m[2]; };
+  const fixw = duzeltici(video.duzeltme || {});
   const chunks = [];
   Z.satirlar.forEach((s, li) => { const ws = Z.kelimeler.filter(k => k.satir === li); let cur = []; ws.forEach((w, i) => { cur.push(w);
     // 4 words per card, but never leave a clause's last word alone on the next card ("amına" / "koyayım.")
@@ -96,8 +109,54 @@ function altyazi(T, video, C) {
   return { html: `<div id="caps">${html}</div>`, tl };
 }
 
-// ---- brand screens: opening sting after the hook, closing sting + call to action; corner tag in between
-function marka(T, kimlik, C) {
+// kontur (story channels): 1-3 words straight over the scene, white Anton 83 px with a 16 px ink stroke (30.10: 20% under
+// the first 104/20), top at y 1410, the spoken word
+// lights up in #FFC9BC. A card breaks at punctuation or a pause; the last one is gone before the closing card.
+function altyaziKontur(T, video, C) {
+  const { Z } = T, fixw = duzeltici(video.duzeltme || {}), VURGU = '#FFC9BC';
+  const chunks = [];
+  Z.satirlar.forEach((s, li) => { const ws = Z.kelimeler.filter(k => k.satir === li); let cur = []; ws.forEach((w, i) => { cur.push(w); const nx = ws[i + 1];
+    if (cur.length >= 3 || /[.,;:?!…]$/.test(w.w) || !nx || nx.a - w.b > .45) { chunks.push({ ws: cur, li }); cur = []; } }); });
+  let html = ''; const tl = [];
+  chunks.forEach((c, ci) => {
+    const a = c.ws[0].a - .05, nx = chunks[ci + 1], son = c.ws[c.ws.length - 1].b;
+    let b = nx ? Math.min(nx.ws[0].a - .05, son + .9) : Math.min(son + .9, Z.satirlar[c.li].son + .1);
+    if (Z.kapanis != null) b = Math.min(b, Z.kapanis);
+    html += `<div class="dcap dc${ci}">${c.ws.map((w, wi) => `<span class="dw${ci}_${wi}">${esc(fixw(w.w))}</span>`).join(' ')}</div>`;
+    tl.push(`gsap.set('.dc${ci}',{opacity:0});tl.set('.dc${ci}',{opacity:1},${at(a)});tl.fromTo('.dc${ci}',{scale:.86},{scale:1,duration:.18,ease:'back.out(3)'},${at(a)});tl.set('.dc${ci}',{opacity:0},${at(b)});`);
+    c.ws.forEach((w, wi) => tl.push(`tl.set('.dw${ci}_${wi}',{color:'${VURGU}'},${at(w.a)});tl.set('.dw${ci}_${wi}',{color:'#FFFFFF'},${at(Math.max(w.b, w.a + .15))});`));
+  });
+  const css = `${KISA_FONT}
+.dcap{position:absolute;left:60px;right:60px;top:1410px;text-align:center;font:400 83px/1.06 AN;text-transform:uppercase;color:#fff;letter-spacing:1px;-webkit-text-stroke:16px ${C.ink};paint-order:stroke fill}`;
+  return { html: `<div id="caps">${html}</div>`, tl, css };
+}
+
+// The channel's own closing card (kimlik.json → marka.kapanis, a file in the channel folder), sandboxed like karakter.js.
+//   kapanis({ C, at, bas, sonraki, hesap }) -> { html, tl, sure, muzik?: {bas, ses}, gorsel?: file in the channel folder, css? }
+function kapanisYukle(kimlik, kimlikDir) {
+  const m = kimlik.marka || {};
+  if (!m.kapanis) return null;
+  if (!kimlikDir) fail('kapanış kartı için kanal klasörü verilmedi (marka(T, kimlik, C, { video, kimlikDir })).');
+  const f = path.join(kimlikDir, m.kapanis);
+  if (!fs.existsSync(f)) fail(`kapanış kartı yok: ${f} (kimlik.json → marka.kapanis)`);
+  return guvenliYukle(f);
+}
+// The card's sound effects ({sfx: [[name, time, volume]]}) as mix inputs: kanal/<kanal>/muzik/<name>.wav. A name that is
+// not a plain word or has no file is skipped, a non-numeric volume plays at 1 (the card still plays, just without that sound).
+function kapanisSesleri(k, kimlikDir) {
+  const out = [];
+  for (const e of (k && k.sfx) || []) {
+    const [ad, t, ses] = [].concat(e), f = /^[\w-]+$/.test(String(ad)) ? path.join(kimlikDir, 'muzik', ad + '.wav') : null;
+    if (f && fs.existsSync(f) && isFinite(t)) out.push([f, Math.max(0, +t), isFinite(ses) && ses !== null && ses !== '' ? +ses : 1]);   // odd volume -> 1, never NaN
+  }
+  return out;
+}
+
+// ---- brand screens. Default: opening sting after the hook, closing sting + call to action; corner tag in between.
+// A channel with marka.kapanis gets no stings: a top label (video.json etiket · BÖLÜM n) and its closing card at Z.kapanis.
+// `ek` = { video, kimlikDir } (needed only for the closing card).
+function marka(T, kimlik, C, ek = {}) {
+  if (kimlik.marka && kimlik.marka.kapanis) return markaKapanis(T, kimlik, C, ek);
   const m = kimlik.marka, { Z, L } = T, html = [], tl = [];
   const logo = `${m.logo[0]}<span>${m.logo[1]}</span>`;
   const ekran = (id, extra = '') => `<div class="sc" id="${id}"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="${C.paper}"/>
@@ -121,6 +180,28 @@ function marka(T, kimlik, C) {
   tl.push(`tl.to('.tag',{opacity:0,duration:.2},${at(Z.sting[0] - .3)});tl.to('.tag',{opacity:1,duration:.3},${at(L[1] + .3)});`);
   if (Z.sting[1] != null) tl.push(`tl.to('.tag',{opacity:0,duration:.2},${at(Z.sting[1] - .4)});`);
   return { html: html.join('\n'), tl };
+}
+
+function markaKapanis(T, kimlik, C, { video = {}, kimlikDir } = {}) {
+  const m = kimlik.marka, { Z } = T, html = [], tl = [];
+  const kart = kapanisYukle(kimlik, kimlikDir);
+  const bolum = +video.bolum || null, toplam = +video.toplam_bolum || null;
+  const sonraki = bolum && (!toplam || bolum < toplam) ? bolum + 1 : null;
+  const hesap = m.hesap || kimlik.hesap;
+  // zaman.json from mix.js carries the card start; an older one without it gets the card at the very end
+  const bas = Z.kapanis != null ? Z.kapanis : T.END - kart({ C, at, bas: 0, sonraki, hesap }).sure;
+  const k = kart({ C, at, bas, sonraki, hesap });
+  if (video.etiket) {
+    const etk = String(video.etiket).toLocaleUpperCase('tr'), ek = bolum ? ` · BÖLÜM ${bolum}` : '';
+    html.push(`<div class="etk"><i></i>${esc(ek && etk.endsWith(ek) ? etk : etk + ek)}</div>`);
+    tl.push(`gsap.set('.etk',{opacity:0,y:-30});tl.to('.etk',{opacity:1,y:0,duration:.4,ease:'power3.out'},0.2);tl.set('.etk',{opacity:0},${at(bas)});`);
+  }
+  html.push(k.html); tl.push(...k.tl);
+  const css = `${KISA_FONT}
+.etk{position:absolute;left:60px;top:150px;box-sizing:border-box;max-width:880px;height:64px;padding:0 32px 0 58px;border-radius:32px;background:${C.ink};color:#FFFDF8;font:800 30px/64px IT;letter-spacing:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.etk i{position:absolute;left:24px;top:22px;width:20px;height:20px;border-radius:50%;background:${C.domates || C.coral}}${k.css ? '\n' + k.css : ''}`;
+  const varliklar = k.gorsel ? [{ kaynak: path.join(kimlikDir, k.gorsel), ad: k.gorsel }] : [];
+  return { html: html.join('\n'), tl, css, varliklar };
 }
 
 const FONT_CSS = `@font-face{font-family:"AntonTR";src:url(assets/fonts/Anton-latin-ext.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1E00-1EFF,U+20A0-20C0,U+2C60-2C7F,U+A720-A7FF;}
@@ -183,4 +264,4 @@ function renderEt(hfDir, mixWav, outMp4, kodlama = KODLAMA) {
   console.log(`\nHAZIR: ${outMp4} (${(fs.statSync(outMp4).size / 1048576).toFixed(1)} MB)`);
 }
 
-module.exports = { KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, sayfaYaz, kareler, renderEt, norm };
+module.exports = { KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, kapanisSesleri, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };

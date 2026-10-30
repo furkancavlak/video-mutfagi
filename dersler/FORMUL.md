@@ -81,7 +81,11 @@ Sahne yazıldıktan sonra her satırdan kareler alınır ve yapay zekâ kendi ka
 - Altyazı bandına ya da marka etiketine giren önemli öğe
 - Okunmayan, anlamsız ya da cümleyle ilgisiz görüntü
 - Örnek videodan kopyalanmış nesne (tüp, hurdacı, termometre...)
-- Satırı gösteren somut bir şey yoksa boş kadraj
+- Satırı gösteren somut bir şey yoksa boş kadraj; metnin adını verdiği nesne yoksa dolgu kare
+- Metinde geçmeyen ekran yazısı (slogan, pankart, uydurma mesaj ya da isim)
+- Yarı saydam bildirim/kart, üst üste karışan iki sahne
+- Ekranı boydan boya kesen ince çizgi
+- Kanalın `gorsel_dil.kurallar` maddelerinden birini çiğneyen kare (her zaman ağır)
 
 Ağır sorun varsa sahne en fazla iki kez düzeltilir. Yine de sorun kalırsa **en yüksek puanlı deneme** kullanılır,
 kalan notlar `uretim.json` → `adimlar.sahne.kalan` alanına ve çıktıya yazılır; paylaşmadan önce bakılır. Hazır şablona

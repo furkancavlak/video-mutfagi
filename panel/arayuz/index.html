@@ -10,21 +10,66 @@
 <link rel="stylesheet" href="stil.css">
 </head>
 <body>
-<header class="ust">
-  <div class="logo"><span class="logo-i">▶</span>Video Mutfağı</div>
+<script>try { if (localStorage.getItem('vm-tema') === 'acik') document.documentElement.dataset.tema = 'acik'; } catch {}</script>
+<aside class="yan" id="yan">
+  <div class="yan-kanal">
+    <span class="kanal-logo" id="kanal-logo">▶</span>
+    <div class="kanal-ad"><b id="kanal-ad">Video Mutfağı</b>
+      <select id="kanal-sec" class="kanal-sec" aria-label="Kanal" title="Kanalı değiştir"></select></div>
+  </div>
+  <button class="yeni-dugme" id="yeni-dugme"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Yeni</button>
   <nav class="sekmeler" id="sekmeler">
-    <button data-s="bugun" class="on">Bugün</button>
-    <button data-s="fikirler">Fikirler</button>
-    <button data-s="uretim">Üretim</button>
-    <button data-s="sira">Sıra</button>
-    <button data-s="takvim">Takvim</button>
-    <button data-s="sonuclar">Sonuçlar</button>
+    <button data-s="takvim" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Takvim</button>
+    <button data-s="hikayeler"><svg viewBox="0 0 24 24"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg>Hikâyeler</button>
+    <button data-s="ayarlar"><svg viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>Ayarlar</button>
   </nav>
-  <button class="isler-dugme" id="isler-dugme" title="Arka planda çalışan işler"><span id="isler-say">0</span> iş</button>
-</header>
+  <div class="yan-alt">
+    <button class="isler-dugme" id="isler-dugme" title="Arka planda çalışan işler" hidden><span id="isler-say">0</span> iş çalışıyor</button>
+    <button class="gelismis-dugme" id="gelismis-dugme" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>Gelişmiş</button>
+    <nav class="alt-sekmeler" id="alt-sekmeler" hidden>
+      <button data-s="bugun">Bekleyenler</button>
+      <button data-s="fikirler">Fikirler</button>
+      <button data-s="uretim">Üretim</button>
+      <button data-s="sira">Sıra</button>
+      <button data-s="sonuclar">Sonuçlar</button>
+    </nav>
+    <button class="tema-dugme" id="tema-dugme"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9"/></svg><span id="tema-yazi">Açık tema</span></button>
+  </div>
+</aside>
 
 <main>
-  <section id="s-bugun" class="sayfa on">
+  <!-- home: calendar + numbers -->
+  <section id="s-takvim" class="sayfa on">
+    <div id="bekleyen-serit"></div>
+    <div class="tk-bas">
+      <div><span class="tk-aralik" id="tk-aralik"></span><h1>Takvim</h1></div>
+      <div class="ok-grup"><button class="ok" data-h="-1" aria-label="Önceki günler">‹</button><button class="dugme ince" data-h="0">Bugün</button><button class="ok" data-h="1" aria-label="Sonraki günler">›</button></div>
+    </div>
+    <div class="tk-sayilar" id="tk-sayilar"></div>
+    <div class="tk-filtre"><div class="secici" id="durum-filtre"></div><div class="konu-filtre" id="konu-filtre"></div></div>
+    <div id="takvim" class="hafta-izgara"></div>
+    <h2 class="bolum">Rakamlar</h2>
+    <div id="istatistik"></div>
+  </section>
+
+  <section id="s-hikayeler" class="sayfa">
+    <div class="baslik-satir"><h1>Hikâyeler</h1><span class="say" id="dz-say"></span>
+      <div class="secici" id="dz-makine" hidden></div></div>
+    <details id="dz-son" class="kart dz-son"></details>
+    <div id="dz-liste" class="liste"></div>
+  </section>
+
+  <section id="s-ayarlar" class="sayfa">
+    <div class="baslik-satir"><h1>Ayarlar</h1></div>
+    <h2 class="bolum" id="dz-ayar-baslik">Hikâyelerin devamı</h2>
+    <form id="dz-ayar" class="kart dz-ayar" novalidate></form>
+    <div id="dz-ayar-yok" class="liste-bos" hidden>Bu kanalda hikâye dizisi yok, ayarlanacak bir şey yok.</div>
+    <h2 class="bolum">Paylaşım</h2>
+    <div id="paylasim-ayar" class="kart paylasim-ayar"></div>
+  </section>
+
+  <!-- advanced pages: unchanged tools -->
+  <section id="s-bugun" class="sayfa">
     <div class="makineler" id="makineler"></div>
     <h2 class="bolum">Senden bekleyenler</h2>
     <div id="bekleyenler" class="liste"></div>
@@ -32,7 +77,6 @@
 
   <section id="s-fikirler" class="sayfa">
     <div class="baslik-satir"><h1>Fikirler</h1>
-      <select id="kanal-sec" class="sec" aria-label="Kanal"></select>
       <div class="secici" id="fikir-filtre"><button data-f="acik" class="on">Açık</button><button data-f="hepsi">Hepsi</button></div>
       <span class="bosluk"></span>
       <button class="dugme" data-is="topla">Yeni konu topla</button>
@@ -60,13 +104,6 @@
     <div id="sira-liste" class="liste"></div>
   </section>
 
-  <section id="s-takvim" class="sayfa">
-    <div class="baslik-satir"><h1>Takvim</h1>
-      <div class="ok-grup"><button class="ok" data-h="-1">‹</button><span id="takvim-ay"></span><button class="ok" data-h="1">›</button></div>
-    </div>
-    <div id="takvim" class="takvim"></div>
-  </section>
-
   <section id="s-sonuclar" class="sayfa">
     <div class="baslik-satir"><h1>Sonuçlar</h1>
       <div class="secici" id="metrik"><button data-m="views" class="on">İzlenme</button><button data-m="reach">Erişim</button><button data-m="likes">Beğeni</button><button data-m="shares">Paylaşım</button><button data-m="saved">Kayıt</button></div>
@@ -83,6 +120,7 @@
 </aside>
 
 <dialog id="pencere"><div id="pencere-ic"></div></dialog>
+<div id="ipucu" class="ipucu" hidden></div>
 <div id="bildirim" class="bildirim" role="status"></div>
 <script src="panel.js"></script>
 </body>

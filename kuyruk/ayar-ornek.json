@@ -2,9 +2,22 @@
   "_aciklama": "Kuyruk ayarları. Değiştirmek için bu dosyayı ayarlar/kuyruk.json olarak kopyala (o dosya repoya girmez) ve orada düzenle.",
   "makine_turu": "ev",
   "_makine_turu": "ev | sunucu. Ev bilgisayarında paylaşım saatinde bilgisayar açık ve uyanık olmalı; durum komutu buna göre uyarır.",
-  "paylasim_saatleri": ["19:00"],
+  "paylasim_saatleri": [
+    "19:00"
+  ],
   "gunluk_en_fazla": 1,
   "_gunluk_en_fazla": "Yeni hesapta ilk haftalarda 1'i geçme (spam işareti riski).",
+  "_hesaplar": "Hesap başına saat ve günlük sınır (yoksa hesabı bu olan dizi kanalının konu.json → dizi bölümü, o da yoksa yukarıdaki genel değerler). Hesap adı instagram-<ad>.json token dosyasıyla eşleşir; işe --hesap <ad> ile atanır, atanmayan iş oxygbio sayılır.",
+  "hesaplar": {
+    "ornek_hesap": {
+      "paylasim_saatleri": [
+        "12:00",
+        "17:00",
+        "21:00"
+      ],
+      "gunluk_en_fazla": 3
+    }
+  },
   "en_fazla_deneme": 3,
   "gecikme_uyari_saat": 2,
   "yayin": {

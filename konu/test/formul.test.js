@@ -75,3 +75,101 @@ test('sample scene: builds in the sandbox with the channel character, no NaN or 
   assert.ok(!/NaN|undefined/.test(hepsi), 'no NaN/undefined in the scene');
   assert.strictEqual((S.html.match(/class="sh"/g) || []).length, 8, 'one shot per line plus the 1000-year card');
 });
+
+// a long episode's scene file took the CLI past the 15 minute default (real run 30.10.2026): the scene call gets its own limit
+test('scene writing: own time limit (konu.json llm.sahne_zaman_asimi_dk, default 45 min), passed through LLM.sor', async () => {
+  assert.strictEqual(U.sahneZamanAsimi({}), 45 * 60e3);
+  assert.strictEqual(U.sahneZamanAsimi({ sahne_zaman_asimi_dk: 60 }), 60 * 60e3);
+  assert.strictEqual(U.sahneZamanAsimi({ sahne_zaman_asimi_dk: 'x' }), 45 * 60e3);
+  const LLM = require('../llm');
+  let gelen;
+  await LLM.sor('istem', { json: false, zamanAsimiMs: 1234, calistir: async (i, o) => { gelen = o; return { metin: 'ok' }; } });
+  assert.strictEqual(gelen.zamanAsimiMs, 1234);
+});
+
+// Furkan 30.10 (story ep 2 review): no invented text, no filler, no see-through overlays, no thin full-width lines.
+// The channel's gorsel_dil.kurallar reach both the scene writer and the still reviewer, and a broken rule is a heavy fail.
+test('scene prompts: channel rules (gorsel_dil.kurallar) and the four bans reach writer and reviewer', () => {
+  const LLM = require('../llm');
+  const gd = { cizgi: 'düz', kurallar: ['UYDURMA YAZI YOK: KURAL123'] };
+  const yaz = LLM.istem('sahne-yaz', { formul: '', renkler: {}, gorsel_dil: gd, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '', kurallar: U.kesinKurallar(gd), parca: '' });
+  assert.match(yaz, /KURAL123/);
+  assert.match(yaz, /`kurallar` varsa her madde kesindir/);
+  for (const re of [/Dolgu sahne yok/, /Metinde geçmeyen slogan/, /tam opak/, /ince çizgi/]) assert.match(yaz, re);
+  const den = LLM.istem('sahne-denetim', { sayfalar: 'a.jpg', gorsel_dil: gd, satirlar: '0: metin' });
+  assert.match(den, /KURAL123/);
+  assert.match(den, /Kural çiğneyen her kare `yuksek`/);
+  for (const re of [/dolgu kare/, /uydurma yazı/, /yarı saydam katman/, /ince çizgi/]) assert.match(den, re);
+});
+
+// ---- chunked parallel scene writing (Furkan 31.10: ~27 min per episode -> 10-15)
+const zaman = (bas, son, kapanis) => ({ satirlar: bas.map((b, i) => ({ bas: b, son: son[i] })), toplam: son[son.length - 1] + 3, kapanis });
+
+test('sahneAyari: defaults 4 chunks, 3 at once, 2 rounds; konu.json overrides, nonsense clamps', () => {
+  assert.deepStrictEqual(U.sahneAyari({}), { parcalar: 4, paralel: 3, turlar: 2 });
+  assert.deepStrictEqual(U.sahneAyari(undefined), { parcalar: 4, paralel: 3, turlar: 2 });
+  assert.deepStrictEqual(U.sahneAyari({ sahne_parca: 1, paralel: 5, sahne_tur: 3 }), { parcalar: 1, paralel: 5, turlar: 3 });
+  assert.deepStrictEqual(U.sahneAyari({ sahne_parca: 0, paralel: -2, sahne_tur: 'x' }), { parcalar: 1, paralel: 1, turlar: 1 });
+  assert.strictEqual(U.sahneAyari({ sahne_parca: 50 }).parcalar, 8);
+});
+
+test('parcala: consecutive lines, near-equal time, windows touch, first from 0, last to the closing card', () => {
+  const Z = zaman([0.3, 23.8, 40.5, 54.9], [23.6, 40.3, 54.7, 68.9], 69.39);
+  assert.deepStrictEqual(U.parcala(Z, 4).map(p => [p.satirlar, p.bas, p.son]), [[[0], 0, 23.8], [[1], 23.8, 40.5], [[2], 40.5, 54.9], [[3], 54.9, 69.39]]);
+  assert.deepStrictEqual(U.parcala(Z, 2).map(p => p.satirlar), [[0, 1], [2, 3]]);
+  assert.deepStrictEqual(U.parcala(Z, 1).map(p => [p.satirlar, p.bas, p.son]), [[[0, 1, 2, 3], 0, 69.39]]);
+  assert.strictEqual(U.parcala(Z, 9).length, 4, 'never more chunks than lines');
+  // 12 short lines into 3 chunks: every line once, in order, no empty chunk; no closing card -> to the end
+  const Z12 = zaman(Array.from({ length: 12 }, (_, i) => i * 5), Array.from({ length: 12 }, (_, i) => i * 5 + 4.5));
+  const P = U.parcala(Z12, 3);
+  assert.strictEqual(P.length, 3);
+  assert.deepStrictEqual(P.flatMap(p => p.satirlar), Array.from({ length: 12 }, (_, i) => i));
+  assert.ok(P.every(p => p.satirlar.length >= 3));
+  assert.strictEqual(P[2].son, Z12.toplam);
+  P.slice(1).forEach((p, k) => assert.strictEqual(p.bas, P[k].son));
+});
+
+test('sorunDagit: issues go to the chunk holding their second; no second -> every chunk', () => {
+  const P = [{ bas: 0, son: 20 }, { bas: 20, son: 40 }, { bas: 40, son: 60 }];
+  const r = U.sorunDagit([{ saniye: 20.1, sorun: 'a' }, { saniye: 5, sorun: 'b' }, { sorun: 'c' }, { saniye: 75, sorun: 'd' }], P);
+  assert.deepStrictEqual(r.map(l => l.map(x => x.sorun)), [['b', 'c'], ['a', 'c'], ['c', 'd']]);
+});
+
+test('paralel: at most n jobs at once, all of them run', async () => {
+  let ayni = 0, en = 0; const bitti = [];
+  await U.paralel([1, 2, 3, 4, 5].map(i => async () => { ayni++; en = Math.max(en, ayni); await new Promise(r => setTimeout(r, 15)); ayni--; bitti.push(i); }), 3);
+  assert.strictEqual(en, 3); assert.deepStrictEqual(bitti.sort(), [1, 2, 3, 4, 5]);
+});
+
+test('birlestir: chunks run in order on one M with their own cuts, ids stay apart, css is kept', () => {
+  const T = { L: [0, 10, 20], LE: [9, 19, 29], END: 30, cue: (w, a) => a + .5 };
+  const parca = (id, a, b, css) => `const yardim = x => x;\nmodule.exports = function ({ M }) {\n  M.kesmeler([${a}, ${b}]);\n  M.sahne('${id}', '<rect/>'); M.kes('${id}', 0);\n  return M.bitir(${JSON.stringify(css)});\n};`;
+  const kod = U.birlestir([parca('p1-a', 0, 10, '.x{}'), parca('p2-a', 10, 20, '.y{}'), parca('p3-a', 20, 30, '')]);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'formul-birlestir-')), f = path.join(dir, 'sahneler.js');
+  fs.writeFileSync(f, kod);
+  const M = motor({ T, at: K.at, f: K.f1 });
+  const S = K.guvenliYukle(f)({ M, T, at: K.at });
+  assert.deepStrictEqual((S.html.match(/id="(p\d-a)"/g) || []), ['id="p1-a"', 'id="p2-a"', 'id="p3-a"']);
+  assert.match(S.tl.join(''), /tl\.set\('#p2-a',\{opacity:1\},10\.000\);tl\.set\('#p2-a',\{opacity:0\},20\.000\)/);
+  assert.match(S.css, /^\.sh\{position:absolute;inset:0\}\n\.x\{\}\n\.y\{\}/);
+  assert.strictEqual((S.css.match(/\.sh\{/g) || []).length, 1, 'the base css once');
+});
+
+test('parcaIstemi: one chunk is the whole file (empty); a chunk names its lines, window, prefix and neighbours', () => {
+  const Z = zaman([0.3, 23.8, 40.5, 54.9], [23.6, 40.3, 54.7, 68.9], 69.39);
+  const sm = (i) => `satır ${i}`;
+  assert.strictEqual(U.parcaIstemi(U.parcala(Z, 1), U.parcala(Z, 1)[0], sm), '');
+  const P = U.parcala(Z, 4), m = U.parcaIstemi(P, P[1], sm);
+  assert.match(m, /parça 2\/4/); assert.match(m, /\*\*1\. satırı\*\*/); assert.match(m, /tam 23\.80 sn'de başlar/); assert.match(m, /tam 40\.50 sn'de biter/);
+  assert.match(m, /`p2-` öneki/); assert.match(m, /Önceki parçanın son satırı.*satır 0/); assert.match(m, /Sonraki parçanın ilk satırı.*satır 2/);
+  assert.match(U.parcaIstemi(P, P[3], sm), /kapanış kartının başladığı ana kadar/);
+});
+
+test('kesinKurallar: channel rules as a list at the top of the scene prompt', () => {
+  assert.strictEqual(U.kesinKurallar({ kurallar: ['A', 'B'] }), '- A\n- B');
+  assert.match(U.kesinKurallar({}), /ek kuralı yok/);
+  const LLM = require('../llm');
+  const s = LLM.istem('sahne-yaz', { formul: '', renkler: {}, gorsel_dil: {}, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '', kurallar: '- KURAL9', parca: 'PARCA7' });
+  assert.ok(s.indexOf('KURAL9') < s.indexOf('## Kurallar (uy)') && s.indexOf('PARCA7') < s.indexOf('## Motor'), 'hard rules and the chunk note come first');
+  assert.match(s, /Havada asılı nesne yok/);
+});

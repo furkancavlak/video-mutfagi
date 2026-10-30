@@ -11,7 +11,7 @@ const sonIstek = new Map();                     // host -> last request time
 
 // Plain node:https request. Node's built-in fetch() adds browser-style "sec-fetch-*" headers; next to a
 // non-browser User-Agent some sites (Ekşi behind Cloudflare) answer that mix with a bot challenge (403),
-// while a plain client with the same honest User-Agent is served normally. We never pretend to be a browser.
+// while a plain client with the same honest User-Agent is served normally. The radar never pretends to be a browser; only the story source (dizi/kaynak.js) uses a browser User-Agent, for Ekşi entry pages only.
 function istek(url, { yontem, basliklar, govde, zamanAsimiMs }, yonlendirme = 0) {
   return new Promise((coz, reddet) => {
     const u = new URL(url), mod = u.protocol === 'http:' ? require('http') : require('https');

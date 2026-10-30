@@ -11,13 +11,17 @@ Instagram'ın API'sinde "şu saatte yayınla" diye bir ayar yok. Planlama yalnı
 5. **Sonuçlar alınır.** `sonuclar` komutu paylaşılan videoların izlenme, erişim, beğeni ve paylaşım sayılarını çeker.
 
 ```
-node kuyruk/kuyruk.js ekle video.mp4 --aciklama "..." [--zaman "2026-10-27 19:00"] [--onay-gerekli]
+node kuyruk/kuyruk.js ekle video.mp4 --aciklama "..." [--zaman "2026-10-27 19:00"] [--onay-gerekli] [--hesap <ad>]
 node kuyruk/kuyruk.js liste
 node kuyruk/kuyruk.js onayla <id>        node kuyruk/kuyruk.js iptal <id>
 node kuyruk/kuyruk.js durum              ← otomasyon çalışıyor mu?
 node kuyruk/kuyruk.js sonuclar
 node kuyruk/kuyruk.js zamanlayici kur | kaldir | durum
 ```
+
+## Birden fazla Instagram hesabı
+
+Her hesabın kendi anahtarı olur: `oxygbio` (varsayılan) `~/.video-mutfagi/instagram.json`, diğerleri `instagram-<ad>.json`. Bağlamak için `node instagram/paylas.js kaydet <token-dosyasi> --hesap <ad>`; `kontrol`, `yenile`, `gonder` komutları da `--hesap <ad>` alır. Kuyruğa `ekle ... --hesap <ad>` ile atanan iş o hesaptan çıkar, `--hesap` yoksa `oxygbio` sayılır. `ayarlar/kuyruk.json` içindeki `hesaplar.<ad>` altına o hesabın `paylasim_saatleri` ve `gunluk_en_fazla` değerleri yazılır; yoksa hesabı o olan dizi kanalının `konu.json → dizi` bölümü (`saatler`, onay döneminde `onay_gunluk`, sonra `gunluk_hedef`), o da yoksa genel değerler geçerli (`kurulum/SUNUCU.md`). Günlük sınır ve boş saat hesabı her hesap için ayrı sayılır; bir hesabın dolması diğerini bekletmez. `durum` komutu bulunan her anahtar dosyası için süre uyarısı verir.
 
 ## Kurulum (ajan yapar, kullanıcı onaylar)
 
@@ -77,6 +81,6 @@ Sunucuda kurulum aynıdır: repo klonlanır, `npm install` çalıştırılır, I
 ## Güvenlik notları
 
 - **Çift paylaşım yok.** "Yayınla" adımında bağlantı koparsa Instagram videoyu yayınlamış da olabilir, yayınlamamış da. Kuyruk bu durumda **asla tekrar denemez**. Videoyu `hatali/` klasörüne "hesaba bak" notuyla ayırır.
-- **Günlük sınır.** Bu sınır her şeyin önünde gelir. Yeni hesapta günde 1'i geçme.
+- **Günlük sınır.** Bu sınır her şeyin önünde gelir (hesap başına ayrı sayılır). Yeni hesapta günde 1'i geçme.
 - **Tek çalışma.** Aynı anda iki çalışma olmaz (kilit dosyası).
 - **Kayıt.** Her şey `kayit/kuyruk.log` dosyasına yazılır.

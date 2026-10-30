@@ -8,6 +8,10 @@
 // only the steps whose price the user saw, up to that price). A stop at a gate leaves uretim.json → bekleyen.
 // Anything that needs a human (failed fact-check, bad stills, low review score, free tier scenes) stops the run
 // and marks the idea "insan-bekliyor" with the reason.
+//
+// `hazir` (a ready script, e.g. a story episode from dizi/): {ad, baslik?, satirlar:[{rol, metin}], anlaticilar:{rol: voiceId},
+// video_ek:{...extra video.json fields}, aciklama_instagram, hiz?}. The folder is videolar/<kanal>-<ad>/ under `kok`, the
+// idea pool and the script stage are skipped, video.json comes from `hazir`; every later stage is the same.
 const fs = require('fs'), path = require('path');
 const { spawnSync } = require('child_process');
 const O = require('./ortak');
@@ -168,66 +172,159 @@ function sureAyari(sure = [60, 80]) {
 }
 
 // ---- formul layer helpers
+// the scene file is the longest answer of the run: a long episode took the CLI past its 15 min default (30.10.2026)
+const sahneZamanAsimi = llm => ((llm && +llm.sahne_zaman_asimi_dk > 0) ? +llm.sahne_zaman_asimi_dk : 45) * 60e3;
 // the ```js block of a model answer (the longest one that exports a function); null if none
 function kodCikar(metin) {
   const bloklar = [...String(metin).matchAll(/```(?:js|javascript)?[ \t]*\r?\n([\s\S]*?)```/g)].map(m => m[1]).filter(k => /module\.exports\s*=/.test(k));
   return bloklar.length ? bloklar.sort((a, b) => b.length - a.length)[0].trim() + '\n' : null;
 }
+// ---- formul scene stage, chunked: konu.json llm.sahne_parca (chunks, default 4), llm.paralel (calls at once, default 3),
+// llm.sahne_tur (rounds, default 2), llm.model_denetim (still reviewer model, default model_metin)
+const sahneAyari = llm => ({
+  parcalar: Math.max(1, Math.min(8, Math.round(+((llm || {}).sahne_parca ?? 4)) || 1)),
+  paralel: Math.max(1, Math.round(+((llm || {}).paralel ?? 3)) || 1),
+  turlar: Math.max(1, Math.round(+((llm || {}).sahne_tur ?? 2)) || 1),
+});
+// consecutive lines -> n chunks of near-equal duration; chunk k is drawn from `bas` to `son` (the next chunk's bas, the
+// closing card or the end): [{k, satirlar: [i..], bas, son}]
+function parcala(Z, n) {
+  const S = Z.satirlar, N = Math.max(1, Math.min(n, S.length));
+  const sonT = Z.kapanis != null ? Z.kapanis : Z.toplam, t0 = S[0].bas, top = S[S.length - 1].son - t0;
+  const gruplar = [];
+  S.forEach((s, i) => {
+    const acilacak = N - gruplar.length, g = gruplar[gruplar.length - 1];
+    // a new chunk starts when this line passes the next k/N time mark, or when every line left must open one
+    if (!g || (acilacak > 0 && (S.length - i <= acilacak || s.bas - t0 >= top * gruplar.length / N))) gruplar.push([i]);
+    else g.push(i);
+  });
+  return gruplar.map((satirlar, k) => ({ k, satirlar, bas: k ? S[satirlar[0]].bas : 0, son: k < gruplar.length - 1 ? S[gruplar[k + 1][0]].bas : sonT }));
+}
+function parcaIstemi(P, p, satirMetni) {
+  if (P.length === 1) return '';
+  const ilk = p.satirlar[0], son = p.satirlar[p.satirlar.length - 1], f = x => x.toFixed(2);
+  return `## Bu dosya videonun yalnız bir parçası (parça ${p.k + 1}/${P.length})\n\n` +
+    `Video ${P.length} parçaya bölündü; her parçayı ayrı bir yönetmen aynı anda çiziyor, dosyalar sonra sırayla çalıştırılıp birleştirilir. ` +
+    `Sen yalnız **${ilk === son ? `${ilk}. satırı` : `${ilk}-${son}. satırları`}** çiz. İlk sahnen tam ${f(p.bas)} sn'de başlar, son sahnen tam ${f(p.son)} sn'de biter (sert kesme). ` +
+    `M.kesmeler'i yalnız bu aralığın sınırlarıyla çağır (ilki ${f(p.bas)}, sonuncusu ${f(p.son)}). Bütün id'lere \`p${p.k + 1}-\` öneki koy. Başka satırların sahnesini çizme; anlatıcı ve renkler öbür parçalarla aynı kalsın.\n\n` +
+    (p.k ? `Önceki parçanın son satırı (geçiş için bil, çizme): ${satirMetni(P[p.k - 1].satirlar[P[p.k - 1].satirlar.length - 1], false)}\n` : 'Bu ilk parça: video bununla açılır.\n') +
+    (p.k < P.length - 1 ? `Sonraki parçanın ilk satırı (çizme): ${satirMetni(P[p.k + 1].satirlar[0], false)}\n` : 'Bu son parça: sahnen kapanış kartının başladığı ana kadar sürer.\n');
+}
+// chunk files run one after another on the same M (each sets its own cuts); the css of all of them is kept
+function birlestir(kodlar) {
+  const parca = (k, i) => `// ---- parça ${i + 1}\nparcalar.push((function () {\n  const module = { exports: null };\n${k.trim()}\n  return module.exports;\n})());`;
+  return `// sahneler.js merged from ${kodlar.length} chunks written in parallel (konu/uret.js formul); each draws its own lines\nconst parcalar = [];\n${kodlar.map(parca).join('\n')}\n` +
+    `module.exports = function (g) {\n  const css = [];\n  for (const p of parcalar) { const r = p(g); if (r && r.css) css.push(String(r.css).replace(/^\\.sh\\{position:absolute;inset:0\\}\\n?/, '')); }\n  return g.M.bitir(css.join('\\n'));\n};\n`;
+}
+// heavy review issues -> per chunk (by their second); an issue without a second goes to every chunk
+function sorunDagit(sorunlar, P) {
+  const out = P.map(() => []);
+  for (const x of sorunlar) {
+    const t = x && x.saniye != null && !isNaN(+x.saniye) ? +x.saniye : null;
+    const i = t == null ? -1 : P.findIndex((p, k) => t >= p.bas && (t < p.son || k === P.length - 1));
+    if (i < 0) out.forEach(l => l.push(x)); else out[i].push(x);
+  }
+  return out;
+}
+// run async jobs with at most n at once
+async function paralel(isler, n) {
+  const kuyruk = isler.slice(), calisan = [];
+  const bir = async () => { while (kuyruk.length) await kuyruk.shift()(); };
+  for (let i = 0; i < Math.max(1, n); i++) calisan.push(bir());
+  await Promise.all(calisan);
+}
+// the channel's hard scene rules (gorsel_dil.kurallar), put at the top of the scene prompt
+const kesinKurallar = gd => (Array.isArray((gd || {}).kurallar) && gd.kurallar.length) ? gd.kurallar.map(k => '- ' + k).join('\n') : '- (kanalın ek kuralı yok)';
+
 // the leading // comment block of a file is its manual
 const basYorum = f => { const out = []; for (const l of fs.readFileSync(f, 'utf8').split('\n')) { if (!l.startsWith('//')) break; out.push(l.replace(/^\/\/ ?/, '')); } return out.join('\n'); };
 
+// the queue job's account: kimlik.hesap normalised like the panel and dizi/calistir.js (strip @, trim, lowercase).
+// The default account (oxygbio) gets no hesap field, as before. A series channel (konu.json → dizi) must name a valid
+// account: without one its episodes would be posted from oxygbio.
+function isHesabi(ctx) {
+  const h = String((ctx.kimlik || {}).hesap || '').trim().replace(/^@/, '').trim().toLowerCase();
+  const gecerli = /^[\w.-]+$/.test(h) ? h : null, dizi = ctx.ayar && ctx.ayar.dizi;
+  if (!gecerli && dizi && typeof dizi === 'object') throw new Dur('insan', 'kanalın Instagram hesabı tanımlı değil');
+  return gecerli && gecerli !== 'oxygbio' ? gecerli : null;
+}
+
 // ---- the run
-async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir, not = null } = {}) {
-  const h = H.havuzOku(ctx);
-  const fikir = H.fikirBul(h, fikirId);
-  if (fikir.durum === 'reddedildi') O.hata('Bu fikir reddedilmiş. Önce seç: node konu/radar.js sec ' + ctx.kanal + ' ' + fikir.id);
+async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir, not = null, hazir = null, kok = O.KOK, sesKontrol, sonAdim = null } = {}) {
+  if (hazir && !/^[\w.-]+$/.test(hazir.ad || '')) O.hata(`hazir.ad geçersiz: "${hazir.ad}" (harf, rakam, - _ . olmalı)`);
+  const fikir = hazir ? { id: hazir.ad, baslik: hazir.baslik || hazir.ad } : H.fikirBul(H.havuzOku(ctx), fikirId);
+  if (!hazir && fikir.durum === 'reddedildi') O.hata('Bu fikir reddedilmiş. Önce seç: node konu/radar.js sec ' + ctx.kanal + ' ' + fikir.id);
   const oto = ctx.ayar.otomasyon || {}, katman = oto.katman || 'ucretli', llm = ctx.ayar.llm || {};
   const sor = (istem, o) => LLM.sor(istem, { ayar: llm, model: llm.model_metin, efor: llm.efor_metin || 'high', calistir, ...o });
 
   // 1. folder
   let dir;
-  if (fikir.video && fs.existsSync(path.join(O.KOK, fikir.video))) dir = path.join(O.KOK, fikir.video);
+  const sablonKopyala = d => { fs.mkdirSync(d, { recursive: true }); const sablon = path.join(O.KOK, 'videolar', '_sablon'); for (const f of fs.readdirSync(sablon)) fs.copyFileSync(path.join(sablon, f), path.join(d, f)); };
+  if (hazir) {
+    dir = path.join(kok, 'videolar', `${ctx.kanal}-${hazir.ad}`);
+    if (!fs.existsSync(path.join(dir, 'video.json'))) sablonKopyala(dir);
+    fikir.video = rel(dir);
+  } else if (fikir.video && fs.existsSync(path.join(O.KOK, fikir.video))) dir = path.join(O.KOK, fikir.video);
   else {
     const vs = O.kanalVideolari(ctx.kanal), no = String((vs.length ? vs[vs.length - 1].no : 0) + 1).padStart(2, '0');
     const seri = new Set(O.seriKelimeleri(ctx));               // "evrendeki-butun-oksijen" would name every episode the same
     const ayirt = O.kelimeler(fikir.baslik).filter(w => !seri.has(w));
     dir = path.join(O.KOK, 'videolar', `${ctx.kanal}-v${no}-${O.slug((ayirt.length ? ayirt : O.kelimeler(fikir.baslik)).slice(0, 3).join(' '))}`);
-    fs.mkdirSync(dir, { recursive: true });
-    const sablon = path.join(O.KOK, 'videolar', '_sablon');
-    for (const f of fs.readdirSync(sablon)) fs.copyFileSync(path.join(sablon, f), path.join(dir, f));
+    sablonKopyala(dir);
     fikir.video = rel(dir);
   }
   const ad = path.basename(dir), durumF = path.join(dir, 'uretim.json');
-  const D = O.okuJson(durumF, { fikir: fikir.id, kanal: ctx.kanal, katman, baslangic: O.simdi().toISOString(), adimlar: {} });
+  const D = O.okuJson(durumF, { fikir: hazir ? null : fikir.id, ...(hazir ? { hazir: hazir.ad } : {}), kanal: ctx.kanal, katman, baslangic: O.simdi().toISOString(), adimlar: {} });
   if (otomatik) D.otomatik = true;      // only runs started by automation are resumed by the scheduler
   const bitti = a => !!D.adimlar[a];
-  const isaretle = (a, ek = {}) => { D.adimlar[a] = { zaman: O.simdi().toISOString(), ...ek }; if (D.bekleyen && D.bekleyen.adim === a) delete D.bekleyen; O.yazJson(durumF, D); };
+  // each stage's mark carries its duration (seconds since the previous mark of this run)
+  let sonIsaret = Date.now();
+  const isaretle = (a, ek = {}) => { D.adimlar[a] = { zaman: O.simdi().toISOString(), sure_sn: Math.round((Date.now() - sonIsaret) / 1000), ...ek }; sonIsaret = Date.now(); if (D.bekleyen && D.bekleyen.adim === a) delete D.bekleyen; O.yazJson(durumF, D); };
   const izinli = (adim, miktar) => onay === true || (!!onay && typeof onay === 'object' && onay[adim] != null && miktar <= onay[adim]);
   const bekle = (adim, ek, mesaj) => { D.bekleyen = { adim, ...ek, zaman: O.simdi().toISOString() }; O.yazJson(durumF, D); return new Dur('onay', mesaj); };
-  const kaydet = (durum, not) => { const h2 = H.havuzOku(ctx); const f2 = H.fikirBul(h2, fikir.id); f2.video = fikir.video; H.durumYap(h2, fikir.id, durum, not); H.havuzYaz(ctx, h2); };
+  const devam = hazir ? `node dizi/calistir.js ${ctx.kanal}` : `node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`;
+  // a ready script has no idea in the pool: nothing to record there
+  const kaydet = hazir ? () => { } : (durum, not) => { const h2 = H.havuzOku(ctx); const f2 = H.fikirBul(h2, fikir.id); f2.video = fikir.video; H.durumYap(h2, fikir.id, durum, not); H.havuzYaz(ctx, h2); };
   kaydet('uretiliyor', bitti('klasor') ? null : `üretim başladı: ${fikir.video}`);
   isaretle('klasor', { yol: fikir.video });
   yaz(`\nVideo klasörü: ${fikir.video}`);
 
   try {
+    const hesap = isHesabi(ctx);          // first: nothing is spent on a video that has no account to go to
     const videoF = path.join(dir, 'video.json'), ucretliF = path.join(dir, 'ucretli.json');
     // --not "...": the reader didn't like the script; rewrite it with their note (only before the voice is paid for)
     let onceki = null;
-    if (not && fs.existsSync(path.join(dir, 'metin.md'))) {     // metin.md exists only once a draft was written
+    if (not && !hazir && fs.existsSync(path.join(dir, 'metin.md'))) {     // metin.md exists only once a draft was written
       if (bitti('ses')) throw new Dur('insan', 'Ses zaten üretildi; metni şimdi değiştirmek o harcamayı boşa çıkarır. --not yalnız sesten önce çalışır.');
       onceki = O.okuJson(videoF).satirlar;
       if (bitti('metin')) { delete D.adimlar.metin; O.yazJson(durumF, D); }
+    }
+    // 2. ready script: video.json straight from `hazir` (no model, no fact-check: the caller vouches for the text)
+    if (hazir && !bitti('metin')) {
+      if (!Array.isArray(hazir.satirlar) || !hazir.satirlar.length) throw new Dur('insan', 'Hazır metinde satır yok.');
+      const baslik = hazir.baslik || hazir.ad;
+      O.yazJson(videoF, {
+        _aciklama: 'Hazır metinden yazıldı (konu/uret.js, hazir): ' + hazir.ad,
+        kanal: `../../kanal/${ctx.kanal}/kimlik.json`, baslik,
+        anlaticilar: hazir.anlaticilar || {}, anons_rolleri: [], hiz: hazir.hiz || 1, duzeltme: {},
+        satirlar: hazir.satirlar.map(s => ({ rol: s.rol, metin: s.metin })), aciklama_instagram: hazir.aciklama_instagram,
+        ...(hazir.video_ek || {}),
+      });
+      fs.writeFileSync(path.join(dir, 'metin.md'), [`# ${baslik} (hazır metin)`, '', '_Bu metin hazır geldi; ses üretmeden önce oku._', '', '---', '', ...hazir.satirlar.flatMap(s => [`**[${s.rol}]**`, s.metin, ''])].join('\n'));
+      isaretle('metin', { hazir: true, satir: hazir.satirlar.length });
+      yaz(`Hazır metin yazıldı: ${rel(videoF)}`);
     }
     // 2-3. script + fact-check (at most two fix rounds)
     if (!bitti('metin')) {
       const anl = ctx.kimlik.anlaticilar || [];
       if (!anl.length) throw new Dur('insan', 'kimlik.json → anlaticilar boş: ses için anlatıcı tanımlı değil.');
       const ana = anl[(O.kanalVideolari(ctx.kanal).length - 1) % anl.length] || anl[0];       // narrators take turns
-      const { anlaticilar, tts, ...kimlikMetin } = ctx.kimlik;
-      const ornekVideo = O.okuJson(path.join(O.KOK, 'videolar', 'oxygbio-v01-ucak', 'video.json'));
+      const { anlaticilar, tts, ornek_video, ...kimlikMetin } = ctx.kimlik;
+      const ornekAd = ornek_video || 'oxygbio-v01-ucak';          // the channel's own sample video, else the repo's
+      const ornekVideo = O.okuJson(path.join(O.KOK, 'videolar', ornekAd, 'video.json'));
       const temel = {
         kimlik: kimlikMetin, metin_kurallari: md('dersler/METIN.md'), metin_hatalari: bolum(md('dersler/HATALAR.md'), 5),
-        ornek_metin: md('videolar/oxygbio-v01-ucak/metin.md'), ornek_satirlar: ornekVideo.satirlar, ...sureAyari(oto.sure_sn),
+        ornek_metin: md(`videolar/${ornekAd}/metin.md`), ornek_satirlar: ornekVideo.satirlar, ...sureAyari(oto.sure_sn),
         fikir: { baslik: fikir.baslik, oncul: fikir.oncul, kanca: fikir.kanca, tirmanis: fikir.tirmanis, kapanis: fikir.kapanis, kaynaklar: fikir.kaynaklar.map(k => ({ baslik: k.baslik, url: k.url, dis_kaynak: k.dis_kaynak })) },
         roller: anl.map(a => `${a.ad} (${a.not || ''})`).join(', '), ana_rol: ana.ad,
       };
@@ -266,53 +363,80 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       const Z = O.okuJson(path.join(dir, 'ses', 'zaman.json'));
       const gd = ctx.kimlik.gorsel_dil || {}, kf = path.join(ctx.dir, (gd.karakter || {}).dosya || 'karakter.js');
       const { _aciklama, karakter: _k, ...gdMetin } = gd;
-      const satirlar = video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(2)}-${Z.satirlar[i].son.toFixed(2)} sn]: ${s.metin}\n   kelimeler: ${Z.kelimeler.filter(k => k.satir === i).map(k => `${k.w}@${k.a.toFixed(2)}`).join(' ')}`).join('\n');
+      const satirMetni = (i, kelime = true) => `${i} [${Z.satirlar[i].bas.toFixed(2)}-${Z.satirlar[i].son.toFixed(2)} sn]: ${video.satirlar[i].metin}${kelime ? `\n   kelimeler: ${Z.kelimeler.filter(k => k.satir === i).map(k => `${k.w}@${k.a.toFixed(2)}`).join(' ')}` : ''}`;
       const kareDir = path.join(dir, 'cikti', 'kareler-ucretsiz'), sf = path.join(dir, 'sahneler.js');
       // two stills per line: just after the cut and near the end, where the line's action has landed
       const saniyeler = Z.satirlar.flatMap(s => [s.bas + (s.son - s.bas) * .3, s.bas + (s.son - s.bas) * .85]).map(x => +x.toFixed(2));
-      let kod = null, sorunlar = [], puan = null, en = null;     // en: the best attempt that ran
-      for (let tur = 0; tur < 3; tur++) {
-        const duzeltme = tur ? `## Önceki denemenin sorunları (düzelt, geri kalanını bozma)\n\n${sorunlar.join('\n')}${kod ? `\n\nÖnceki dosya:\n\n\`\`\`js\n${kod}\`\`\`` : ''}` : '';
-        yaz(tur ? `Sahne düzeltiliyor (tur ${tur + 1})…` : 'Sahne çiziliyor (formül: bu videoya özel çizim)…');
-        const cevap = await sor(LLM.istem('sahne-yaz', {
-          formul: md('dersler/FORMUL.md'), renkler: ctx.kimlik.renkler || {}, gorsel_dil: gdMetin,
-          karakter: fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.',
-          motor: basYorum(path.join(O.KOK, 'uretim', 'motor.js')), satirlar, sure: Z.toplam.toFixed(1), marka: (Z.sting[0] || 0).toFixed(2),
-          ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'), duzeltme,
-        }), { is: 'sahne-yaz', json: false, efor: llm.efor_sahne || 'high' });   // fast / cheap models can think themselves out of an answer: lower it per channel
-        const yeni = kodCikar(cevap);
-        if (!yeni) { sorunlar = ['- Cevapta module.exports içeren bir \`\`\`js kod bloğu yok. Dosyanın tamamını tek blokta döndür.']; continue; }
-        kod = yeni;
+      const { parcalar: parcaSayisi, turlar: TUR, paralel: es } = sahneAyari(llm);
+      const P = parcala(Z, parcaSayisi);
+      const ortak = {
+        formul: md('dersler/FORMUL.md'), renkler: ctx.kimlik.renkler || {}, gorsel_dil: gdMetin, kurallar: kesinKurallar(gd),
+        karakter: fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.',
+        motor: basYorum(path.join(O.KOK, 'uretim', 'motor.js')), sure: Z.toplam.toFixed(1), marka: (Z.sting[0] || 0).toFixed(2),
+        ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'),
+      };
+      const satirListesi = p => video.satirlar.map((_, i) => satirMetni(i, P.length === 1 || p.satirlar.includes(i))).join('\n');
+      const sureler = [];
+      let kodlar = P.map(() => null), sorunlar = P.map(() => []), puan = null, en = null;     // en: the best attempt that ran
+      for (let tur = 0; tur < TUR; tur++) {
+        const yazilacak = P.filter(p => !kodlar[p.k] || sorunlar[p.k].length);
+        yaz(tur ? `Sahne düzeltiliyor (tur ${tur + 1}, ${yazilacak.length}/${P.length} parça)…` : `Sahne çiziliyor (formül: bu videoya özel çizim${P.length > 1 ? `, ${P.length} parça, aynı anda ${Math.min(es, P.length)}` : ''})…`);
+        const t0 = Date.now();
+        await paralel(yazilacak.map(p => async () => {
+          const s = sorunlar[p.k];
+          const duzeltme = s.length ? `## Önceki denemenin sorunları (düzelt, geri kalanını bozma)\n\n${s.join('\n')}${kodlar[p.k] ? `\n\nÖnceki dosya:\n\n\`\`\`js\n${kodlar[p.k]}\`\`\`` : ''}` : '';
+          const cevap = await sor(LLM.istem('sahne-yaz', { ...ortak, satirlar: satirListesi(p), parca: parcaIstemi(P, p, satirMetni), duzeltme }),
+            { is: 'sahne-yaz', json: false, efor: llm.efor_sahne || 'high', zamanAsimiMs: sahneZamanAsimi(llm) });   // fast / cheap models can think themselves out of an answer: lower it per channel
+          const yeni = kodCikar(cevap);
+          if (yeni) { kodlar[p.k] = yeni; sorunlar[p.k] = []; }
+          else sorunlar[p.k] = ['- Cevapta module.exports içeren bir ```js kod bloğu yok. Dosyanın tamamını tek blokta döndür.'];
+        }), es);
+        const olcum = { tur: tur + 1, parca: yazilacak.length, yaz_sn: Math.round((Date.now() - t0) / 1000) };
+        sureler.push(olcum);
+        if (kodlar.some(k => !k)) continue;
+        const kod = P.length === 1 ? kodlar[0] : birlestir(kodlar);
         fs.writeFileSync(sf, kod);
+        if (P.length > 1) kodlar.forEach((k, i) => fs.writeFileSync(path.join(dir, `sahneler-parca-${i + 1}.js`), k));
         fs.mkdirSync(kareDir, { recursive: true });
         for (const f of fs.readdirSync(kareDir)) if (/^(frame-|contact-sheet)/.test(f)) fs.unlinkSync(path.join(kareDir, f));   // our own old stills
-        const r = node('uretim/kurgu.js', [dir, '--kare', saniyeler.join(',')], { yakala: true });
-        if (!r.ok) { sorunlar = ['- Dosya çalışmadı ya da kare alınamadı: ' + r.cikti.split('\n').filter(Boolean).slice(-4).join(' | ')]; continue; }
+        const t1 = Date.now(), r = node('uretim/kurgu.js', [dir, '--kare', saniyeler.join(',')], { yakala: true });
+        olcum.kare_sn = Math.round((Date.now() - t1) / 1000);
+        if (!r.ok) {
+          // a merged file that does not run cannot be blamed on one chunk: every chunk gets the error
+          const hata = '- Dosya çalışmadı ya da kare alınamadı: ' + r.cikti.split('\n').filter(Boolean).slice(-4).join(' | ');
+          sorunlar = P.map(() => [hata]);
+          continue;
+        }
         const sayfalar = fs.readdirSync(kareDir).filter(f => /^contact-sheet.*\.jpg$/.test(f)).sort().map(f => path.join(kareDir, f));
         yaz(`Sahne kareleri kontrol ediliyor (${saniyeler.length} kare)…`);
+        const t2 = Date.now();
         let d;
         try {
           d = await sor(LLM.istem('sahne-denetim', {
             sayfalar: sayfalar.map(f => path.resolve(f)).join(', '), gorsel_dil: gdMetin,
             satirlar: video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(1)}-${Z.satirlar[i].son.toFixed(1)} sn]: ${s.metin}`).join('\n'),
-          }), { is: 'sahne-denetim', resimler: sayfalar, efor: llm.efor_sahne === 'low' ? 'low' : 'medium' });
+          }), { is: 'sahne-denetim', resimler: sayfalar, model: llm.model_denetim || llm.model_metin, efor: llm.efor_sahne === 'low' ? 'low' : 'medium' });
         } catch (e) {
           // a text-only model cannot look at the stills: keep the attempt that ran, unreviewed, and say so
           if (!/image|resim|vision|görsel/i.test(e.message)) throw e;
           yaz('  Bu model resim göremiyor: sahne kontrolsüz kullanılıyor.');
-          return { ok: true, tur: tur + 1, puan: null, kalan: ['- Sahne kontrol edilmedi: seçilen model resim göremiyor. Paylaşmadan önce videoyu baştan sona izle.'] };
+          return { ok: true, tur: tur + 1, puan: null, kalan: ['- Sahne kontrol edilmedi: seçilen model resim göremiyor. Paylaşmadan önce videoyu baştan sona izle.'], sureler };
         }
+        Object.assign(olcum, { denetim_sn: Math.round((Date.now() - t2) / 1000), puan: d.puan });
         puan = d.puan;
         const agir = (d.sorunlar || []).filter(x => x.agirlik !== 'dusuk');
-        const kalan = agir.map(x => `- ${x.saniye != null ? x.saniye + ' sn: ' : ''}${x.sorun} → ${x.duzeltme || ''}`);
+        const satir = x => `- ${x.saniye != null ? x.saniye + ' sn: ' : ''}${x.sorun} → ${x.duzeltme || ''}`;
+        const kalan = agir.map(satir);
+        olcum.agir = agir.length;
         if (!en || (+d.puan || 0) > en.puan || ((+d.puan || 0) === en.puan && agir.length < en.sorunlar.length)) en = { kod, puan: +d.puan || 0, sorunlar: kalan, tur: tur + 1 };
         yaz(`  puan ${d.puan ?? '?'}/10, ağır sorun ${agir.length}`);
-        if (!agir.length) return { ok: true, tur: tur + 1, puan, kalan: [] };
-        sorunlar = kalan;
+        if (!agir.length) return { ok: true, tur: tur + 1, puan, kalan: [], sureler };
+        // only the chunks whose time window holds a heavy issue are written again
+        sorunlar = sorunDagit(agir, P).map(l => l.map(satir));
       }
       // no attempt passed clean: the best one that ran is used and its remaining notes go to the run record
-      if (en) { fs.writeFileSync(sf, en.kod); return { ok: true, tur: en.tur, puan: en.puan, kalan: en.sorunlar }; }
-      return { ok: false, sorunlar, puan };
+      if (en) { fs.writeFileSync(sf, en.kod); return { ok: true, tur: en.tur, puan: en.puan, kalan: en.sorunlar, sureler }; }
+      return { ok: false, sorunlar: sorunlar.flat(), puan, sureler };
     }
 
     // 4. paid-tier recipe
@@ -355,7 +479,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       const eksik = video.satirlar.filter((s, i) => !fs.existsSync(path.join(sesDir, `${String(i + 1).padStart(2, '0')}-${s.rol}.mp3`)));
       const karakter = eksik.reduce((a, s) => a + s.metin.length, 0);
       yaz(`\n💳 SES: ${eksik.length} satır, ~${karakter} ElevenLabs karakteri.`);
-      const sesBilgi = node('uretim/ses.js', [dir], { yakala: true });
+      const sesBilgi = sesKontrol ? sesKontrol(dir) : node('uretim/ses.js', [dir], { yakala: true });   // stdout + stderr
       if (sesBilgi.cikti) yaz(sesBilgi.cikti.split('\n').map(l => '   ' + l).join('\n'));
       let krediTahmin = null;
       if (katman === 'ucretli') {
@@ -365,8 +489,10 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       }
       const izin = A.harcamaIzni(ctx, 'karakter', karakter, { otomatik });
       if (!izin.izin) throw new Dur(otomatik ? 'butce' : 'onay', izin.neden);
-      if (!izinli('ses', karakter)) throw bekle('ses', { karakter, satir: eksik.length, kredi_tahmin: krediTahmin }, `Hiçbir şey harcanmadı. Önce metni oku: ${rel(path.join(dir, 'metin.md'))}\nBeğendiysen devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
+      if (!izinli('ses', karakter)) throw bekle('ses', { karakter, satir: eksik.length, kredi_tahmin: krediTahmin }, `Hiçbir şey harcanmadı. Önce metni oku: ${rel(path.join(dir, 'metin.md'))}\nBeğendiysen devam: ${devam}`);
       if (karakter) {
+        // a story episode out of monthly ElevenLabs characters waits like a budget stop (the scheduler retries it)
+        if (!sesBilgi.ok && hazir && /kalan karakter yetmiyor/.test(sesBilgi.cikti || '')) throw new Dur('butce', 'ElevenLabs bu ay kalan karakter yetmiyor; kota yenilenince ya da plan yükselince devam eder.');
         if (!sesBilgi.ok) throw new Dur('insan', 'ses.js çalışmadı (anahtar ya da kota). Çıktı yukarıda.');
         const r = node('uretim/ses.js', [dir, '--onay']);
         if (!r.ok) throw new Dur('insan', 'Ses üretimi yarıda kaldı (ElevenLabs). Çıktı yukarıda; tekrar çalıştırınca eksik satırlardan devam eder.');
@@ -385,10 +511,12 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     // attempt even ran, the run stops for a human.
     if (katman === 'formul' && !bitti('sahne')) {
       const r = await formulSahne();
-      if (!r.ok) throw new Dur('insan', 'Sahne kodu üç denemede de çalışmadı (kare alınamadı):\n' + r.sorunlar.join('\n') + `\nSon deneme: ${rel(path.join(dir, 'sahneler.js'))}. Düzelt ya da sil, sonra aynı komutla devam et.`);
+      if (!r.ok) throw new Dur('insan', `Sahne kodu ${sahneAyari(llm).turlar} denemede de çalışmadı` + ' (kare alınamadı):\n' + r.sorunlar.join('\n') + `\nSon deneme: ${rel(path.join(dir, 'sahneler.js'))}. Düzelt ya da sil, sonra aynı komutla devam et.`);
       if (r.kalan.length) yaz(`Sahne en iyi denemeyle (tur ${r.tur}, puan ${r.puan}/10) kullanılıyor; kontrolün kalan notları (paylaşmadan önce bak):\n` + r.kalan.map(x => '  ' + x).join('\n'));
-      isaretle('sahne', { tur: r.tur, puan: r.puan, kalan: r.kalan });
+      isaretle('sahne', { tur: r.tur, puan: r.puan, kalan: r.kalan, turlar: r.sureler });
     }
+    // stills-only runs (timing the scene stage on an existing voice) stop here: no render, no queue job
+    if (sonAdim === 'sahne') return { durum: 'sahne-bitti', dir };
 
     if (katman !== 'ucretli' && katman !== 'sablon' && katman !== 'formul') throw new Dur('insan', 'Ücretsiz katman seçili: sahneler.js (kodla animasyon) otomatik yazılmıyor, çünkü kare kare bakıp düzeltmeden güvenilir çıkmıyor. Ajan ya da insan sahneler.js yazmalı (uretim/TARIF.md 5a). Ses hazır.');
 
@@ -419,7 +547,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       if (kredi) {
         const izin = A.harcamaIzni(ctx, 'kredi', kredi, { otomatik });
         if (!izin.izin) throw new Dur(otomatik ? 'butce' : 'onay', izin.neden);
-        if (!izinli(adim, kredi)) throw bekle(adim, { kredi, butce: U.butce }, `Hiçbir şey harcanmadı. Devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
+        if (!izinli(adim, kredi)) throw bekle(adim, { kredi, butce: U.butce }, `Hiçbir şey harcanmadı. Devam: ${devam}`);
         const r = node('uretim/ucretli.js', [dir, adim, '--onay']);
         O.harcamaYaz(ctx, 'kredi', kredi, ad);              // logged even on partial failure: credits may be gone
         if (!r.ok) throw new Dur('insan', `${adim} üretimi başarısız (çıktı yukarıda).`);
@@ -469,7 +597,9 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
 
     // 14. hand-off to the posting queue (kuyruk/ is built separately; we only drop the job file)
     // yayinDk: the job is timed N minutes after the video is finished (otherwise the queue picks the next free slot)
-    const is = kuyrugaYaz({ video: rel(dir), mp4: rel(mp4), aciklama: video.aciklama_instagram || video.baslik, onayGerekli, neZaman: typeof neZaman === 'number' ? new Date(Date.now() + neZaman * 60e3).toISOString() : neZaman });
+    // the job names its account (isHesabi, checked at the start; none for the default account)
+    const relK = f => path.relative(kok, f).split(path.sep).join('/');
+    const is = kuyrugaYaz({ video: relK(dir), mp4: relK(mp4), aciklama: video.aciklama_instagram || video.baslik, onayGerekli, neZaman: typeof neZaman === 'number' ? new Date(Date.now() + neZaman * 60e3).toISOString() : neZaman, hesap, kaynak: hazir ? 'dizi' : undefined }, kok);
     isaretle('kuyruk', { is: rel(is) });
     kaydet('uretildi', `video hazır, kuyrukta: ${rel(is)}${onayGerekli ? ' (paylaşım için onay bekliyor)' : ' (onaysız, tam otomatik)'}`);
     yaz(`\nHAZIR: ${rel(mp4)}\nKuyruk işi: ${rel(is)}${onayGerekli ? '\nPaylaşılmadan önce videoyu izle ve onayla.' : ''}`);
@@ -484,13 +614,26 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
   }
 }
 
-// Posting queue contract: kuyruk/bekleyen/<YYYYMMDD-HHMM>-<video-adi>.json
-function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null }, kok = O.KOK) {
+// a waiting or posted job for this video folder (a failed or cancelled one does not count: a retry needs a new job)
+function kuyruktaVar(video, kok = O.KOK) {
+  if (!video) return null;
+  for (const k of ['bekleyen', 'paylasilan']) {
+    const d = path.join(kok, 'kuyruk', k);
+    let ad = []; try { ad = fs.readdirSync(d).filter(f => f.endsWith('.json')); } catch (e) { }
+    for (const f of ad) { try { if (O.okuJson(path.join(d, f)).video === video) return path.join(d, f); } catch (e) { } }
+  }
+  return null;
+}
+// Posting queue contract: kuyruk/bekleyen/<YYYYMMDD-HHMM>-<video-adi>.json. A rerun of a finished video never adds a
+// second job: the existing waiting or posted one is returned instead.
+function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap = null, kaynak = 'konu-radari' }, kok = O.KOK) {
+  const var_ = kuyruktaVar(video, kok);
+  if (var_) return var_;
   const d = path.join(kok, 'kuyruk', 'bekleyen');
   fs.mkdirSync(d, { recursive: true });
   const f = path.join(d, `${O.damga()}-${path.basename(video)}.json`);
-  O.yazJson(f, { video, mp4, aciklama, ne_zaman: neZaman, kaynak: 'konu-radari', onay_gerekli: !!onayGerekli });
+  O.yazJson(f, { video, mp4, aciklama, ne_zaman: neZaman, ...(hesap ? { hesap } : {}), kaynak, onay_gerekli: !!onayGerekli });
   return f;
 }
 
-module.exports = { uret, kodCikar, sureAyari, kuyrugaYaz, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, isHesabi, kodCikar, sahneZamanAsimi, sahneAyari, parcala, parcaIstemi, birlestir, sorunDagit, paralel, kesinKurallar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };

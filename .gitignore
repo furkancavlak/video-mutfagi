@@ -21,6 +21,7 @@ kuyruk/paylasilan/
 kuyruk/hatali/
 kuyruk/iptal/
 kuyruk/durum.json
+kuyruk/token-yenileme.json
 kuyruk/.kilit
 # second brain: the user's own notes and numbers (default vault) and the local Claude Code hook
 ikinci-beyin/kasa/
@@ -29,3 +30,14 @@ ikinci-beyin/kasa/
 stil/*/ornekler/
 stil/*/kareler/
 stil/*/karsilastirma/
+# private channel kits: copied in from their own repos, never committed here. Only the sample channel, the
+# template and the guide files are tracked.
+kanal/*
+!kanal/oxygbio/
+!kanal/sablon/
+!kanal/*.md
+# episode folders of private channels (story series etc.) never go public: only the template and the sample
+# channel's videos are tracked. A tracked file stays tracked; a new public sample needs `git add -f`.
+videolar/*
+!videolar/_sablon/
+!videolar/oxygbio-*/
