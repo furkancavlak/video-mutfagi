@@ -56,21 +56,29 @@ test('doldur: per-theme target, best favourites first, story check, short/low-fa
   const kontrol = async (cx, h) => (h.id === 'eksi-16' ? { hikaye: false, neden: 'inceleme' } : { hikaye: true, ozet: 'özet ' + h.id });
   const r = await H.doldur(c, { kok, simdi: SIMDI, getir, hikayeMi: kontrol, uyu: async () => { } });
   const h = H.yukle(kok, 'k').hikayeler;
-  // target 6 over 3 themes = 2 each: aşk gets 11 (500) and 17 (150); 16 failed the check and is kept as elendi
-  assert.deepStrictEqual(h.filter(x => x.konu === 'aşk' && x.durum === 'havuzda').map(x => x.id), ['eksi-11', 'eksi-17']);
+  // target 6 over 3 themes = 2 each: aşk gets 11 (500) and 17 (150); 16 failed the check and is kept as elendi.
+  // okul has nothing, so the pool is short: the top-up pass lets aşk carry 18 too (up to twice its share)
+  assert.deepStrictEqual(h.filter(x => x.konu === 'aşk' && x.durum === 'havuzda').map(x => x.id), ['eksi-11', 'eksi-17', 'eksi-18']);
   assert.deepStrictEqual(h.filter(x => x.durum === 'elendi').map(x => [x.id, x.neden]), [['eksi-16', 'hikaye_degil: inceleme']]);
   assert.ok(!h.some(x => ['eksi-12', 'eksi-13', 'eksi-14', 'eksi-15'].includes(x.id)), 'used, rejected, short and low-fav ids skipped');
   assert.deepStrictEqual(h.filter(x => x.konu === 'iş').map(x => x.id), ['eksi-21', 'eksi-22'], 'an id on two topics is added once');
   const x = h.find(y => y.id === 'eksi-11');
   assert.deepStrictEqual([x.baslik, x.link, x.fav, x.tarih, x.kelime, x.ozet, x.tahmini_bolum, x.durum], ['ilk aşk', 'https://eksisozluk.com/entry/11', 500, '13.11.2014 22:53', 400, 'özet eksi-11', 2, 'havuzda']);
-  assert.deepStrictEqual(r.stok, { 'aşk': 2, 'iş': 2 });
+  assert.deepStrictEqual(r.stok, { 'aşk': 3, 'iş': 2 });
   assert.ok(r.notlar.some(n => /okul: 2 hikâye eksik/.test(n)));
-  // a second fill finds nothing new and asks no page of a full theme
-  getir.urls.length = 0;
+  assert.ok(r.notlar.some(n => /havuz hedefin altında: 5\/6/.test(n)));
+  // a second fill finds nothing new
   const r2 = await H.doldur(c, { kok, simdi: SIMDI, getir, hikayeMi: kontrol, uyu: async () => { } });
   assert.deepStrictEqual(r2.eklenen, {});
-  assert.ok(!getir.urls.some(u => /ask--1|is--2/.test(u)), 'full themes are not fetched again');
   assert.strictEqual(H.yukle(kok, 'k').hikayeler.length, h.length);
+});
+
+test('doldur: a pool already at the target asks no page at all', async () => {
+  const kok = kokYap(), c = ctx();
+  H.kaydet(kok, 'k', { hikayeler: Array.from({ length: 6 }, (_, i) => ({ id: 'eksi-' + (900 + i), konu: KONULAR[i % 3].ad, durum: 'havuzda' })) });
+  const getir = sahteGetir({});
+  const r = await H.doldur(c, { kok, simdi: SIMDI, getir, hikayeMi: async () => ({ hikaye: true }), uyu: async () => { } });
+  assert.deepStrictEqual([getir.urls.length, r.eklenen], [0, {}]);
 });
 
 test('doldur: a 403 stops the whole fill with a note; polite wait between requests; no themes is an error', async () => {
@@ -158,4 +166,13 @@ test('yeniDizi without themes keeps the old live path (no pool, no konu)', async
   const d = await yeniDiziYap({ kaynak, bol: bolSahte(), entryGetir: entrySahte })({ kanal: 'k', ayar: { dizi: {} } }, { simdi: SIMDI, diziler: [], kok, sonuc: { notlar: [] } });
   assert.strictEqual(d.id, 'eksi-9'); assert.ok(!('konu' in d));
   assert.ok(!fs.existsSync(H.dosya(kok, 'k')));
+});
+
+test('birlestir: the server copy wins for known stories, the filled copy only adds new ones', () => {
+  const sunucu = { guncelleme: 'eski', hikayeler: [{ id: 'eksi-1', durum: 'kullanildi' }, { id: 'eksi-2', durum: 'elendi', neden: 'elle elendi' }] };
+  const yerel = { guncelleme: 'yeni', son_doldurma: { zaman: 'z' }, hikayeler: [{ id: 'eksi-1', durum: 'havuzda' }, { id: 'eksi-2', durum: 'havuzda' }, { id: 'eksi-3', durum: 'havuzda' }] };
+  const b = H.birlestir(sunucu, yerel);
+  assert.deepStrictEqual(b.hikayeler.map(x => [x.id, x.durum]), [['eksi-1', 'kullanildi'], ['eksi-2', 'elendi'], ['eksi-3', 'havuzda']]);
+  assert.deepStrictEqual([b.guncelleme, b.son_doldurma], ['yeni', { zaman: 'z' }]);
+  assert.deepStrictEqual(H.birlestir(null, yerel).hikayeler.length, 3, 'no server copy: the filled one as is');
 });
