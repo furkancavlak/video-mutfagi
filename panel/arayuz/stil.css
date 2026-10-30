@@ -232,52 +232,105 @@ label.kutu{flex-direction:row;align-items:center;gap:7px;padding-bottom:8px}
 
 /* ===== the calendar: one big card per video, a dashed card for a free day ===== */
 /* the week grid: 7 columns Mon-Sun, rows are weeks; cards scale with the column, covers keep 9:16 under a max height */
-.hafta-izgara{--kapak-max:min(400px,40vh);display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
+.hafta-izgara{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
 .gun-ad{font:700 11.5px var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);padding:0 8px 2px}
-.gun-h{min-width:0;display:flex;flex-direction:column;gap:8px;padding:8px;border-radius:16px;border:1px solid transparent;container-type:inline-size}
-.gun-h.bos.gecmis .bos-gun{min-height:64px}
+/* every day cell has the same height: 3 compact rows at most, then "+N daha" */
+.gun-h{min-width:0;height:236px;overflow:hidden;display:flex;flex-direction:column;gap:3px;padding:6px;border-radius:14px;background:var(--card);border:1px solid var(--line)}
+.gun-h.gecmis{background:transparent}
+.gun-h.bos.gecmis{opacity:.55}
 /* a busy day in a wide column: cover left, text right, so the week still fits on one screen */
-@container (min-width:240px){
-  .gun-h.cok>.gk-kart{display:grid;grid-template-columns:42% minmax(0,1fr);column-gap:12px;row-gap:5px;align-content:start;grid-template-areas:"kapak ust" "kapak satir" "kapak durum" "kapak asama" "kapak ad" "kapak hikaye";grid-template-rows:auto auto auto auto auto 1fr}
-  .gun-h.cok>.gk-kart>.gkk-kapak{grid-area:kapak;width:100%;margin:0;align-self:start}
-  .gun-h.cok>.gk-kart>.gkk-ust{grid-area:ust}.gun-h.cok>.gk-kart>.gkk-satir{grid-area:satir;margin:0}.gun-h.cok>.gk-kart>.gkk-durum{grid-area:durum}.gun-h.cok>.gk-kart>.asama{grid-area:asama}.gun-h.cok>.gk-kart>.gkk-ad{grid-area:ad}.gun-h.cok>.gk-kart>.gkk-hikaye{grid-area:hikaye}
-  .gun-h.cok .gkk-yer{font-size:13px;padding:8px 8px 40px}
-}
-.gun-h.bu-hafta{background:var(--card);border-color:var(--line)}
+.gun-h.bu-hafta{border-color:var(--line-2)}
 .gun-h.bugun{border-color:var(--ink-3)}
-.gh-ust{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-3);white-space:nowrap;min-width:0;padding:2px 4px}
-.gh-ust b{font:800 19px/1 var(--display);color:var(--ink);letter-spacing:-.02em;margin-right:2px}
+.gh-ust{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-3);white-space:nowrap;min-width:0;padding:0 2px;height:22px;flex:none}
+.gh-ust b{font:800 16px/1 var(--display);color:var(--ink);letter-spacing:-.02em;margin-right:2px}
 .gun-h.gecmis .gh-ust b{color:var(--ink-3)}
-.gh-ust em{margin-left:auto;font:700 11px/1 var(--body);font-style:normal;background:var(--ana-bg);color:var(--ana-t);padding:5px 9px;border-radius:999px}
+.gh-ust em{margin-left:auto;font:700 10.5px/1 var(--body);font-style:normal;background:var(--ana-bg);color:var(--ana-t);padding:4px 8px;border-radius:999px}
 .gh-gun{display:none}
-.gh-yok{flex:1;display:grid;place-items:center;color:var(--ink-3);min-height:60px}
-.gk-kart{display:flex;flex-direction:column;gap:7px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 12px 13px;min-width:0;transition:transform .15s,border-color .15s}
-.gk-kart:hover{transform:translateY(-2px);border-color:var(--line-2)}
-.gk-kart.bugun{border-color:var(--ink-3)}
-.gkk-ust{display:flex;align-items:center;gap:6px;min-width:0}
-.gkk-ust b{font:800 17px/1 var(--display);color:var(--ink);letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.gkk-ust .kanal-rozet{margin-left:auto;flex:none}
-.gkk-ust .kanal-rozet+.kanal-rozet{margin-left:0}
-.gkk-hikaye{font:600 12px var(--body);color:var(--ink-3)}
-.gkk-kapak{position:relative;display:block;aspect-ratio:9/16;width:min(100%,calc(var(--kmax,var(--kapak-max,400px)) * 9 / 16));margin:0 auto;border-radius:11px;overflow:hidden;background:linear-gradient(160deg,var(--paper-2),var(--paper));border:1px solid var(--line)}
-.gkk-kapak img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
-.gkk-yer{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;gap:4px;padding:14px;font:800 17px/1.15 var(--display);letter-spacing:-.02em;color:var(--ink-2)}
-.gkk-yer small{font:600 11px var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
-.gkk-oynat{position:absolute;right:8px;bottom:8px;z-index:2;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(4px)}
-.gkk-oynat .ik{margin-left:2px}
-.gkk-satir{display:block;font-size:12.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
-.gkk-durum{display:flex;align-items:center;flex-wrap:wrap;gap:4px 7px;font:600 12.5px var(--body);color:var(--dt);min-width:0}
+.gh-yok{flex:1;display:grid;place-items:center;color:var(--ink-3);font-size:12px}
+.gh-arti{margin-left:auto;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;color:var(--ink-3);opacity:0;transition:opacity .12s}
+.gun-h:hover .gh-arti,.gh-arti:focus-visible{opacity:1}
+.gh-arti:hover{background:var(--secili-bg);color:var(--ink)}
+.gh-ust em+.gh-arti{margin-left:4px}
+.gh-daha{margin-top:auto;text-align:left;font:700 12px var(--body);color:var(--ink-2);padding:4px 6px;border-radius:7px}
+.gh-daha:hover{background:var(--secili-bg);color:var(--ink)}
+/* a compact video row: small still, time, one-line title, status */
+.sat{display:grid;grid-template-columns:32px minmax(0,1fr);gap:8px;align-items:center;width:100%;text-align:left;padding:2px 4px;border-radius:9px;border:1px solid transparent}
+.sat:hover{background:var(--secili-bg);border-color:var(--line-2)}
+.sat-kapak{position:relative;width:32px;height:57px;border-radius:6px;overflow:hidden;display:grid;place-items:center;background:var(--paper-2);color:var(--ink-3);box-shadow:inset 0 0 0 1px var(--line)}
+.sat-kapak[style]{background:linear-gradient(160deg,color-mix(in srgb,var(--k) 30%,transparent),var(--paper-2))}
+.sat-kapak img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
+.sat-ic{min-width:0;display:flex;flex-direction:column;gap:2px}
+.sat-ust{display:flex;align-items:center;gap:6px}
+.sat-ust b{font:800 14px/1.1 var(--display);letter-spacing:-.01em;white-space:nowrap}
+.sat-izl{margin-left:auto;display:inline-flex;align-items:center;gap:3px;font:600 11px var(--body);color:var(--ink-3)}
+.sat-ad{font:600 12.5px/1.25 var(--body);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sat-ad small{color:var(--ink-3);font-weight:600}
+.sat-ad .nokta-k{margin-right:5px}
+.sat-durum{display:flex;align-items:center;gap:6px;font:600 11.5px var(--body);color:var(--dt);white-space:nowrap;overflow:hidden}
+.sat .asama{margin-top:1px}
+.sat-hikaye{font:600 11.5px var(--body);color:var(--ink-3)}
+.sat.genis{grid-template-columns:44px minmax(0,1fr);gap:12px;padding:6px 8px}
+.sat.genis .sat-kapak{width:44px;height:78px}
+.sat.genis .sat-ad{font-size:14px}
+.gun-h{cursor:pointer}
+.gun-h:hover{border-color:var(--line-2)}
+/* the day detail panel */
+dialog.gun-panel{position:fixed;inset:0 0 0 auto;margin:0;width:min(820px,100%);max-width:100%;height:100vh;max-height:100vh;border-radius:18px 0 0 18px;animation:gp-gir .18s ease-out}
+@keyframes gp-gir{from{opacity:0}}
+dialog.gun-panel #pencere-ic{height:100%;padding:0;gap:0}
+.gp{display:flex;flex-direction:column;height:100%;min-height:0}
+.gp-ust{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 22px 14px;border-bottom:1px solid var(--line)}
+.gp-ust h2{font:800 26px/1.1 var(--display);letter-spacing:-.025em;text-transform:capitalize;display:flex;align-items:center;gap:10px}
+.gp-bugun{font:700 11px/1 var(--body);font-style:normal;text-transform:none;background:var(--ana-bg);color:var(--ana-t);padding:5px 9px;border-radius:999px}
+.gp-ozet{margin-top:6px;color:var(--ink-2);font-size:14px}
+.gp-liste{flex:1;min-height:0;overflow:auto;padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.gp-alt{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 22px;border-top:1px solid var(--line)}
+.gp-kart{display:grid;grid-template-columns:240px minmax(0,1fr);gap:18px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--paper)}
+.gp-video video,.gp-yok{display:block;width:100%;aspect-ratio:9/16;border-radius:12px;background:var(--board-deep);object-fit:contain}
+.gp-yok{position:relative;display:grid;place-items:center;text-align:center;overflow:hidden;background:var(--paper-2);color:var(--ink-2);font-weight:600;font-size:13.5px;padding:14px}
+.gp-yok img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.45}
+.gp-yok span{position:relative}
+.gp-yok a{display:inline-flex;align-items:center;gap:6px;padding:9px 13px;border-radius:10px;background:var(--ana-bg);color:var(--ana-t);text-decoration:none}
+.gp-bilgi{min-width:0;display:flex;flex-direction:column;gap:10px}
+.gp-satir1{display:flex;align-items:center;gap:8px}
+.gp-satir1 b{font:800 20px var(--display)}
+.gp-bilgi h3{font:800 21px/1.15 var(--display);letter-spacing:-.02em}
+.gp-cipler{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.gp-bolum{font:600 13px var(--body);color:var(--ink-2)}
+.gp-izl{display:inline-flex;align-items:center;gap:4px;font:600 13px var(--body);color:var(--ink-2)}
+.gp-hikaye{font-size:13.5px;color:var(--ink-2);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.gp-karar{font-size:13.5px;color:var(--ink-2);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 11px}
+.gp-dugmeler{display:flex;gap:8px;flex-wrap:wrap}
+.gp-kart .m-altyazi{max-height:150px}
+.gun-liste{display:flex;flex-direction:column;gap:4px;max-height:70vh;overflow:auto}
+.tk-ust-satir{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+.tk-ust-satir .tk-aralik{margin:0}
+.tk-satir{display:flex;align-items:baseline;gap:10px 30px;flex-wrap:wrap}
+.tk-satir .tk-sayilar{margin:0}
+.tk-bas{margin-bottom:16px}
+.kn{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--body);color:var(--ink-3)}
+.kn.kotu{color:var(--bad-t)}
+.kn .ik{flex:none}
+/* "Onayını bekleyenler": what waits for Furkan, above the calendar */
+#onay-bar{margin:0 0 14px}
+.ob-bos{display:flex;align-items:center;gap:7px;font:600 13px var(--body);color:var(--ink-3)}
+.ob{padding:10px 14px}
+.ob-ust{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ob-ust h2{font:700 17px var(--display);letter-spacing:-.01em}
+.ob-gruplar{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:12px}
+.ob-grup{border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.ob-grup h3{display:flex;align-items:center;gap:7px;font:700 12.5px var(--body);letter-spacing:.04em;text-transform:uppercase;color:var(--dt)}
+.ob-grup h3 small{font-weight:600;opacity:.7}
+.ob-metin{--dr:var(--mor);--dt:var(--mor-t);background:var(--mor-soft)}
+.ob-video{--dr:var(--sun);--dt:var(--sun-t);background:var(--honey-soft)}
+.ob-satir{display:flex;align-items:center;gap:10px;padding:6px;border-radius:10px;background:var(--card)}
+.ob-ikon{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;background:var(--mor-soft);color:var(--mor-t);flex:none}
+.ob-satir .sat-kapak{flex:none}
+.ob-ad{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.ob-ad b{font:700 14px var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ob-ad small{display:flex;align-items:center;font-size:12px;color:var(--ink-3)}
+.ob-satir .dugme{flex:none}
 .nokta-d{width:7px;height:7px;border-radius:50%;background:var(--dr);flex:none}
-.gkk-izl{margin-left:auto;display:inline-flex;align-items:center;gap:4px;color:var(--ink-2);font-weight:600}
-.gkk-ad{font:700 15px/1.3 var(--body);color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.gkk-alt{margin-top:auto;display:flex;gap:6px;padding-top:2px}
-.gk-kart .asama{margin-top:0}
-.bos-gun{flex:1;background:transparent;border:1.5px dashed var(--line-2);min-height:120px}
-.bos-gun:hover{border-color:var(--ink-3)}
-.bos-gun.gecmis{opacity:.45;cursor:default}
-.bos-gun.gecmis:hover{transform:none;border-color:var(--line-2)}
-.gkk-arti{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--ink-3);font-size:12.5px;font-weight:600}
-.bos-gun:not(.gecmis):hover .gkk-arti{color:var(--ink)}
 
 /* add-to-queue picker */
 .satir.secim{width:100%;text-align:left}
@@ -460,18 +513,19 @@ dialog{width:min(880px,94vw);margin:auto}
   #durum-filtre{overflow-x:auto;min-width:0;max-width:100%;scrollbar-width:none}
   #durum-filtre button{flex:none}
   .hafta-izgara{grid-template-columns:minmax(0,1fr);gap:8px}
-  .gun-h{padding:8px 0;border:0;background:transparent!important;border-radius:0;border-bottom:1px solid var(--line)}
-  .gun-h.bugun{border-bottom-color:var(--line)}
-  .gk-kart:not(.bos-gun){display:grid;grid-template-columns:104px minmax(0,1fr);column-gap:14px;row-gap:5px;align-content:start;grid-template-areas:"kapak ust" "kapak satir" "kapak durum" "kapak asama" "kapak ad" "kapak hikaye";grid-template-rows:auto auto auto auto auto 1fr}
-  .gk-kart:not(.bos-gun)>.gkk-kapak{grid-area:kapak;align-self:start;width:100%;margin:0}
-  .gk-kart .gkk-ust{grid-area:ust}.gk-kart .gkk-satir{grid-area:satir;margin:0}.gk-kart .gkk-durum{grid-area:durum}.gk-kart .asama{grid-area:asama}.gk-kart .gkk-ad{grid-area:ad}.gk-kart .gkk-hikaye{grid-area:hikaye}
-  .gkk-yer{font-size:12px;padding:8px 8px 40px}
-  .gkk-oynat{width:26px;height:26px;right:6px;bottom:6px}
-  .gun-h.bos{flex-direction:row;align-items:center;justify-content:space-between}
+  dialog.gun-panel{inset:0;width:100%;border-radius:0}
+  .gp-kart{grid-template-columns:minmax(0,1fr)}
+  .gp-video video,.gp-yok{max-height:56vh;width:auto;max-width:100%;margin:0 auto}
+  .gp-yok:not(:has(img)){aspect-ratio:auto;width:100%;min-height:84px}
+  .gp-ust,.gp-liste,.gp-alt{padding-left:14px;padding-right:14px}
+  .gp-alt .ince-yazi{display:none}
+  .gun-h{height:auto;overflow:visible;padding:8px 0;border:0;background:transparent!important;border-radius:0;border-bottom:1px solid var(--line)}
+  .gun-h.bos{flex-direction:row;align-items:center}
   .gun-h.bos .gh-ust{flex:1}
-  .gun-h.bos .gh-ust em{margin-left:8px}
-  .bos-gun{flex:none;min-height:0;padding:7px 12px;border-radius:10px}
-  .gkk-arti{flex:none;flex-direction:row}
+  .gh-arti{opacity:1}
+  .ob-satir{flex-wrap:wrap}
+  .ob-satir .ob-ad{flex:1 1 60%}
+  .gun-h.bugun{border-bottom-color:var(--line)}
   .sayilar{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .sk{padding:14px}
   .sk-deger{font-size:28px}
@@ -490,10 +544,7 @@ dialog{width:min(880px,94vw);margin:auto}
 }
 
 /* ===== story text approval (purple): calendar card, header count, Hikâyeler badge, modal ===== */
-.gk-kart.d-metin{border-color:var(--mor);background:linear-gradient(180deg,var(--mor-soft),var(--card) 60%)}
-.gk-kart.d-metin:hover{border-color:var(--mor-t)}
 .mt-kapak{background:linear-gradient(160deg,var(--mor-soft),var(--paper));border-color:var(--mor)}
-.mt-kapak .gkk-yer{color:var(--ink)}.mt-kapak .gkk-yer .ik{color:var(--mor-t);margin-bottom:auto}
 .tk-sayilar span.mor b{color:var(--mor-t)}
 .hk-durum-metin{display:inline-flex;align-items:center;gap:4px;background:var(--mor-soft);color:var(--mor-t)}
 .dugme.mor{background:var(--mor);border-color:var(--mor);color:#fff}
@@ -507,4 +558,3 @@ dialog{width:min(880px,94vw);margin:auto}
 .mt-bolum>span{font:700 14px var(--body)}.mt-bolum small{font-weight:500;color:var(--ink-3)}
 .mt-bolum textarea{width:100%;min-height:170px;resize:vertical;background:var(--paper);border:1px solid var(--line-2);border-radius:12px;padding:12px 14px;line-height:1.55;font-size:14.5px}
 .mt-bolum textarea:focus{outline:2px solid var(--mor);outline-offset:1px;border-color:transparent}
-.gk-kart.d-metin .gkk-durum{flex-wrap:nowrap;white-space:nowrap;overflow:hidden}
