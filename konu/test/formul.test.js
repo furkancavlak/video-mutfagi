@@ -86,3 +86,18 @@ test('scene writing: own time limit (konu.json llm.sahne_zaman_asimi_dk, default
   await LLM.sor('istem', { json: false, zamanAsimiMs: 1234, calistir: async (i, o) => { gelen = o; return { metin: 'ok' }; } });
   assert.strictEqual(gelen.zamanAsimiMs, 1234);
 });
+
+// Furkan 30.10 (story ep 2 review): no invented text, no filler, no see-through overlays, no thin full-width lines.
+// The channel's gorsel_dil.kurallar reach both the scene writer and the still reviewer, and a broken rule is a heavy fail.
+test('scene prompts: channel rules (gorsel_dil.kurallar) and the four bans reach writer and reviewer', () => {
+  const LLM = require('../llm');
+  const gd = { cizgi: 'düz', kurallar: ['UYDURMA YAZI YOK: KURAL123'] };
+  const yaz = LLM.istem('sahne-yaz', { formul: '', renkler: {}, gorsel_dil: gd, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '' });
+  assert.match(yaz, /KURAL123/);
+  assert.match(yaz, /`kurallar` varsa her madde kesindir/);
+  for (const re of [/Dolgu sahne yok/, /Metinde geçmeyen slogan/, /tam opak/, /ince çizgi/]) assert.match(yaz, re);
+  const den = LLM.istem('sahne-denetim', { sayfalar: 'a.jpg', gorsel_dil: gd, satirlar: '0: metin' });
+  assert.match(den, /KURAL123/);
+  assert.match(den, /Kural çiğneyen her kare `yuksek`/);
+  for (const re of [/dolgu kare/, /uydurma yazı/, /yarı saydam katman/, /ince çizgi/]) assert.match(den, re);
+});

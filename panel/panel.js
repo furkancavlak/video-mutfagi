@@ -307,7 +307,9 @@ function dizilerCevap(kanal) {
 // route -> server hop goes through this object so tests can stub the ssh / scp call
 const kanca = { sunucuda: (...a) => sunucuda(...a), scp: (args, sure) => spawnSync('scp', args, { encoding: 'utf8', timeout: sure }) };
 const kanalAdi = k => { if (typeof k !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(k)) throw new Error('kanal yok'); return k; };
-const bolumNo = n => { if (!Number.isInteger(n) || n < 1 || n > 3) throw new Error('bölüm numarası 1, 2 ya da 3 olmalı'); return n; };
+// a series has 2-5 episodes (dizi/bol.js MAX_SAYI); an n past this series' own count is refused by dizi.js ("bölüm n yok")
+const MAX_BOLUM = 5;
+const bolumNo = n => { if (!Number.isInteger(n) || n < 1 || n > MAX_BOLUM) throw new Error(`bölüm numarası 1 ile ${MAX_BOLUM} arasında olmalı`); return n; };
 const diziId = i => { if (typeof i !== 'string' || !/^[\w.-]{1,80}$/.test(i)) throw new Error('böyle bir dizi yok'); return i; };
 // only validated fields are rebuilt into the payload, so nothing but known-safe values reaches the shell (and q() quotes it anyway)
 function diziKararGovde(b) {
@@ -326,14 +328,14 @@ function kilitli(kanal, fn) {
 }
 function diziBul(D, b) {
   if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
-  if (!Number.isInteger(b.n) || b.n < 1 || b.n > 3) throw new Error('bölüm numarası 1, 2 ya da 3 olmalı');
+  bolumNo(b.n);
   const veri = D.yukle(KOK, b.kanal), d = (veri.diziler || []).find(x => x.id === b.id);
   if (!d) throw new Error('böyle bir dizi yok');
   return { veri, d };
 }
 function diziKarar(b) {
   if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
-  if (!Number.isInteger(b.n) || b.n < 1 || b.n > 3) throw new Error('bölüm numarası 1, 2 ya da 3 olmalı');
+  bolumNo(b.n);
   if (!['devam', 'kes'].includes(b.karar)) throw new Error('karar devam ya da kes olmalı');
   return kilitli(b.kanal, D => {
     const { veri, d } = diziBul(D, b);

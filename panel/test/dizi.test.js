@@ -90,7 +90,7 @@ test('refusals are 400 with a Turkish message and change nothing', async () => {
   sifirla();
   const once = fs.readFileSync(path.join(KOK, DZ), 'utf8');
   const g = (o) => istek('POST', '/api/dizi/karar', { kanal: 'kanal_a', id: 'd1', n: 1, karar: 'devam', ...o });
-  for (const [o, re] of [[{ kanal: '../x' }, /kanal/], [{ kanal: 'yok' }, /kanal/], [{ id: 'nope' }, /dizi yok/], [{ n: 0 }, /bölüm numarası/], [{ n: 4 }, /bölüm numarası/], [{ n: 1.5 }, /bölüm numarası/], [{ n: '1' }, /bölüm numarası/], [{ karar: 'bekle' }, /devam ya da kes/], [{ karar: undefined }, /devam ya da kes/],
+  for (const [o, re] of [[{ kanal: '../x' }, /kanal/], [{ kanal: 'yok' }, /kanal/], [{ id: 'nope' }, /dizi yok/], [{ n: 0 }, /bölüm numarası/], [{ n: 6 }, /bölüm numarası/], [{ n: 4 }, /bölüm 4 yok/], [{ n: 1.5 }, /bölüm numarası/], [{ n: '1' }, /bölüm numarası/], [{ karar: 'bekle' }, /devam ya da kes/], [{ karar: undefined }, /devam ya da kes/],
     [{ id: 'd1', n: 2, karar: 'kes' }, /yayında değil/], [{ id: 'd2', n: 1, karar: 'kes' }, /üretime girdi/], [{ id: 'd2', n: 1, karar: 'devam' }, /üretime girdi/], [{ id: 'd1', n: 3, karar: 'kes' }, /yayında değil/], [{ id: 'd3', n: 1, karar: 'devam' }, /yalnız Kes/]]) {
     const r = await g(o); assert.equal(r.kod, 400, JSON.stringify(o)); assert.match(r.j.hata, re, JSON.stringify(o));
   }

@@ -213,3 +213,15 @@ test('izin flags: a non-finished series that waits for a human always has a butt
   }
   assert.ok(bakilan > 20, String(bakilan));
 });
+
+test('a 5-episode series: Kes on ep 3 skips 4-5, Kes on ep 5 finishes, Devam past the last is refused', () => {
+  const s = () => ({ id: 's5', kanal: 'k', durum: 'aktif', bolumler: [1, 2, 3, 4, 5].map(n => ({ n, metin: 'x', durum: n <= 3 ? 'yayinda' : 'metin' })) });
+  let d = s(); kararUygula(d, 3, 'kes', 'neden');
+  assert.deepStrictEqual([d.durum, ...d.bolumler.map(b => b.durum)], ['kesildi', 'yayinda', 'yayinda', 'yayinda', 'atlandi', 'atlandi']);
+  d = s(); d.bolumler[3].durum = 'yayinda';
+  assert.strictEqual(kararHata(d, 4, 'devam'), null, 'ep 4 of 5 is not the last');
+  d.bolumler[4].durum = 'yayinda';
+  assert.match(kararHata(d, 5, 'devam'), /Son bölüm/);
+  kararUygula(d, 5, 'kes', 'son'); assert.strictEqual(d.durum, 'bitti');
+  assert.match(kararHata(s(), 6, 'kes'), /bölüm 6 yok/);
+});

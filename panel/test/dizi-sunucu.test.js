@@ -96,7 +96,7 @@ test('sunucu: invalid input is rejected with 400 before any ssh call', async () 
   const kotu = [
     ['/api/dizi/karar', { kanal: "kanal_a'; id #", id: 'd1', n: 1, karar: 'kes' }],
     ['/api/dizi/karar', { kanal: 'kanal_a', id: "d1'; rm", n: 1, karar: 'kes' }],
-    ['/api/dizi/karar', { kanal: 'kanal_a', id: 'd1', n: 4, karar: 'kes' }],
+    ['/api/dizi/karar', { kanal: 'kanal_a', id: 'd1', n: 6, karar: 'kes' }],
     ['/api/dizi/karar', { kanal: 'kanal_a', id: 'd1', n: 1, karar: 'sil' }],
     ['/api/dizi/tekrar', { kanal: '../x', id: 'd1', n: 1 }],
     ['/api/dizi/tekrar', { kanal: 'kanal_a', id: 'd1', n: '1' }],

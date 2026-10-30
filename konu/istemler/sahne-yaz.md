@@ -11,6 +11,8 @@ Renkler (`C` içinde gelir): {{renkler}}
 Görsel dil:
 {{gorsel_dil}}
 
+Görsel dilde `kurallar` varsa her madde kesindir: birini çiğneyen sahne kontrol turunda ağır hata alır.
+
 ## Kanalın karakteri
 
 {{karakter}}
@@ -38,6 +40,10 @@ Aşağıdaki dosya başka bir hikâyenin videosudur. Ondan şunları öğren: do
 ## Yazarken
 
 - Her satır için önce şunu düşün: bu cümlede izleyicinin GÖRMESİ gereken tek şey ne? Onu çiz, gerisini çizme.
+- Dolgu sahne yok: metin bir nesnenin ya da olayın adını veriyorsa o an onu göster. Karakterin tek başına durduğu, ekranın yarısı boş kalan kare yok.
+- Ekrana koyduğun her yazıyı metinden al. Metinde geçmeyen slogan, pankart, levha yazısı ya da mesaj uydurma; içeriği metinde olmayan mesajı yazısız (gri satır çubuklarıyla) çiz.
+- Bildirim, kart ve mesaj tam opak olur; sahnenin üstüne yarı saydam katman bindirme. Bir sahne gitmeden yenisi onun üstüne karışarak gelmez.
+- Ekranı soldan sağa kesen ince çizgi çizme (masa kenarı, raf, ayraç dahil); kenar gerekiyorsa en az 24 px kalın dolu şekil kullan.
 - Nesneleri SVG yollarıyla (path, rect, circle, ellipse, polygon, text) düz renkli çiz. Tanınır olsun: bir nesne 3-12 şekilden oluşur, gerekirse detay ekle.
 - Kahraman ve önemli yazı y = 230 ile y = 1560 arasında kalır.
 - Karakter kanalın dosyasından gelir (`karakter.ciz`, `karakter.ifade`); karakteri kendin yeniden çizme. `karakter` null ise karakter yoktur.

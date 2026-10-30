@@ -40,9 +40,10 @@ function satirlaraBol(metin) {
   return p;
 }
 
-function aciklamaYaz(metin, n) {
+// a series has its own episode count (2-5): only its last episode says Final
+function aciklamaYaz(metin, n, toplam = 3) {
   const ilk = temiz(cumleler(temiz(metin))[0]);
-  return `${ilk} 👀\nBölüm ${n} · ${n < 3 ? 'Devamı yarın.' : 'Final.'}\n${ETIKETLER}`;
+  return `${ilk} 👀\nBölüm ${n} · ${n < toplam ? 'Devamı yarın.' : 'Final.'}\n${ETIKETLER}`;
 }
 
 function hazirYap(dizi, n) {
@@ -53,7 +54,7 @@ function hazirYap(dizi, n) {
     satirlar: satirlaraBol(b.metin).map(metin => ({ rol: 'anlatici', metin })),
     anlaticilar: { anlatici: dizi.anlatici.ses },
     video_ek: { bolum: n, toplam_bolum: dizi.bolumler.length, etiket: `${String(dizi.baslik_kisa || dizi.baslik).toLocaleUpperCase('tr')} · BÖLÜM ${n}` },
-    aciklama_instagram: aciklamaYaz(b.metin, n),
+    aciklama_instagram: aciklamaYaz(b.metin, n, dizi.bolumler.length),
   };
 }
 
@@ -81,4 +82,4 @@ async function uretBolum(ctx, dizi, n, { onayGerekli = true, calistir, kok = O.K
   return { durum, dir: r.dir, ...(r.mp4 ? { mp4: r.mp4 } : {}), ...(r.neden ? { neden: r.neden } : {}) };
 }
 
-module.exports = { uretBolum, satirlaraBol, aciklamaYaz, hazirYap };
+module.exports = { uretBolum, satirlaraBol, aciklamaYaz, hazirYap, cumleler };

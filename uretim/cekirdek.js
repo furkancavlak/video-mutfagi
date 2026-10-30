@@ -109,7 +109,8 @@ function altyazi(T, video, C, kimlik) {
   return { html: `<div id="caps">${html}</div>`, tl };
 }
 
-// kontur (story channels): 1-3 words straight over the scene, white Anton with a 20 px ink stroke, the spoken word
+// kontur (story channels): 1-3 words straight over the scene, white Anton 83 px with a 16 px ink stroke (30.10: 20% under
+// the first 104/20), top at y 1410, the spoken word
 // lights up in #FFC9BC. A card breaks at punctuation or a pause; the last one is gone before the closing card.
 function altyaziKontur(T, video, C) {
   const { Z } = T, fixw = duzeltici(video.duzeltme || {}), VURGU = '#FFC9BC';
@@ -126,7 +127,7 @@ function altyaziKontur(T, video, C) {
     c.ws.forEach((w, wi) => tl.push(`tl.set('.dw${ci}_${wi}',{color:'${VURGU}'},${at(w.a)});tl.set('.dw${ci}_${wi}',{color:'#FFFFFF'},${at(Math.max(w.b, w.a + .15))});`));
   });
   const css = `${KISA_FONT}
-.dcap{position:absolute;left:60px;right:60px;top:1410px;text-align:center;font:400 104px/1.06 AN;text-transform:uppercase;color:#fff;letter-spacing:1px;-webkit-text-stroke:20px ${C.ink};paint-order:stroke fill}`;
+.dcap{position:absolute;left:60px;right:60px;top:1410px;text-align:center;font:400 83px/1.06 AN;text-transform:uppercase;color:#fff;letter-spacing:1px;-webkit-text-stroke:16px ${C.ink};paint-order:stroke fill}`;
   return { html: `<div id="caps">${html}</div>`, tl, css };
 }
 

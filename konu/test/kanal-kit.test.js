@@ -74,7 +74,7 @@ test('new channel: kontur captions, no sting, top label and the channel closing 
   assert.match(cap.html, /class="dcap/);
   assert.ok(!/class="cap/.test(cap.html), 'no oxygbio caption box');
   assert.match(cap.tl.join(''), /color:'#FFC9BC'/);
-  assert.match(cap.css, /\.dcap\{[^}]*top:1410px[^}]*-webkit-text-stroke:20px #23283B/);
+  assert.match(cap.css, /\.dcap\{[^}]*top:1410px[^}]*font:400 83px\/1\.06 AN[^}]*-webkit-text-stroke:16px #23283B/);   // 30.10: 20% smaller, same place
   assert.match(cap.css, /font-family:AN/);
   // the last caption is gone before the card comes up
   const sonlar = cap.tl.map(s => s.match(/\{opacity:0\},([\d.]+)\);$/)).filter(Boolean).map(m => +m[1]);
@@ -94,6 +94,10 @@ test('new channel: kontur captions, no sting, top label and the channel closing 
   // last episode: the card is told there is no next one
   const son = K.marka(T, kimlik, C, { video: { ...video, bolum: 3 }, kimlikDir: dir });
   assert.match(son.html, /KAPFIX null/);
+  // a series has its own episode count (2-5): episode 3 of 5 announces 4, the last of 5 or of 2 announces none
+  assert.match(K.marka(T, kimlik, C, { video: { ...video, bolum: 3, toplam_bolum: 5 }, kimlikDir: dir }).html, /KAPFIX 4 /);
+  assert.match(K.marka(T, kimlik, C, { video: { ...video, bolum: 5, toplam_bolum: 5 }, kimlikDir: dir }).html, /KAPFIX null/);
+  assert.match(K.marka(T, kimlik, C, { video: { ...video, bolum: 2, toplam_bolum: 2 }, kimlikDir: dir }).html, /KAPFIX null/);
   // no label text -> no label
   assert.ok(!/class="etk"/.test(K.marka(T, kimlik, C, { video: { bolum: 1 }, kimlikDir: dir }).html));
 });

@@ -335,3 +335,21 @@ test('a missing onay_donemi means the approval period is on (onay_gunluk, onayGe
   assert.strictEqual(n, 1);
   assert.deepStrictEqual(opts, [true]);
 });
+
+// series have their own episode count (2-5): the measured ep 2 of a 2-episode series ends it, ep 3 of 5 leads to ep 4
+test('own episode count: ep 2 of 2 measured finishes the series, ep 3 of 5 measured makes ep 4 due', async () => {
+  const k = kok();
+  const yayinda = n => bolum(n, { durum: 'sirada', video: 'v-' + n });
+  kaydet(k, 'k', { diziler: [
+    { id: 'iki', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'olculdu', karar: 'devam', metrik: { views: 1000 } }), { ...yayinda(2), video: 'v-iki2' }] },
+    { id: 'bes', kanal: 'k', durum: 'aktif', bolumler: [1, 2].map(n => bolum(n, { durum: 'olculdu', karar: 'devam', metrik: { views: 1000 } })).concat([{ ...yayinda(3), video: 'v-bes3' }, bolum(4), bolum(5)]) },
+  ] });
+  is(k, 'paylasilan', 'j1', { video: 'v-iki2', paylasildi: saatOnce(21), media_id: 'M1', hesap: 'dur' });
+  is(k, 'paylasilan', 'j2', { video: 'v-bes3', paylasildi: saatOnce(21), media_id: 'M2', hesap: 'dur' });
+  const uret = fakeUret();
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({ metrik: { views: 900 }, yorum_devam: 0 }), uretBolum: uret, yeniDizi: async () => null });
+  const v = yukle(k, 'k').diziler;
+  assert.strictEqual(v.find(d => d.id === 'iki').durum, 'bitti');
+  assert.strictEqual(v.find(d => d.id === 'bes').durum, 'aktif');
+  assert.deepStrictEqual(uret.calls, ['bes:4']);
+});

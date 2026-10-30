@@ -41,6 +41,9 @@ test('satirlaraBol: 2-4 lines at paragraph breaks', () => {
 test('aciklamaYaz: first sentence (no audio tags), episode line, tags', () => {
   assert.strictEqual(aciklamaYaz(P.join('\n\n'), 2), 'Bir sabah kapı çaldı ve kapıda kimse yoktu. 👀\nBölüm 2 · Devamı yarın.\n#hikaye #yaşanmışhikaye #anı #komik');
   assert.match(aciklamaYaz('Son. Bitti.', 3), /^Son\. 👀\nBölüm 3 · Final\.\n/);
+  // the series' own count decides the last episode
+  assert.match(aciklamaYaz('Son. Bitti.', 3, 5), /Bölüm 3 · Devamı yarın\./);
+  assert.match(aciklamaYaz('Son. Bitti.', 2, 2), /Bölüm 2 · Final\./);
   // an ellipsis is a pause inside the sentence
   assert.match(aciklamaYaz('Bir sabah... kapı yine çaldı. Sonra sustu.', 1), /^Bir sabah\.\.\. kapı yine çaldı\. 👀\n/);
 });
@@ -100,6 +103,21 @@ test('episode states: finished jobs wait for approval or the slot, Bolum.video e
   assert.strictEqual(d.bolumler[0].durum, 'kontrol_et');
   assert.match(d.bolumler[0].karar_neden, /sahne çalışmadı/);
   assert.strictEqual(r.durum, 'kontrol_et');
+});
+
+test('a 5-episode and a 2-episode series: total, label and description follow the series\' own count', async () => {
+  const kok = tmp('dizi-ub-bes-'), ctx = kanalCtx();
+  const f = async (cx, id, o) => { f.o = o; return { durum: 'uretildi', dir: path.join(kok, 'videolar', `${cx.kanal}-${o.hazir.ad}`) }; };
+  const d = dizi({ bolumler: [1, 2, 3, 4, 5].map(n => ({ n, metin: P.slice(0, 2).join('\n\n'), durum: 'metin' })) });
+  await uretBolum(ctx, d, 4, { kok, uret: f, yaz: sessiz });
+  assert.deepStrictEqual(f.o.hazir.video_ek, { bolum: 4, toplam_bolum: 5, etiket: 'DENEME HİKÂYE · BÖLÜM 4' });
+  assert.match(f.o.hazir.aciklama_instagram, /Bölüm 4 · Devamı yarın\./);
+  await uretBolum(ctx, d, 5, { kok, uret: f, yaz: sessiz });
+  assert.match(f.o.hazir.aciklama_instagram, /Bölüm 5 · Final\./);
+  const iki = dizi({ bolumler: [1, 2].map(n => ({ n, metin: P[0], durum: 'metin' })) });
+  await uretBolum(ctx, iki, 2, { kok, uret: f, yaz: sessiz });
+  assert.strictEqual(f.o.hazir.video_ek.toplam_bolum, 2);
+  assert.match(f.o.hazir.aciklama_instagram, /Bölüm 2 · Final\./);
 });
 
 test('scheduler: a produced episode is matched to its posted queue job; budget wait stays due with a note', async () => {
