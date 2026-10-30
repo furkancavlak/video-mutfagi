@@ -1,5 +1,5 @@
 // Series store (kayit/dizi/<kanal>/diziler.json) and the continue/cut decision for story episodes. Pure except yukle/kaydet.
-const fs = require('fs'), path = require('path');
+const fs = require('fs'), path = require('path'), os = require('os');
 const { yazJson, okuJson } = require('../konu/ortak');
 
 const dosya = (kok, kanal) => path.join(kok, 'kayit', 'dizi', kanal, 'diziler.json');
@@ -95,20 +95,28 @@ function kararVer(dizi, n, tumDiziler, ayar, simdi) {
   return { karar: 'devam', neden: `${ne} ${f(deger)} >= eşik ${f(esik)} (ortalama ${f(ortalama)})` };
 }
 
-// ---- per-channel lock (kayit/dizi/<kanal>/.kilit), shared by the scheduler run and the panel's manual decisions; a dead pid or a file older than 6 h is stale
+// ---- per-channel lock (kayit/dizi/<kanal>/.kilit), shared by the scheduler run and the panel's manual decisions.
+// A live pid on this host always holds it, however long the run takes. Stale: a dead pid on this host, or a lock from
+// another host (or without a pid) older than 6 h. A file still being written (unreadable) is held for a minute.
+const pidCanli = pid => { try { process.kill(pid, 0); return true; } catch (x) { return x.code === 'EPERM'; } };
+function kilitTutuluyor(k, mtime) {
+  if (!k) return Date.now() - mtime < 60e3;
+  const t = Date.parse(k.zaman), yas = Date.now() - (isNaN(t) ? mtime : t), buMakine = !k.host || k.host === os.hostname();
+  if (Number.isInteger(k.pid) && k.pid > 0 && buMakine) return pidCanli(k.pid);
+  return yas < KILIT_SAAT * 3600e3;
+}
 function kilitAl(kok, kanal) {
   const f = path.join(kok, 'kayit', 'dizi', kanal, '.kilit');
   fs.mkdirSync(path.dirname(f), { recursive: true });
   for (let i = 0; i < 2; i++) {
     try {
-      const fd = fs.openSync(f, 'wx'); fs.writeSync(fd, JSON.stringify({ pid: process.pid, zaman: new Date().toISOString() })); fs.closeSync(fd);
+      const fd = fs.openSync(f, 'wx'); fs.writeSync(fd, JSON.stringify({ pid: process.pid, host: os.hostname(), zaman: new Date().toISOString() })); fs.closeSync(fd);
       return { birak: () => { try { if (JSON.parse(fs.readFileSync(f, 'utf8')).pid === process.pid) fs.unlinkSync(f); } catch (e) { } } };
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
-      let k = null; try { k = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (x) { }
-      let yasiyor = !!k && Date.now() - Date.parse(k.zaman) < KILIT_SAAT * 3600e3;
-      if (yasiyor) { try { process.kill(k.pid, 0); } catch (x) { yasiyor = x.code === 'EPERM'; } }
-      if (yasiyor) return { mesaj: `kilit: başka bir dizi işi sürüyor (pid ${k.pid}, ${k.zaman})` };
+      let k = null, mtime = 0;
+      try { mtime = fs.statSync(f).mtimeMs; k = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (x) { }
+      if (kilitTutuluyor(k, mtime)) return { mesaj: k ? `kilit: başka bir dizi işi sürüyor (pid ${k.pid}${k.host ? ' @' + k.host : ''}, ${k.zaman})` : 'kilit: başka bir dizi işi kilidi yazıyor' };
       try { fs.unlinkSync(f); } catch (x) { }
     }
   }

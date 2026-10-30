@@ -134,3 +134,24 @@ test('kilitAl is shared: a second holder gets a message, release frees it', () =
   assert.match(kilitAl(k, 'k').mesaj, /kilit/);
   a.birak(); assert.ok(kilitAl(k, 'k').birak);
 });
+
+test('kilitAl: a live pid on this host holds the lock however old; a dead pid or an old foreign-host lock is taken', () => {
+  const k = fs.mkdtempSync(path.join(os.tmpdir(), 'dizi-kilit2-')), f = path.join(k, 'kayit', 'dizi', 'k', '.kilit');
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  const eski = new Date(Date.now() - 10 * 3600e3).toISOString(), yeni = new Date().toISOString();
+  const yaz = o => fs.writeFileSync(f, JSON.stringify(o));
+  yaz({ pid: process.pid, host: os.hostname(), zaman: eski });
+  assert.match(kilitAl(k, 'k').mesaj, /kilit/, 'live old lock stays held');
+  yaz({ pid: process.pid, zaman: eski });
+  assert.match(kilitAl(k, 'k').mesaj, /kilit/, 'a lock without host counts as this host');
+  const olu = require('child_process').spawnSync(process.execPath, ['-e', '']).pid;
+  yaz({ pid: olu, host: os.hostname(), zaman: yeni });
+  const a = kilitAl(k, 'k'); assert.ok(a.birak, 'dead-pid lock is taken');
+  const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+  assert.deepStrictEqual([j.pid, j.host], [process.pid, os.hostname()], 'the hostname is recorded');
+  a.birak();
+  yaz({ pid: olu, host: 'baska-makine', zaman: yeni });
+  assert.match(kilitAl(k, 'k').mesaj, /kilit/, 'a fresh lock from another host is held');
+  yaz({ pid: olu, host: 'baska-makine', zaman: eski });
+  const b = kilitAl(k, 'k'); assert.ok(b.birak, 'an old lock from another host is stale'); b.birak();
+});
