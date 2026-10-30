@@ -29,7 +29,11 @@ async function adaylar(ctx, { simdi, getir = varsayilanGetir, kok } = {}) {
   // ---- Ekşi
   try {
     const idler = [], konular = [];
-    try { idler.push(...eksi.debeEntryIdleri(await al('https://eksisozluk.com/debe')).slice(0, a.eksi_adet)); }
+    try {
+      const ids = eksi.debeEntryIdleri(await al('https://eksisozluk.com/debe'));
+      if (!ids.length) notlar.push('ekşi debe: sayfada entry bulunamadı (site yapısı değişmiş olabilir)');
+      idler.push(...ids.slice(0, a.eksi_adet));
+    }
     catch (e) { notlar.push(`ekşi debe: ${e.message}`); if (engelMi(e)) throw e; }
     for (const b of a.eksi_basliklar) {
       const s = String(b).trim();
@@ -49,7 +53,11 @@ async function adaylar(ctx, { simdi, getir = varsayilanGetir, kok } = {}) {
     }
     for (const k of konular) {
       const url = /^https?:/.test(k) ? k : 'https://eksisozluk.com' + (k.startsWith('/') ? '' : '/') + k;
-      try { for (const e of eksi.entryleriAyristir(await al(url + (url.includes('?') ? '&' : '?') + 'a=nice')).slice(0, a.eksi_adet)) ekle(e); }
+      try {
+        const es = eksi.entryleriAyristir(await al(url + (url.includes('?') ? '&' : '?') + 'a=nice'));
+        if (!es.length) notlar.push(`ekşi başlık ${k}: sayfada entry bulunamadı (site yapısı değişmiş olabilir)`);
+        for (const e of es.slice(0, a.eksi_adet)) ekle(e);
+      }
       catch (e) { notlar.push(`ekşi başlık ${k}: ${e.message}`); if (engelMi(e)) throw e; }
     }
   } catch (e) { notlar.push(`ekşi: ${e.message} (kaynak atlandı)`); }

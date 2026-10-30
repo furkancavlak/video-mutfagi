@@ -86,3 +86,15 @@ test('adaylar: ids already used by a series are dropped', async () => {
   const r = await adaylar(ayar(), { simdi: SIMDI, getir, kok });
   assert.deepStrictEqual(r.ogeler.map(h => h.id), ['reddit-p2']);
 });
+
+test('adaylar: changed Ekşi markup (empty parse) leaves notes, no crash', async () => {
+  const getir = async url => {
+    if (/eksisozluk.com/.test(url)) return '<html></html>';
+    if (/.rss/.test(url)) return rss();
+    return postDe('x', '');
+  };
+  const r = await adaylar(ayar({ eksi_basliklar: ['/bir-baslik--1'] }), { simdi: SIMDI, getir, kok: kokYap() });
+  assert.deepStrictEqual(r.ogeler, []);
+  assert.ok(r.notlar.some(n => /ekşi debe.*bulunamadı/i.test(n)), r.notlar.join(' | '));
+  assert.ok(r.notlar.some(n => /ekşi başlık.*bulunamadı/i.test(n)), r.notlar.join(' | '));
+});
