@@ -41,7 +41,7 @@ function kilitAl(kok, kanal) {
   return { mesaj: 'kilit: kilit dosyası alınamadı' };
 }
 
-// ---- default collaborators, resolved lazily so missing modules (later tasks) only skip a step
+// ---- default collaborators (all injectable)
 // factory so tests can pass a fake paylas module: returns {metrik, yorum_devam}; yorum_devam = comments containing a keyword (tr-lowercase)
 const sonucAlYap = P => async (mediaId, hesap, kelimeler) => {
   const metrik = await P.sonuc(mediaId, hesap);
@@ -55,17 +55,28 @@ const sonucAlYap = P => async (mediaId, hesap, kelimeler) => {
   return { metrik, yorum_devam };
 };
 const varsayilanSonucAl = (...a) => sonucAlYap(require('../instagram/paylas'))(...a);
-function varsayilanYeniDizi() {
-  const kaynak = require('../dizi/kaynak'), bol = require('../dizi/bol');   // throws MODULE_NOT_FOUND until Tasks 4-5 exist
+// Ekşi favourites and Reddit scores are not one scale: rank inside each source, then take them in turns (Ekşi first).
+function sirayaKoy(ogeler) {
+  const gruplar = {};
+  for (const h of ogeler) (gruplar[h.tur || 'diger'] = gruplar[h.tur || 'diger'] || []).push(h);
+  const turler = Object.keys(gruplar).sort((a, b) => (a === 'eksi' ? -1 : b === 'eksi' ? 1 : a.localeCompare(b)));
+  for (const t of turler) gruplar[t].sort((a, b) => (b.puan || 0) - (a.puan || 0));
+  const out = [];
+  for (let i = 0; turler.some(t => i < gruplar[t].length); i++) for (const t of turler) if (i < gruplar[t].length) out.push(gruplar[t][i]);
+  return out;
+}
+// candidates are fetched once per run; a story whose split fails (too short, not faithful) is skipped
+function yeniDiziYap({ kaynak, bol } = {}) {
+  kaynak = kaynak || require('./kaynak'); bol = bol || require('./bol');
   let aday = null;
-  return async (ctx, { simdi, diziler }) => {
-    if (!aday) aday = (await kaynak.adaylar(ctx, { simdi })).ogeler.slice().sort((a, b) => (b.puan || 0) - (a.puan || 0));
+  return async (ctx, { simdi, diziler, kok }) => {
+    if (!aday) aday = sirayaKoy((await kaynak.adaylar(ctx, { simdi, kok })).ogeler || []);
     const kullanilan = new Set((diziler || []).map(d => d.id));
     while (aday.length) {
       const h = aday.shift();
       if (kullanilan.has(h.id)) continue;
       const r = await bol.bol(ctx, h, {});
-      if (r && r.ok) return { id: h.id, kanal: ctx.kanal, kaynak: { tur: h.tur, url: h.url, puan: h.puan }, olusturma: new Date(simdi).toISOString(), ...r.dizi };
+      if (r && r.ok) return { id: h.id, kanal: ctx.kanal, kaynak: { tur: h.tur, url: h.url, puan: h.puan }, ...r.dizi, olusturma: new Date(simdi).toISOString() };
     }
     return null;
   };
@@ -177,7 +188,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     const eksik = Math.max(0, Math.min((hedef || 0) - sayi, MAX_AKTIF - aktif));
     if (kuru) { sonuc.yeniler = eksik; if (eksik) notlar.push(`yeni dizi planlanan: ${eksik}`); }
     else if (eksik) {
-      try { yeniDizi = yeniDizi || varsayilanYeniDizi(); }
+      try { yeniDizi = yeniDizi || yeniDiziYap(); }
       catch (e) { notlar.push(eksikModul(e)); yeniDizi = null; }
       while (yeniDizi && sayi < (hedef || 0) && aktif < MAX_AKTIF) {
         let d;
@@ -194,7 +205,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     sonuc.uretilecek = liste;
     if (kuru) { for (const u of liste) notlar.push(`üretilecek: ${u.id} bölüm ${u.n}`); return sonuc; }
     if (liste.length && !uretBolum) {
-      try { uretBolum = require('../dizi/uret-bolum').uretBolum; } catch (e) { notlar.push(eksikModul(e)); }
+      try { uretBolum = require('./uret-bolum').uretBolum; } catch (e) { notlar.push(eksikModul(e)); }
     }
     if (uretBolum) for (const u of liste) {
       const d = diziler.find(x => x.id === u.id), b = bul(d, u.n);
@@ -202,8 +213,9 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
         const r = await uretBolum(ctx, d, u.n, { onayGerekli: !!ayar.onay_donemi, kok });
         // uretBolum contract: returns {durum, dir?, mp4?}; the state is written whatever the episode's current one
         if (r && r.durum) b.durum = r.durum === 'butce-bekliyor' ? 'uretimde' : r.durum;
-        if (r && (r.dir || r.mp4) && !b.video) b.video = r.dir || r.mp4;
-        if (r && r.durum === 'butce-bekliyor') notlar.push(`${u.id} bölüm ${u.n}: bütçe bekliyor`);
+        // a budget stop keeps the episode due (uretimde without a video), so it is resumed next run
+        if (r && r.durum !== 'butce-bekliyor' && (r.dir || r.mp4) && !b.video) b.video = r.dir || r.mp4;
+        if (r && r.durum === 'butce-bekliyor') notlar.push(`${u.id} bölüm ${u.n}: bütçe bekliyor${r.neden ? ': ' + r.neden : ''}`);
       } catch (e) { notlar.push(`${u.id} bölüm ${u.n}: üretim hatası: ${e.message}`); }
       kaydetSon();
     }
@@ -211,7 +223,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
   } finally { kilit.birak(); }
 }
 
-module.exports = { calistir, sonucAlYap, uretilecekler, senkronla };
+module.exports = { calistir, sonucAlYap, uretilecekler, senkronla, yeniDiziYap, sirayaKoy };
 
 if (require.main === module) {
   const kanal = process.argv[2], kuru = process.argv.includes('--kuru');

@@ -140,6 +140,16 @@ function kapanisYukle(kimlik, kimlikDir) {
   if (!fs.existsSync(f)) fail(`kapanış kartı yok: ${f} (kimlik.json → marka.kapanis)`);
   return guvenliYukle(f);
 }
+// The card's sound effects ({sfx: [[name, time, volume]]}) as mix inputs: kanal/<kanal>/muzik/<name>.wav. A name that is
+// not a plain word or has no file is skipped (the card still plays, just without that sound).
+function kapanisSesleri(k, kimlikDir) {
+  const out = [];
+  for (const e of (k && k.sfx) || []) {
+    const [ad, t, ses] = [].concat(e), f = /^[\w-]+$/.test(String(ad)) ? path.join(kimlikDir, 'muzik', ad + '.wav') : null;
+    if (f && fs.existsSync(f) && isFinite(t)) out.push([f, Math.max(0, +t), ses == null ? 1 : +ses]);
+  }
+  return out;
+}
 
 // ---- brand screens. Default: opening sting after the hook, closing sting + call to action; corner tag in between.
 // A channel with marka.kapanis gets no stings: a top label (video.json etiket · BÖLÜM n) and its closing card at Z.kapanis.
@@ -181,7 +191,8 @@ function markaKapanis(T, kimlik, C, { video = {}, kimlikDir } = {}) {
   const bas = Z.kapanis != null ? Z.kapanis : T.END - kart({ C, at, bas: 0, sonraki, hesap }).sure;
   const k = kart({ C, at, bas, sonraki, hesap });
   if (video.etiket) {
-    html.push(`<div class="etk"><i></i>${esc(String(video.etiket).toLocaleUpperCase('tr') + (bolum ? ` · BÖLÜM ${bolum}` : ''))}</div>`);
+    const etk = String(video.etiket).toLocaleUpperCase('tr'), ek = bolum ? ` · BÖLÜM ${bolum}` : '';
+    html.push(`<div class="etk"><i></i>${esc(ek && etk.endsWith(ek) ? etk : etk + ek)}</div>`);
     tl.push(`gsap.set('.etk',{opacity:0,y:-30});tl.to('.etk',{opacity:1,y:0,duration:.4,ease:'power3.out'},0.2);tl.set('.etk',{opacity:0},${at(bas)});`);
   }
   html.push(k.html); tl.push(...k.tl);
@@ -252,4 +263,4 @@ function renderEt(hfDir, mixWav, outMp4, kodlama = KODLAMA) {
   console.log(`\nHAZIR: ${outMp4} (${(fs.statSync(outMp4).size / 1048576).toFixed(1)} MB)`);
 }
 
-module.exports = { KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };
+module.exports = { KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, kapanisSesleri, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };

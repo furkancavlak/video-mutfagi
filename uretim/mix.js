@@ -8,11 +8,11 @@
 // The sting is not played after the hook: its riser starts under the hook's last words, the hit lands right
 // after the sentence, and the voice comes back ~0.75 s later over the ducked tail (like a video transition).
 // A channel without a sting (kimlik.json → marka.ses: null) gets none; with a closing card (marka.kapanis) the card
-// starts 0.5 s after the narration ends (zaman.json → kapanis), its music (marka.kapanis_muzigi) comes in with it and the
-// video ends with the card.
+// starts 0.5 s after the narration ends (zaman.json → kapanis), its music (marka.kapanis_muzigi) comes in with it, its
+// sound effects (the card's sfx → kanal/<kanal>/muzik/<name>.wav, skipped when missing) play and the video ends with the card.
 const fs = require('fs'), path = require('path');
 const { spawnSync } = require('child_process');
-const { videoYukle, okuJson, sh, sure, fail, KOK, kapanisYukle, palet, at: atS } = require('./cekirdek');
+const { videoYukle, okuJson, sh, sure, fail, KOK, kapanisYukle, kapanisSesleri, palet, at: atS } = require('./cekirdek');
 const { hizala } = require('./hizala');
 
 const { dir, video, kimlik, kimlikDir } = videoYukle(process.argv[2]);
@@ -85,6 +85,7 @@ for (const f of lines) {
 
 // timeline
 const ev = [], Z = { satirlar: [], kelimeler: [], sting: [], chime: [] };
+let kartSfx = 0;
 let t = 0.25;
 lines.forEach((f, i) => {
   const kim = rol(f), isA = anons.has(kim);
@@ -111,6 +112,7 @@ lines.forEach((f, i) => {
       const bas = end + 0.5, k = kart({ C: palet(kimlik), at: atS, bas, sonraki: null, hesap: kimlik.marka.hesap });
       const m = k.muzik || { bas: bas - 0.1, ses: 0.7 };
       if (muzik) ev.push([muzik, Math.max(0, m.bas), m.ses, 'fx']);
+      for (const [f, t0, v] of kapanisSesleri(k, kimlikDir)) { ev.push([f, t0, v, 'fx']); kartSfx++; }   // the card's own whoosh/pop/tick
       Z.kapanis = +bas.toFixed(3); t = bas + k.sure;
     } else t = end + 1;
   } else t = end + (isA || anons.has(rol(lines[i + 1])) ? 0.35 : 0.22);
@@ -129,5 +131,5 @@ if (fxIdx.length) {
 } else g += `;${voiceIdx.map(i => `[e${i}]`).join('')}amix=inputs=${voiceIdx.length}:normalize=0,atrim=0:${Z.toplam},loudnorm=I=-14:TP=-1.5[o]`;   // no sting, chime or music
 sh('ffmpeg', ['-loglevel', 'error', '-y', ...inputs, '-filter_complex', g, '-map', '[o]', '-ar', String(SR), path.join(sesDir, 'mix.wav')]);
 fs.writeFileSync(path.join(sesDir, 'zaman.json'), JSON.stringify(Z, null, 1));
-console.log(`mix.wav hazır: ${Z.toplam} sn | marka vuruşları ${Z.sting.join(', ') || '-'} | anons ${Z.chime.join(', ') || '-'}${Z.kapanis != null ? ` | kapanış kartı ${Z.kapanis}` : ''}`);
+console.log(`mix.wav hazır: ${Z.toplam} sn | marka vuruşları ${Z.sting.join(', ') || '-'} | anons ${Z.chime.join(', ') || '-'}${Z.kapanis != null ? ` | kapanış kartı ${Z.kapanis}${kartSfx ? ` (${kartSfx} efekt)` : ''}` : ''}`);
 if (STING) console.log('Dinle: açılış sesi kancanın son kelimelerinin ALTINDA yükselmeli, cümle biter bitmez vurmalı.');

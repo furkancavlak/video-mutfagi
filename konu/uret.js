@@ -8,6 +8,10 @@
 // only the steps whose price the user saw, up to that price). A stop at a gate leaves uretim.json → bekleyen.
 // Anything that needs a human (failed fact-check, bad stills, low review score, free tier scenes) stops the run
 // and marks the idea "insan-bekliyor" with the reason.
+//
+// `hazir` (a ready script, e.g. a story episode from dizi/): {ad, baslik?, satirlar:[{rol, metin}], anlaticilar:{rol: voiceId},
+// video_ek:{...extra video.json fields}, aciklama_instagram, hiz?}. The folder is videolar/<kanal>-<ad>/ under `kok`, the
+// idea pool and the script stage are skipped, video.json comes from `hazir`; every later stage is the same.
 const fs = require('fs'), path = require('path');
 const { spawnSync } = require('child_process');
 const O = require('./ortak');
@@ -177,34 +181,39 @@ function kodCikar(metin) {
 const basYorum = f => { const out = []; for (const l of fs.readFileSync(f, 'utf8').split('\n')) { if (!l.startsWith('//')) break; out.push(l.replace(/^\/\/ ?/, '')); } return out.join('\n'); };
 
 // ---- the run
-async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir, not = null } = {}) {
-  const h = H.havuzOku(ctx);
-  const fikir = H.fikirBul(h, fikirId);
-  if (fikir.durum === 'reddedildi') O.hata('Bu fikir reddedilmiş. Önce seç: node konu/radar.js sec ' + ctx.kanal + ' ' + fikir.id);
+async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir, not = null, hazir = null, kok = O.KOK } = {}) {
+  if (hazir && !/^[\w.-]+$/.test(hazir.ad || '')) O.hata(`hazir.ad geçersiz: "${hazir.ad}" (harf, rakam, - _ . olmalı)`);
+  const fikir = hazir ? { id: hazir.ad, baslik: hazir.baslik || hazir.ad } : H.fikirBul(H.havuzOku(ctx), fikirId);
+  if (!hazir && fikir.durum === 'reddedildi') O.hata('Bu fikir reddedilmiş. Önce seç: node konu/radar.js sec ' + ctx.kanal + ' ' + fikir.id);
   const oto = ctx.ayar.otomasyon || {}, katman = oto.katman || 'ucretli', llm = ctx.ayar.llm || {};
   const sor = (istem, o) => LLM.sor(istem, { ayar: llm, model: llm.model_metin, efor: llm.efor_metin || 'high', calistir, ...o });
 
   // 1. folder
   let dir;
-  if (fikir.video && fs.existsSync(path.join(O.KOK, fikir.video))) dir = path.join(O.KOK, fikir.video);
+  const sablonKopyala = d => { fs.mkdirSync(d, { recursive: true }); const sablon = path.join(O.KOK, 'videolar', '_sablon'); for (const f of fs.readdirSync(sablon)) fs.copyFileSync(path.join(sablon, f), path.join(d, f)); };
+  if (hazir) {
+    dir = path.join(kok, 'videolar', `${ctx.kanal}-${hazir.ad}`);
+    if (!fs.existsSync(path.join(dir, 'video.json'))) sablonKopyala(dir);
+    fikir.video = rel(dir);
+  } else if (fikir.video && fs.existsSync(path.join(O.KOK, fikir.video))) dir = path.join(O.KOK, fikir.video);
   else {
     const vs = O.kanalVideolari(ctx.kanal), no = String((vs.length ? vs[vs.length - 1].no : 0) + 1).padStart(2, '0');
     const seri = new Set(O.seriKelimeleri(ctx));               // "evrendeki-butun-oksijen" would name every episode the same
     const ayirt = O.kelimeler(fikir.baslik).filter(w => !seri.has(w));
     dir = path.join(O.KOK, 'videolar', `${ctx.kanal}-v${no}-${O.slug((ayirt.length ? ayirt : O.kelimeler(fikir.baslik)).slice(0, 3).join(' '))}`);
-    fs.mkdirSync(dir, { recursive: true });
-    const sablon = path.join(O.KOK, 'videolar', '_sablon');
-    for (const f of fs.readdirSync(sablon)) fs.copyFileSync(path.join(sablon, f), path.join(dir, f));
+    sablonKopyala(dir);
     fikir.video = rel(dir);
   }
   const ad = path.basename(dir), durumF = path.join(dir, 'uretim.json');
-  const D = O.okuJson(durumF, { fikir: fikir.id, kanal: ctx.kanal, katman, baslangic: O.simdi().toISOString(), adimlar: {} });
+  const D = O.okuJson(durumF, { fikir: hazir ? null : fikir.id, ...(hazir ? { hazir: hazir.ad } : {}), kanal: ctx.kanal, katman, baslangic: O.simdi().toISOString(), adimlar: {} });
   if (otomatik) D.otomatik = true;      // only runs started by automation are resumed by the scheduler
   const bitti = a => !!D.adimlar[a];
   const isaretle = (a, ek = {}) => { D.adimlar[a] = { zaman: O.simdi().toISOString(), ...ek }; if (D.bekleyen && D.bekleyen.adim === a) delete D.bekleyen; O.yazJson(durumF, D); };
   const izinli = (adim, miktar) => onay === true || (!!onay && typeof onay === 'object' && onay[adim] != null && miktar <= onay[adim]);
   const bekle = (adim, ek, mesaj) => { D.bekleyen = { adim, ...ek, zaman: O.simdi().toISOString() }; O.yazJson(durumF, D); return new Dur('onay', mesaj); };
-  const kaydet = (durum, not) => { const h2 = H.havuzOku(ctx); const f2 = H.fikirBul(h2, fikir.id); f2.video = fikir.video; H.durumYap(h2, fikir.id, durum, not); H.havuzYaz(ctx, h2); };
+  const devam = hazir ? `node dizi/calistir.js ${ctx.kanal}` : `node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`;
+  // a ready script has no idea in the pool: nothing to record there
+  const kaydet = hazir ? () => { } : (durum, not) => { const h2 = H.havuzOku(ctx); const f2 = H.fikirBul(h2, fikir.id); f2.video = fikir.video; H.durumYap(h2, fikir.id, durum, not); H.havuzYaz(ctx, h2); };
   kaydet('uretiliyor', bitti('klasor') ? null : `üretim başladı: ${fikir.video}`);
   isaretle('klasor', { yol: fikir.video });
   yaz(`\nVideo klasörü: ${fikir.video}`);
@@ -213,21 +222,37 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     const videoF = path.join(dir, 'video.json'), ucretliF = path.join(dir, 'ucretli.json');
     // --not "...": the reader didn't like the script; rewrite it with their note (only before the voice is paid for)
     let onceki = null;
-    if (not && fs.existsSync(path.join(dir, 'metin.md'))) {     // metin.md exists only once a draft was written
+    if (not && !hazir && fs.existsSync(path.join(dir, 'metin.md'))) {     // metin.md exists only once a draft was written
       if (bitti('ses')) throw new Dur('insan', 'Ses zaten üretildi; metni şimdi değiştirmek o harcamayı boşa çıkarır. --not yalnız sesten önce çalışır.');
       onceki = O.okuJson(videoF).satirlar;
       if (bitti('metin')) { delete D.adimlar.metin; O.yazJson(durumF, D); }
+    }
+    // 2. ready script: video.json straight from `hazir` (no model, no fact-check: the caller vouches for the text)
+    if (hazir && !bitti('metin')) {
+      if (!Array.isArray(hazir.satirlar) || !hazir.satirlar.length) throw new Dur('insan', 'Hazır metinde satır yok.');
+      const baslik = hazir.baslik || hazir.ad;
+      O.yazJson(videoF, {
+        _aciklama: 'Hazır metinden yazıldı (konu/uret.js, hazir): ' + hazir.ad,
+        kanal: `../../kanal/${ctx.kanal}/kimlik.json`, baslik,
+        anlaticilar: hazir.anlaticilar || {}, anons_rolleri: [], hiz: hazir.hiz || 1, duzeltme: {},
+        satirlar: hazir.satirlar.map(s => ({ rol: s.rol, metin: s.metin })), aciklama_instagram: hazir.aciklama_instagram,
+        ...(hazir.video_ek || {}),
+      });
+      fs.writeFileSync(path.join(dir, 'metin.md'), [`# ${baslik} (hazır metin)`, '', '_Bu metin hazır geldi; ses üretmeden önce oku._', '', '---', '', ...hazir.satirlar.flatMap(s => [`**[${s.rol}]**`, s.metin, ''])].join('\n'));
+      isaretle('metin', { hazir: true, satir: hazir.satirlar.length });
+      yaz(`Hazır metin yazıldı: ${rel(videoF)}`);
     }
     // 2-3. script + fact-check (at most two fix rounds)
     if (!bitti('metin')) {
       const anl = ctx.kimlik.anlaticilar || [];
       if (!anl.length) throw new Dur('insan', 'kimlik.json → anlaticilar boş: ses için anlatıcı tanımlı değil.');
       const ana = anl[(O.kanalVideolari(ctx.kanal).length - 1) % anl.length] || anl[0];       // narrators take turns
-      const { anlaticilar, tts, ...kimlikMetin } = ctx.kimlik;
-      const ornekVideo = O.okuJson(path.join(O.KOK, 'videolar', 'oxygbio-v01-ucak', 'video.json'));
+      const { anlaticilar, tts, ornek_video, ...kimlikMetin } = ctx.kimlik;
+      const ornekAd = ornek_video || 'oxygbio-v01-ucak';          // the channel's own sample video, else the repo's
+      const ornekVideo = O.okuJson(path.join(O.KOK, 'videolar', ornekAd, 'video.json'));
       const temel = {
         kimlik: kimlikMetin, metin_kurallari: md('dersler/METIN.md'), metin_hatalari: bolum(md('dersler/HATALAR.md'), 5),
-        ornek_metin: md('videolar/oxygbio-v01-ucak/metin.md'), ornek_satirlar: ornekVideo.satirlar, ...sureAyari(oto.sure_sn),
+        ornek_metin: md(`videolar/${ornekAd}/metin.md`), ornek_satirlar: ornekVideo.satirlar, ...sureAyari(oto.sure_sn),
         fikir: { baslik: fikir.baslik, oncul: fikir.oncul, kanca: fikir.kanca, tirmanis: fikir.tirmanis, kapanis: fikir.kapanis, kaynaklar: fikir.kaynaklar.map(k => ({ baslik: k.baslik, url: k.url, dis_kaynak: k.dis_kaynak })) },
         roller: anl.map(a => `${a.ad} (${a.not || ''})`).join(', '), ana_rol: ana.ad,
       };
@@ -365,7 +390,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       }
       const izin = A.harcamaIzni(ctx, 'karakter', karakter, { otomatik });
       if (!izin.izin) throw new Dur(otomatik ? 'butce' : 'onay', izin.neden);
-      if (!izinli('ses', karakter)) throw bekle('ses', { karakter, satir: eksik.length, kredi_tahmin: krediTahmin }, `Hiçbir şey harcanmadı. Önce metni oku: ${rel(path.join(dir, 'metin.md'))}\nBeğendiysen devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
+      if (!izinli('ses', karakter)) throw bekle('ses', { karakter, satir: eksik.length, kredi_tahmin: krediTahmin }, `Hiçbir şey harcanmadı. Önce metni oku: ${rel(path.join(dir, 'metin.md'))}\nBeğendiysen devam: ${devam}`);
       if (karakter) {
         if (!sesBilgi.ok) throw new Dur('insan', 'ses.js çalışmadı (anahtar ya da kota). Çıktı yukarıda.');
         const r = node('uretim/ses.js', [dir, '--onay']);
@@ -419,7 +444,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       if (kredi) {
         const izin = A.harcamaIzni(ctx, 'kredi', kredi, { otomatik });
         if (!izin.izin) throw new Dur(otomatik ? 'butce' : 'onay', izin.neden);
-        if (!izinli(adim, kredi)) throw bekle(adim, { kredi, butce: U.butce }, `Hiçbir şey harcanmadı. Devam: node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`);
+        if (!izinli(adim, kredi)) throw bekle(adim, { kredi, butce: U.butce }, `Hiçbir şey harcanmadı. Devam: ${devam}`);
         const r = node('uretim/ucretli.js', [dir, adim, '--onay']);
         O.harcamaYaz(ctx, 'kredi', kredi, ad);              // logged even on partial failure: credits may be gone
         if (!r.ok) throw new Dur('insan', `${adim} üretimi başarısız (çıktı yukarıda).`);
@@ -469,7 +494,10 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
 
     // 14. hand-off to the posting queue (kuyruk/ is built separately; we only drop the job file)
     // yayinDk: the job is timed N minutes after the video is finished (otherwise the queue picks the next free slot)
-    const is = kuyrugaYaz({ video: rel(dir), mp4: rel(mp4), aciklama: video.aciklama_instagram || video.baslik, onayGerekli, neZaman: typeof neZaman === 'number' ? new Date(Date.now() + neZaman * 60e3).toISOString() : neZaman });
+    // the job names its account (kimlik.hesap, an Instagram account name like "dur_anlatayim"; "@oxygbio" is a handle, not one)
+    const hesap = /^[\w.]+$/.test(ctx.kimlik.hesap || '') ? ctx.kimlik.hesap : null;
+    const relK = f => path.relative(kok, f).split(path.sep).join('/');
+    const is = kuyrugaYaz({ video: relK(dir), mp4: relK(mp4), aciklama: video.aciklama_instagram || video.baslik, onayGerekli, neZaman: typeof neZaman === 'number' ? new Date(Date.now() + neZaman * 60e3).toISOString() : neZaman, hesap, kaynak: hazir ? 'dizi' : undefined }, kok);
     isaretle('kuyruk', { is: rel(is) });
     kaydet('uretildi', `video hazır, kuyrukta: ${rel(is)}${onayGerekli ? ' (paylaşım için onay bekliyor)' : ' (onaysız, tam otomatik)'}`);
     yaz(`\nHAZIR: ${rel(mp4)}\nKuyruk işi: ${rel(is)}${onayGerekli ? '\nPaylaşılmadan önce videoyu izle ve onayla.' : ''}`);
@@ -485,11 +513,11 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
 }
 
 // Posting queue contract: kuyruk/bekleyen/<YYYYMMDD-HHMM>-<video-adi>.json
-function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null }, kok = O.KOK) {
+function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap = null, kaynak = 'konu-radari' }, kok = O.KOK) {
   const d = path.join(kok, 'kuyruk', 'bekleyen');
   fs.mkdirSync(d, { recursive: true });
   const f = path.join(d, `${O.damga()}-${path.basename(video)}.json`);
-  O.yazJson(f, { video, mp4, aciklama, ne_zaman: neZaman, kaynak: 'konu-radari', onay_gerekli: !!onayGerekli });
+  O.yazJson(f, { video, mp4, aciklama, ne_zaman: neZaman, ...(hesap ? { hesap } : {}), kaynak, onay_gerekli: !!onayGerekli });
   return f;
 }
 

@@ -57,15 +57,18 @@ function geciciKanal() {
   };
   fs.writeFileSync(path.join(dir, 'kimlik.json'), JSON.stringify(kimlik));
   fs.writeFileSync(path.join(dir, 'kapanis.js'), `module.exports = function ({ C, at, bas, sonraki, hesap }) {
-  return { html: '<div class="sc" id="kapfix">KAPFIX ' + sonraki + ' ' + hesap + ' ' + C.domates + '</div>', tl: ["tl.set('#kapfix',{opacity:1}," + at(bas) + ");"], sure: 3, muzik: { bas: bas - .1, ses: .7 }, gorsel: 'fix.png' };
+  return { html: '<div class="sc" id="kapfix">KAPFIX ' + sonraki + ' ' + hesap + ' ' + C.domates + '</div>', tl: ["tl.set('#kapfix',{opacity:1}," + at(bas) + ");"], sure: 3, muzik: { bas: bas - .1, ses: .7 }, gorsel: 'fix.png',
+    sfx: [['pop', bas + .05, .5], ['yok', bas + .5, .3], ['../kimlik', bas, 1], ['tik', bas - 15, .2]] };
 };`);
   fs.writeFileSync(path.join(dir, 'fix.png'), 'png');
+  fs.mkdirSync(path.join(dir, 'muzik'));
+  for (const n of ['pop', 'tik']) fs.writeFileSync(path.join(dir, 'muzik', n + '.wav'), 'wav');
   return { dir, kimlik };
 }
 
 test('new channel: kontur captions, no sting, top label and the channel closing card', () => {
   const { dir, kimlik } = geciciKanal();
-  const video = { ...okuJ(path.join(V01, 'video.json')), anons_rolleri: [], etiket: 'Veli grubu', bolum: 2, toplam_bolum: 3 };
+  const video = { ...okuJ(path.join(V01, 'video.json')), anons_rolleri: [], etiket: 'Deneme hikâye', bolum: 2, toplam_bolum: 3 };
   const T = zaman(video, okuJ(path.join(V01, 'ses', 'kelimeler.json')), { sting: false, kapanis: 3 }), C = K.palet(kimlik);
   const cap = K.altyazi(T, video, C, kimlik);
   assert.match(cap.html, /class="dcap/);
@@ -80,7 +83,9 @@ test('new channel: kontur captions, no sting, top label and the channel closing 
   const mk = K.marka(T, kimlik, C, { video, kimlikDir: dir });
   assert.match(mk.html, /KAPFIX 3 @deneme_kanal #E5533C/);
   assert.ok(!/id="st"/.test(mk.html) && !/id="st2"/.test(mk.html) && !/class="tag"/.test(mk.html), 'no oxygbio stings or corner tag');
-  assert.match(mk.html, /<div class="etk"><i><\/i>VELİ GRUBU · BÖLÜM 2<\/div>/);
+  assert.match(mk.html, /<div class="etk"><i><\/i>DENEME HİKÂYE · BÖLÜM 2<\/div>/);
+  // a label that already names the episode (dizi/uret-bolum.js) is not suffixed twice
+  assert.match(K.marka(T, kimlik, C, { video: { ...video, etiket: 'DENEME HİKÂYE · BÖLÜM 2' }, kimlikDir: dir }).html, /<div class="etk"><i><\/i>DENEME HİKÂYE · BÖLÜM 2<\/div>/);
   assert.ok(mk.tl.includes(`tl.set('#kapfix',{opacity:1},${K.at(T.Z.kapanis)});`), 'card starts at Z.kapanis');
   assert.match(mk.tl.join(''), new RegExp(`tl\\.set\\('\\.etk',\\{opacity:0\\},${K.at(T.Z.kapanis).replace('.', '\\.')}\\)`));
   assert.deepStrictEqual(mk.varliklar, [{ kaynak: path.join(dir, 'fix.png'), ad: 'fix.png' }]);
@@ -100,4 +105,11 @@ test('new channel: the card length is readable for mix.js (kapanisYukle)', () =>
   assert.strictEqual(c.sure, 3);
   assert.deepStrictEqual({ ...c.muzik }, { bas: 9.9, ses: .7 });          // spread: the object comes from the sandbox realm
   assert.strictEqual(K.kapanisYukle(okuJ(path.join(KOK, 'kanal', 'oxygbio', 'kimlik.json')), path.join(KOK, 'kanal', 'oxygbio')), null);
+});
+
+test('new channel: card sound effects resolve to kanal/<kanal>/muzik/<name>.wav, missing or odd names are skipped', () => {
+  const { dir, kimlik } = geciciKanal();
+  const c = K.kapanisYukle(kimlik, dir)({ C: K.palet(kimlik), at: K.at, bas: 10, sonraki: null, hesap: '@x' });
+  assert.deepStrictEqual(K.kapanisSesleri(c, dir), [[path.join(dir, 'muzik', 'pop.wav'), 10.05, .5], [path.join(dir, 'muzik', 'tik.wav'), 0, .2]]);
+  assert.deepStrictEqual(K.kapanisSesleri({}, dir), []);
 });
