@@ -6,6 +6,8 @@
 //   node panel/panel.js [--port 4747] [--acma] [--kok <repo>]
 //   node panel/panel.js --ozet                    print the queue summary as JSON (the panel uses it over SSH)
 //   node panel/panel.js --zaman <is-id> "YYYY-MM-DD HH:MM"
+//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json>
+//                                                 the Diziler page on a server: print JSON; on error "HATA: ..." and exit 1 (3 = lock busy, HTTP 409)
 //
 // Listens on 127.0.0.1 only; every API call carries a random key made at start (it is in the printed link).
 // The panel never posts and never spends by itself: queue changes go through kuyruk/kuyruk.js, production through
@@ -108,7 +110,7 @@ function sunucuda(komut, sure = 60e3) {
   const ic = `cd ${q(S.kok)} && ${S.node ? q(S.node) : 'node'} ${komut}`;
   const r = spawnSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', S.ssh, `${S.on_ek ? S.on_ek + ' ' : ''}bash -lc ${q(ic)}`], { encoding: 'utf8', timeout: sure });
   if (r.error) throw new Error('ssh çalışmadı: ' + r.error.message);
-  if (r.status !== 0) throw new Error(((r.stderr || '') + (r.stdout || '')).trim().replace(/^[\s\S]*HATA:\s*/m, '').slice(0, 300) || 'sunucu komutu başarısız');
+  if (r.status !== 0) throw Object.assign(new Error(((r.stderr || '') + (r.stdout || '')).trim().replace(/^[\s\S]*HATA:\s*/m, '').slice(0, 300) || 'sunucu komutu başarısız'), r.status === 3 ? { kod: 409 } : {});   // exit 3 = the series lock is busy
   return r.stdout;
 }
 // account for a queue add: a named channel must have one (never falls back to oxygbio); without a channel the old `hesap` field is used
@@ -299,6 +301,19 @@ function dizilerCevap(kanal) {
   }) }));
   return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null) };
 }
+// route -> server hop goes through this object so tests can stub the ssh call
+const kanca = { sunucuda: (...a) => sunucuda(...a) };
+const kanalAdi = k => { if (typeof k !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(k)) throw new Error('kanal yok'); return k; };
+const bolumNo = n => { if (!Number.isInteger(n) || n < 1 || n > 3) throw new Error('bölüm numarası 1, 2 ya da 3 olmalı'); return n; };
+const diziId = i => { if (typeof i !== 'string' || !/^[\w.-]{1,80}$/.test(i)) throw new Error('böyle bir dizi yok'); return i; };
+// only validated fields are rebuilt into the payload, so nothing but known-safe values reaches the shell (and q() quotes it anyway)
+function diziKararGovde(b) {
+  if (!['devam', 'kes'].includes(b.karar)) throw new Error('karar devam ya da kes olmalı');
+  return { kanal: kanalAdi(b.kanal), id: diziId(b.id), n: bolumNo(b.n), karar: b.karar, neden: String(b.neden || '').replace(/\s+/g, ' ').trim().slice(0, 200) };
+}
+const diziTekrarGovde = b => ({ kanal: kanalAdi(b.kanal), id: diziId(b.id), n: bolumNo(b.n) });
+const diziAyarGovde = b => ({ kanal: kanalAdi(b.kanal), ayar: diziAyarTemiz(b.ayar) });
+const sunucuJson = (bayrak, deger) => JSON.parse(kanca.sunucuda(`panel/panel.js ${bayrak} ${q(typeof deger === 'string' ? deger : JSON.stringify(deger))}`));
 const DiziDepo = () => require('../dizi/dizi.js');
 // manual decisions run under the scheduler's lock, so a running calistir cannot overwrite them
 function kilitli(kanal, fn) {
@@ -372,10 +387,10 @@ async function api(req, u) {
   if (GET && yol === 'isler') return isListesi();
   if (GET && yol === 'instagram') return instagram(u.searchParams.has('yenile'), u.searchParams.get('hesap'));
   if (GET && yol === 'dersler') return okuJ(DERSLER, []);
-  if (GET && yol === 'diziler') return dizilerCevap(u.searchParams.get('kanal'));
-  if (!GET && yol === 'dizi/karar') return diziKarar(b);
-  if (!GET && yol === 'dizi/tekrar') return diziTekrar(b);
-  if (!GET && yol === 'dizi/ayar') return diziAyarYaz(b);
+  if (GET && yol === 'diziler') return sunucu ? sunucuJson('--diziler', kanalAdi(u.searchParams.get('kanal'))) : dizilerCevap(u.searchParams.get('kanal'));
+  if (!GET && yol === 'dizi/karar') return sunucu ? sunucuJson('--dizi-karar', diziKararGovde(b)) : diziKarar(b);
+  if (!GET && yol === 'dizi/tekrar') return sunucu ? sunucuJson('--dizi-tekrar', diziTekrarGovde(b)) : diziTekrar(b);
+  if (!GET && yol === 'dizi/ayar') return sunucu ? sunucuJson('--dizi-ayar', diziAyarGovde(b)) : diziAyarYaz(b);
   if (!GET && yol === 'is') return isBaslat(b.tur, b);
   // ideas
   if (!GET && yol === 'fikir') {
@@ -432,7 +447,7 @@ const sunucuYap = () => http.createServer(async (req, res) => {
   } catch (e) { gonder(res, e.kod || 400, { hata: e.message }); }
 });
 
-module.exports = { kuyrukOzet, instagram, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, ANAHTAR };
+module.exports = { kanca, kuyrukOzet, instagram, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, ANAHTAR };
 if (require.main !== module) return;
 
 if (process.argv.includes('--ozet')) {
@@ -440,6 +455,16 @@ if (process.argv.includes('--ozet')) {
   catch (e) { console.error('HATA: ' + e.message); process.exit(1); }
 }
 if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'); zamanDegistir(process.argv[i + 1], process.argv[i + 2]); console.log('Saat değişti.'); process.exit(0); }
+
+// Diziler on a server: the panel on the home PC calls these over ssh (same functions as the local routes)
+const jsonArg = s => { let j; try { j = JSON.parse(s); } catch { throw new Error('bozuk istek'); } if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('bozuk istek'); return j; };
+for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))]]) {
+  if (!process.argv.includes(bayrak)) continue;
+  let cikti;
+  try { cikti = JSON.stringify(fn(arg(bayrak))); } catch (e) { console.error('HATA: ' + e.message); process.exit(e.kod === 409 ? 3 : 1); }
+  process.stdout.write(cikti, () => process.exit(0));
+  return;
+}
 
 const sunucu = sunucuYap();
 sunucu.on('error', e => { console.error(e.code === 'EADDRINUSE' ? `\nHATA: ${PORT} portu dolu. Başka port: node panel/panel.js --port 4748\n` : e.message); process.exit(1); });

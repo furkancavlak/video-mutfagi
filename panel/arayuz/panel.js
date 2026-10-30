@@ -202,13 +202,15 @@ function dzBolum(d, b) {
   return `<div class="dz-bolum"><div class="dz-bolum-ust"><b>Bölüm ${esc(b.n)}</b><span class="etiket ${r}">${esc(y)}</span>${b.bekleme === 'butce' ? '<span class="etiket sari">bütçe bekliyor</span>' : ''}</div>
     <div class="ince-yazi">${b.metrik && b.metrik.views != null ? sayi(b.metrik.views) + ' izlenme' : b.paylasildi ? 'sayılar henüz yok' : (b.kelime ? sayi(b.kelime) + ' kelime' : '')}${b.paylasildi ? ' · ' + esc(tarih(b.paylasildi, { weekday: undefined })) : ''}</div>
     ${karar || b.karar_neden ? `<div class="dz-karar ${b.karar === 'kes' ? 'kes' : ''}">${karar ? `<b>${esc(karar)}</b> ` : ''}${esc(b.karar_neden || '')}</div>` : ''}
-    <div class="dz-islem">${onayBekler ? `<button class="dugme ince sari" data-onayla="${esc(b.kuyruk_id)}" data-makine="yerel">Onayla</button>` : ''}
+    <div class="dz-islem">${onayBekler ? `<button class="dugme ince sari" data-onayla="${esc(b.kuyruk_id)}" data-makine="${makine}">Onayla</button>` : ''}
       ${iz.devam ? `<button class="dugme ince" data-dkarar="devam" ${dk}>Devam ettir</button>` : ''}${iz.kes ? `<button class="dugme ince tehlike" data-dkarar="kes" ${dk}>Kes</button>` : ''}${iz.tekrar ? `<button class="dugme ince" data-dtekrar="1" ${dk}>Tekrar dene</button>` : ''}
-      ${b.mp4 ? `<button class="dugme ince" data-izle="${esc(b.mp4)}">Videoyu aç</button>` : ''}
+      ${b.mp4 && makine === 'yerel' ? `<button class="dugme ince" data-izle="${esc(b.mp4)}">Videoyu aç</button>` : ''}
       ${guvenli(b.link) ? `<a class="dugme ince" href="${esc(guvenli(b.link))}" target="_blank" rel="noopener">Reels</a>` : ''}</div></div>`;
 }
 const DZ_DURUM = { aktif: ['yesil', 'sürüyor'], bitti: ['', 'bitti'], kesildi: ['kirmizi', 'kesildi'] };
 function dizilerCiz() {
+  $('#dz-makine').innerHTML = ['yerel', ...(O.sunucu ? ['sunucu'] : [])].map(m => `<button data-dz-makine="${m}" class="${m === makine ? 'on' : ''}">${esc(makineAd(m))}</button>`).join('');
+  $('#dz-makine').hidden = !O.sunucu;
   if (!DZ) { $('#dz-liste').innerHTML = '<div class="liste-bos">Diziler yükleniyor…</div>'; return; }
   $('#dz-say').textContent = DZ.diziler.length;
   const s = DZ.son_kosu;
@@ -250,24 +252,25 @@ function dzAyarOku() {
   return o;
 }
 async function dizilerYukle() {
-  const at = kanal; if (!at) return;
-  try { const r = await api('diziler?kanal=' + encodeURIComponent(at)); if (at === kanal) DZ = r; } catch (e) { if (at === kanal) DZ = { ayar: {}, diziler: [], son_kosu: null, hata: e.message }; }
+  const at = kanal, mk = makine; if (!at) return;
+  const ayni = () => at === kanal && mk === makine;   // channel or machine switched while waiting: drop the answer
+  try { const r = await api('diziler?kanal=' + encodeURIComponent(at) + (mk === 'sunucu' ? '&makine=sunucu' : '')); if (ayni()) DZ = r; } catch (e) { if (ayni()) DZ = { ayar: {}, diziler: [], son_kosu: null, hata: e.message }; }
   dizilerCiz();
 }
 async function dzKaydet(e) {
   e.preventDefault();
   const h = $('#dz-hata'); h.textContent = '';
-  try { await api('dizi/ayar', { kanal, ayar: dzAyarOku() }); dzKirli = false; bildir('Ayarlar kaydedildi ✓'); await dizilerYukle(); }
+  try { await api('dizi/ayar', { kanal, makine, ayar: dzAyarOku() }); dzKirli = false; bildir('Ayarlar kaydedildi ✓'); await dizilerYukle(); }
   catch (err) { h.textContent = err.message; bildir(err.message, true); }
 }
 async function dzTekrar(d) {
-  try { await api('dizi/tekrar', { kanal, id: d.did, n: +d.dn }); bildir('Bölüm yeniden denenecek'); await dizilerYukle(); }
+  try { await api('dizi/tekrar', { kanal, makine, id: d.did, n: +d.dn }); bildir('Bölüm yeniden denenecek'); await dizilerYukle(); }
   catch (err) { bildir(err.message, true); }
 }
 async function dzKarar(d) {
   const kes = d.dkarar === 'kes';
   if (kes && !confirm('Bu hikâyenin devamı kesilsin mi? Sonraki bölümler üretilmez.')) return;
-  try { await api('dizi/karar', { kanal, id: d.did, n: +d.dn, karar: d.dkarar, neden: kes ? 'Furkan kesti' : 'Furkan devam ettirdi' }); bildir(kes ? 'Kesildi' : 'Devam edecek'); await dizilerYukle(); }
+  try { await api('dizi/karar', { kanal, makine, id: d.did, n: +d.dn, karar: d.dkarar, neden: kes ? 'Furkan kesti' : 'Furkan devam ettirdi' }); bildir(kes ? 'Kesildi' : 'Devam edecek'); await dizilerYukle(); }
   catch (err) { bildir(err.message, true); }
 }
 
@@ -381,6 +384,7 @@ document.addEventListener('click', e => {
   if (d.kapat !== undefined) $('#pencere').close();
   else if (d.s) sekme(d.s);
   else if (d.sira) { makine = d.sira; siraCiz(); sekme('sira'); }
+  else if (d.dzMakine) { makine = d.dzMakine; DZ = null; dzKirli = false; siraCiz(); dizilerCiz(); dizilerYukle(); }
   else if (d.makineSec) { makine = d.makineSec; siraCiz(); }
   else if (d.onayla) islem('kuyruk/onayla', { id: d.onayla, makine: d.makine }, 'Onaylandı ✓');
   else if (d.iptal) { if (confirm('Bu video sıradan çıkarılsın mı?')) islem('kuyruk/iptal', { id: d.iptal, makine: d.makine }, 'Sıradan çıkarıldı'); }
