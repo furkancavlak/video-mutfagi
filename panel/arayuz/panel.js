@@ -188,6 +188,82 @@ function sonuclarCiz() {
   dersCiz();
 }
 
+// ---------------- Series (Diziler): one card per story, 3 episode chips, continuation settings
+const DZ_ET = { metin: ['', 'metin'], uretimde: ['sari', 'üretimde'], 'onay-bekliyor': ['sari', 'onay bekliyor'], sirada: ['yesil', 'sırada'], yayinda: ['yesil', 'yayında'], olculdu: ['yesil', 'ölçüldü'], atlandi: ['kirmizi', 'kesildi'], kontrol_et: ['kirmizi', 'kontrol et'] };
+let DZ = null, dzKirli = false;
+function dzEtiket(b) {
+  if (b.durum === 'onay-bekliyor' && b.kuyruk_onay_gerekli === false) return ['yesil', 'sırada'];   // approved in the queue, waiting for its slot
+  return DZ_ET[b.durum] || ['', b.durum];
+}
+function dzBolum(d, b) {
+  const [r, y] = dzEtiket(b), onayBekler = b.durum === 'onay-bekliyor' && b.kuyruk_id && b.kuyruk_onay_gerekli === true;
+  const karar = b.karar && b.karar !== 'bekle' ? `${b.karar === 'kes' ? 'kes' : 'devam'}${b.elle ? ' (elle)' : ''}` : null;
+  const dk = `data-did="${esc(d.id)}" data-dn="${b.n}"`;
+  return `<div class="dz-bolum"><div class="dz-bolum-ust"><b>Bölüm ${b.n}</b><span class="etiket ${r}">${esc(y)}</span>${b.bekleme === 'butce' ? '<span class="etiket sari">bütçe bekliyor</span>' : ''}</div>
+    <div class="ince-yazi">${b.metrik && b.metrik.views != null ? sayi(b.metrik.views) + ' izlenme' : b.paylasildi ? 'sayılar henüz yok' : (b.kelime ? sayi(b.kelime) + ' kelime' : '')}${b.paylasildi ? ' · ' + esc(tarih(b.paylasildi, { weekday: undefined })) : ''}</div>
+    ${karar || b.karar_neden ? `<div class="dz-karar ${b.karar === 'kes' ? 'kes' : ''}">${karar ? `<b>${esc(karar)}</b> ` : ''}${esc(b.karar_neden || '')}</div>` : ''}
+    <div class="dz-islem">${onayBekler ? `<button class="dugme ince sari" data-onayla="${esc(b.kuyruk_id)}" data-makine="yerel">Onayla</button>` : ''}
+      ${b.durum === 'yayinda' ? `<button class="dugme ince" data-dkarar="devam" ${dk}>Devam ettir</button><button class="dugme ince tehlike" data-dkarar="kes" ${dk}>Kes</button>` : ''}
+      ${b.mp4 ? `<button class="dugme ince" data-izle="${esc(b.mp4)}">Videoyu aç</button>` : ''}
+      ${guvenli(b.link) ? `<a class="dugme ince" href="${esc(guvenli(b.link))}" target="_blank" rel="noopener">Reels</a>` : ''}</div></div>`;
+}
+const DZ_DURUM = { aktif: ['yesil', 'sürüyor'], bitti: ['', 'bitti'], kesildi: ['kirmizi', 'kesildi'] };
+function dizilerCiz() {
+  if (!DZ) { $('#dz-liste').innerHTML = '<div class="liste-bos">Diziler yükleniyor…</div>'; return; }
+  $('#dz-say').textContent = DZ.diziler.length;
+  const s = DZ.son_kosu;
+  $('#dz-son').innerHTML = `<div class="dz-son-ust"><b>Son çalışma</b><span class="ince-yazi">${s ? esc(tarih(s.zaman, { weekday: undefined })) : (DZ.hata ? esc(DZ.hata) : 'henüz çalışma kaydı yok')}</span></div>`
+    + (s ? ((s.notlar || []).length ? `<ul class="dz-notlar">${s.notlar.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '<div class="ince-yazi">Not yok, her şey yolunda.</div>') + ((s.kararlar || []).length ? `<div class="ince-yazi">Kararlar: ${s.kararlar.map(k => esc(`${k.id} bölüm ${k.n} → ${k.karar}`)).join(', ')}</div>` : '') : '');
+  $('#dz-liste').innerHTML = DZ.diziler.length ? DZ.diziler.map(d => {
+    const [r, y] = DZ_DURUM[d.durum] || ['', d.durum], url = guvenli(d.kaynak && d.kaynak.url);
+    return `<div class="kart dz-kart"><div class="dz-ust"><div class="ad"><span class="baslik"><span class="etiket ${r}">${esc(y)}</span>${esc(d.baslik_kisa || d.baslik)}</span><small>${esc(d.baslik || '')}</small></div>
+      <div class="dz-meta">${d.anlatici ? `<span class="ince-yazi">Ses: ${esc(d.anlatici.ad || d.anlatici.ses)}</span>` : ''}${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">Kaynak</a>` : ''}</div></div>
+      <div class="dz-bolumler">${(d.bolumler || []).map(b => dzBolum(d, b)).join('')}</div></div>`;
+  }).join('') : '<div class="liste-bos">Henüz dizi yok. Zamanlayıcı çalışınca ilk hikâyeler burada görünür.</div>';
+  if (!dzKirli) dzAyarCiz();
+}
+// plain questions; percent in the form, a ratio in konu.json
+function dzAyarCiz() {
+  const a = (DZ && DZ.ayar) || {}, v = x => x == null ? '' : esc(x);
+  $('#dz-ayar').innerHTML = `<label>Günde kaç bölüm paylaşılsın?<input type="number" name="gunluk_hedef" min="1" max="5" step="1" value="${v(a.gunluk_hedef)}"></label>
+    <label class="kutu dz-onay"><input type="checkbox" name="onay_donemi" ${a.onay_donemi ? 'checked' : ''}> Her bölümü önce ben onaylayayım (onay dönemi)</label>
+    <label>Onay döneminde günde kaç bölüm hazırlansın?<input type="number" name="onay_gunluk" min="1" max="5" step="1" value="${v(a.onay_gunluk)}"></label>
+    <label>Hangi saatlerde paylaşılsın? (virgülle: 12:00, 17:00)<input type="text" name="saatler" value="${v((a.saatler || []).join(', '))}"></label>
+    <label>Bir hikâyenin devamı için kaç saat bekleyelim?<input type="number" name="bekle_saat" min="6" max="72" step="1" value="${v(a.bekle_saat)}"></label>
+    <label>Devam için izlenme, öncekilerin ortalamasının en az yüzde kaçı olsun?<input type="number" name="esik_oran" min="10" max="100" step="1" value="${a.esik_oran == null ? '' : Math.round(a.esik_oran * 100)}"></label>
+    <label>İlk kaç hikâye hiç kesilmesin?<input type="number" name="ilk_dizi_sayisi" min="0" max="50" step="1" value="${v(a.ilk_dizi_sayisi)}"></label>
+    <label>Yorumlarda hangi sözler “devamı gelsin” demek? (virgülle)<input type="text" name="yorum_kelimeleri" value="${v((a.yorum_kelimeleri || []).join(', '))}"></label>
+    <label>Kaç kişi isterse hikâye kesilmesin?<input type="number" name="yorum_min" min="1" max="50" step="1" value="${v(a.yorum_min)}"></label>
+    <div class="dz-kaydet"><span class="dz-hata" id="dz-hata" role="alert"></span><button class="dugme sari" type="submit">Kaydet</button></div>`;
+  dzKirli = false;
+}
+function dzAyarOku() {
+  const f = $('#dz-ayar'), g = n => f.elements[n], sayiOku = n => g(n).value.trim() === '' ? undefined : Number(g(n).value.replace(',', '.'));
+  const liste = n => g(n).value.split(',').map(x => x.trim()).filter(Boolean);
+  const yuzde = sayiOku('esik_oran');
+  const o = { gunluk_hedef: sayiOku('gunluk_hedef'), onay_donemi: g('onay_donemi').checked, onay_gunluk: sayiOku('onay_gunluk'), saatler: liste('saatler'), bekle_saat: sayiOku('bekle_saat'),
+    esik_oran: yuzde == null ? undefined : Math.round(yuzde * 10) / 1000, ilk_dizi_sayisi: sayiOku('ilk_dizi_sayisi'), yorum_kelimeleri: liste('yorum_kelimeleri'), yorum_min: sayiOku('yorum_min') };
+  for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
+  return o;
+}
+async function dizilerYukle() {
+  const at = kanal; if (!at) return;
+  try { const r = await api('diziler?kanal=' + encodeURIComponent(at)); if (at === kanal) DZ = r; } catch (e) { if (at === kanal) DZ = { ayar: {}, diziler: [], son_kosu: null, hata: e.message }; }
+  dizilerCiz();
+}
+async function dzKaydet(e) {
+  e.preventDefault();
+  const h = $('#dz-hata'); h.textContent = '';
+  try { await api('dizi/ayar', { kanal, ayar: dzAyarOku() }); dzKirli = false; bildir('Ayarlar kaydedildi ✓'); await dizilerYukle(); }
+  catch (err) { h.textContent = err.message; bildir(err.message, true); }
+}
+async function dzKarar(d) {
+  const kes = d.dkarar === 'kes';
+  if (kes && !confirm('Bu hikâyenin devamı kesilsin mi? Sonraki bölümler üretilmez.')) return;
+  try { await api('dizi/karar', { kanal, id: d.did, n: +d.dn, karar: d.dkarar, neden: kes ? 'Furkan kesti' : 'Furkan devam ettirdi' }); bildir(kes ? 'Kesildi' : 'Devam edecek'); await dizilerYukle(); }
+  catch (err) { bildir(err.message, true); }
+}
+
 // ---------------- Background jobs drawer
 const IS_AD = { topla: 'Konu toplama', puanla: 'Puanlama', uret: 'Üretim', 'uret-ses': 'Üretim (ses onaylı)', 'uret-kredi': 'Üretim (kredi onaylı)', sonuclar: 'Rakam çekme', ders: 'Ders çıkarma' };
 function islerCiz() {
@@ -275,6 +351,7 @@ async function yukle() {
     if (no !== yukleNo) return;
   } catch (e) { if (no !== yukleNo) return; $('main').innerHTML = `<div class="liste-bos" style="margin-top:40px">${esc(e.message)}</div>`; return; }
   hepsi();
+  dizilerYukle();
   if (O.sunucu) api('sunucu' + kq()).then(s => { if (no === yukleNo) SV = s; }).catch(e => { if (no === yukleNo) SV = { hata: 'Sunucuya ulaşılamadı: ' + e.message }; }).finally(() => { if (no === yukleNo) hepsi(); });
   if (IG === null) igYukle();
   if (J.some(x => x.durum === 'calisiyor')) islerYukle();
@@ -287,7 +364,7 @@ async function igYukle(yenile) {
   if (at !== kanal) return;                       // the channel changed while the numbers were coming
   IG = r; if (O) hepsi();
 }
-function hepsi() { bugunCiz(); fikirlerCiz(); uretimCiz(); siraCiz(); takvimCiz(); sonuclarCiz(); islerCiz(); }
+function hepsi() { dizilerCiz(); bugunCiz(); fikirlerCiz(); uretimCiz(); siraCiz(); takvimCiz(); sonuclarCiz(); islerCiz(); }
 function sekme(ad) { $$('#sekmeler button').forEach(b => b.classList.toggle('on', b.dataset.s === ad)); $$('.sayfa').forEach(s => s.classList.toggle('on', s.id === 's-' + ad)); try { sessionStorage.setItem('vm-s', ad); } catch {} }
 async function islem(yol, govde, mesaj) { try { await api(yol, govde); bildir(mesaj); await yukle(); } catch (e) { bildir(e.message, true); } }
 
@@ -307,6 +384,7 @@ document.addEventListener('click', e => {
   else if (d.krediOnay) krediOnayGoster(d.krediOnay);
   else if (d.metin) metinGoster(d.metin).catch(err => bildir(err.message, true));
   else if (d.rapor) raporGoster(d.rapor).catch(err => bildir(err.message, true));
+  else if (d.dkarar) dzKarar(d);
   else if (d.izle) videoGoster(d.izle);
   else if (d.ekle) ekleGoster(d.ekle);
   else if (d.is) isBaslat(d.is, { kanal: ['topla', 'puanla', 'ders'].includes(d.is) ? kanal || kanalAd0() : undefined });
@@ -322,9 +400,11 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.zaman && t.value) islem('kuyruk/zaman', { id: t.dataset.zaman, makine: t.dataset.makine, zaman: ofsetli(t.value) }, 'Saat değişti');
-  if (t.id === 'kanal-sec') { kanal = t.value; try { localStorage.setItem('vm-kanal', kanal); } catch {} IG = null; SV = null; yukle(); }
+  if (t.id === 'kanal-sec') { DZ = null; dzKirli = false; kanal = t.value; try { localStorage.setItem('vm-kanal', kanal); } catch {} IG = null; SV = null; yukle(); }
 });
 $('#fikir-ekle').addEventListener('submit', e => { e.preventDefault(); islem('fikir', { is: 'ekle', kanal, baslik: $('#fe-baslik').value, oncul: $('#fe-oncul').value }, 'Fikir eklendi').then(() => { $('#fikir-ekle').reset(); $('#fikir-ekle').hidden = true; }); });
+$('#dz-ayar').addEventListener('submit', dzKaydet);
+$('#dz-ayar').addEventListener('input', () => { dzKirli = true; });
 $('#pencere').addEventListener('close', () => { const v = $('#pencere video'); if (v) v.pause(); });
 
 try { const s = new URLSearchParams(location.hash.slice(1)).get('s') || sessionStorage.getItem('vm-s'); if (s) sekme(s); } catch {}

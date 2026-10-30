@@ -169,3 +169,29 @@ label.kutu{flex-direction:row;align-items:center;gap:7px;padding-bottom:8px}
 
 .kanal-sec{margin-left:auto;font-weight:600;max-width:220px}
 .kanal-sec+.isler-dugme{margin-left:0}
+
+/* series */
+.dz-son{padding:14px 18px;margin-bottom:14px}
+.dz-son-ust{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
+.dz-notlar{margin:4px 0 6px 18px;font-size:13.5px;color:var(--ink-2)}
+.dz-kart{padding:16px 18px}
+.dz-ust{display:flex;align-items:flex-start;gap:12px;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+.dz-ust .ad{min-width:0;flex:1 1 320px}
+.dz-ust .ad .baslik{display:block;font:700 17px var(--display);letter-spacing:-.02em}
+.dz-ust .ad small{display:block;font-size:13px;color:var(--ink-3);margin-top:2px}
+.dz-meta{display:flex;gap:8px;align-items:center}
+.dz-bolumler{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.dz-bolum{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.dz-bolum-ust{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dz-bolum-ust .etiket{margin-right:0}
+.dz-karar{font-size:13px;color:var(--ink-2)}
+.dz-karar.kes{color:var(--tomato)}
+.dz-islem{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:4px}
+.dz-ayar{padding:18px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px 22px}
+.dz-ayar label{display:flex;flex-direction:column;gap:5px;font-weight:600;font-size:13.5px;color:var(--ink-2)}
+.dz-ayar input[type=number],.dz-ayar input[type=text]{padding:7px 10px;border:1px solid var(--line-2);border-radius:10px;background:var(--card);font-weight:400;color:var(--ink)}
+.dz-ayar label.kutu{flex-direction:row;align-items:center;padding-bottom:0}
+.dz-onay{grid-column:1/-1}
+.dz-kaydet{grid-column:1/-1;display:flex;align-items:center;justify-content:flex-end;gap:12px}
+.dz-hata{color:var(--tomato);font-weight:600;font-size:13.5px}
+@media (max-width:860px){.dz-bolumler{grid-template-columns:1fr}}

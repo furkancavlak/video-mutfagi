@@ -252,6 +252,72 @@ async function instagram(yenile, hesap, P) {
 // how a channel reaches the language model: 'claude-cli' (the user's Claude subscription) or 'api' (pay as you go)
 const yzYolu = k => { try { return require(path.join(KOK, 'konu', 'llm.js')).yolSec((okuJ(path.join(KOK, 'kanal', k, 'konu.json'), {}) || {}).llm || {}); } catch { return null; } };
 
+// ---------- series ("Diziler"): kayit/dizi/<kanal>/diziler.json + konu.json → dizi. The channel is checked against kanal/ first.
+const DIZI_KEYS = ['esik_oran', 'bekle_saat', 'gunluk_hedef', 'onay_donemi', 'onay_gunluk', 'saatler', 'ilk_dizi_sayisi', 'yorum_min', 'yorum_kelimeleri'];
+const sayiAralik = (v, ad, a, b, tam) => { if (typeof v !== 'number' || !Number.isFinite(v) || v < a || v > b || (tam && !Number.isInteger(v))) throw new Error(`${ad} ${a} ile ${b} arasında ${tam ? 'bir tam sayı ' : 'bir sayı '}olmalı`); return v; };
+function diziAyarTemiz(a) {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error('ayarlar anlaşılmadı');
+  const o = {};
+  for (const [k, v] of Object.entries(a)) {
+    if (!DIZI_KEYS.includes(k)) throw new Error(`bilinmeyen ayar: ${k}`);
+    if (k === 'esik_oran') o[k] = sayiAralik(v, 'Eşik oranı', 0.1, 1);
+    else if (k === 'bekle_saat') o[k] = sayiAralik(v, 'Bekleme süresi (saat)', 6, 72);
+    else if (k === 'gunluk_hedef') o[k] = sayiAralik(v, 'Günlük bölüm sayısı', 1, 5, true);
+    else if (k === 'onay_gunluk') o[k] = sayiAralik(v, 'Onay döneminde günlük bölüm sayısı', 1, 5, true);
+    else if (k === 'ilk_dizi_sayisi') o[k] = sayiAralik(v, 'Kesilmeyecek ilk hikâye sayısı', 0, 50, true);
+    else if (k === 'yorum_min') o[k] = sayiAralik(v, 'Gereken yorum sayısı', 1, 50, true);
+    else if (k === 'onay_donemi') { if (typeof v !== 'boolean') throw new Error('Onay dönemi açık ya da kapalı olmalı'); o[k] = v; }
+    else if (k === 'saatler') {
+      if (!Array.isArray(v) || !v.length || v.length > 10 || !v.every(x => /^([01]\d|2[0-3]):[0-5]\d$/.test(x))) throw new Error('Saatler SS:DD biçiminde (24 saat), en az bir tane olmalı');
+      o[k] = [...new Set(v)].sort();
+    } else if (k === 'yorum_kelimeleri') {
+      if (!Array.isArray(v) || v.length > 30 || !v.every(x => typeof x === 'string' && x.trim() && x.length <= 60)) throw new Error('Yorum kelimeleri boş olmayan yazılardan oluşmalı');
+      o[k] = v.map(x => x.trim());
+    }
+  }
+  return o;
+}
+// the episode's playable mp4 (under videolar/ only): the folder's cikti/*.mp4 (free version first) or the queue job's file
+function bolumMp4(video, isMp4) {
+  const dene = rel => { const f = path.resolve(KOK, rel || ''); return icinde(f, path.join(KOK, 'videolar')) ? f : null; };
+  const goreli = f => path.relative(KOK, f).split(path.sep).join('/');
+  const v = dene(video);
+  if (v && v.endsWith('.mp4') && fs.existsSync(v)) return goreli(v);
+  const c = v && path.join(v, 'cikti');
+  if (c && fs.existsSync(c)) { const m = fs.readdirSync(c).filter(f => f.endsWith('.mp4')).sort((a, b) => /ucretli/.test(a) - /ucretli/.test(b)); if (m.length) return goreli(path.join(c, m[0])); }
+  const j = dene(isMp4); return j && fs.existsSync(j) ? goreli(j) : null;
+}
+function dizilerCevap(kanal) {
+  if (!kanallar().includes(kanal)) throw new Error('kanal yok');
+  const ayar = (okuJ(path.join(KOK, 'kanal', kanal, 'konu.json'), {}) || {}).dizi || {};
+  const bek = isler('bekleyen');
+  const diziler = (DiziDepo().yukle(KOK, kanal).diziler || []).map(d => ({ ...d, bolumler: (d.bolumler || []).map(({ metin, ...b }) => {
+    const j = b.video ? bek.find(x => x.video === b.video) : null;
+    return { ...b, kelime: String(metin || '').split(/\s+/).filter(Boolean).length, mp4: bolumMp4(b.video, j && j.mp4), kuyruk_id: j ? j.id : null, kuyruk_onay_gerekli: j ? !!j.onay_gerekli : null };
+  }) }));
+  return { ayar, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null) };
+}
+const DiziDepo = () => require('../dizi/dizi.js');
+function diziKarar(b) {
+  if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
+  if (!Number.isInteger(b.n) || b.n < 1 || b.n > 3) throw new Error('bölüm numarası 1, 2 ya da 3 olmalı');
+  if (!['devam', 'kes'].includes(b.karar)) throw new Error('karar devam ya da kes olmalı');
+  const D = DiziDepo(), veri = D.yukle(KOK, b.kanal), d = (veri.diziler || []).find(x => x.id === b.id);
+  if (!d) throw new Error('böyle bir dizi yok');
+  D.elleKarar(d, b.n, b.karar, String(b.neden || '').replace(/\s+/g, ' ').trim().slice(0, 200) || (b.karar === 'kes' ? 'elle kesildi' : 'elle devam ettirildi'));
+  D.kaydet(KOK, b.kanal, veri);
+  return { ok: true };
+}
+// only the given keys change; the rest of konu.json is kept (read, merge, write to a temp file, rename)
+function diziAyarYaz(b) {
+  if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
+  const yeni = diziAyarTemiz(b.ayar), f = path.join(KOK, 'kanal', b.kanal, 'konu.json'), O = require('../konu/ortak');
+  const konu = O.okuJson(f);
+  konu.dizi = { ...(konu.dizi || {}), ...yeni };
+  O.yazJson(f, konu);
+  return { ok: true, ayar: konu.dizi };
+}
+
 // ---------- http
 const TUR = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.md': 'text/plain; charset=utf-8' };
 const gonder = (res, kod, govde, tur = 'application/json; charset=utf-8') => { res.writeHead(kod, { 'Content-Type': tur, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(typeof govde === 'string' || Buffer.isBuffer(govde) ? govde : JSON.stringify(govde)); };
@@ -286,6 +352,9 @@ async function api(req, u) {
   if (GET && yol === 'isler') return isListesi();
   if (GET && yol === 'instagram') return instagram(u.searchParams.has('yenile'), u.searchParams.get('hesap'));
   if (GET && yol === 'dersler') return okuJ(DERSLER, []);
+  if (GET && yol === 'diziler') return dizilerCevap(u.searchParams.get('kanal'));
+  if (!GET && yol === 'dizi/karar') return diziKarar(b);
+  if (!GET && yol === 'dizi/ayar') return diziAyarYaz(b);
   if (!GET && yol === 'is') return isBaslat(b.tur, b);
   // ideas
   if (!GET && yol === 'fikir') {
@@ -327,16 +396,7 @@ async function api(req, u) {
   throw Object.assign(new Error('yok'), { kod: 404 });
 }
 
-module.exports = { kuyrukOzet, instagram, kanalBilgi, ekleHesap, ozetCevap };
-if (require.main !== module) return;
-
-if (process.argv.includes('--ozet')) {
-  try { process.stdout.write(JSON.stringify(kuyrukOzet(arg('--kanal') || undefined))); process.exit(0); }
-  catch (e) { console.error('HATA: ' + e.message); process.exit(1); }
-}
-if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'); zamanDegistir(process.argv[i + 1], process.argv[i + 2]); console.log('Saat değişti.'); process.exit(0); }
-
-const sunucu = http.createServer(async (req, res) => {
+const sunucuYap = () => http.createServer(async (req, res) => {
   try {
     // only this machine, only our own host name (blocks DNS-rebinding tricks)
     if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host || '')) return gonder(res, 403, { hata: 'yalnız bu bilgisayardan' });
@@ -350,6 +410,17 @@ const sunucu = http.createServer(async (req, res) => {
     gonder(res, 200, fs.readFileSync(f), TUR[path.extname(f)] || 'application/octet-stream');
   } catch (e) { gonder(res, e.kod || 400, { hata: e.message }); }
 });
+
+module.exports = { kuyrukOzet, instagram, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, ANAHTAR };
+if (require.main !== module) return;
+
+if (process.argv.includes('--ozet')) {
+  try { process.stdout.write(JSON.stringify(kuyrukOzet(arg('--kanal') || undefined))); process.exit(0); }
+  catch (e) { console.error('HATA: ' + e.message); process.exit(1); }
+}
+if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'); zamanDegistir(process.argv[i + 1], process.argv[i + 2]); console.log('Saat değişti.'); process.exit(0); }
+
+const sunucu = sunucuYap();
 sunucu.on('error', e => { console.error(e.code === 'EADDRINUSE' ? `\nHATA: ${PORT} portu dolu. Başka port: node panel/panel.js --port 4748\n` : e.message); process.exit(1); });
 sunucu.listen(PORT, '127.0.0.1', () => {
   const link = `http://127.0.0.1:${PORT}/#k=${ANAHTAR}`;
