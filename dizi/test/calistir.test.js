@@ -353,3 +353,37 @@ test('own episode count: ep 2 of 2 measured finishes the series, ep 3 of 5 measu
   assert.strictEqual(v.find(d => d.id === 'bes').durum, 'aktif');
   assert.deepStrictEqual(uret.calls, ['bes:4']);
 });
+
+// story-level text approval: a waiting series is never produced, does not use an active slot, and at most 2 wait
+test('text approval: new series wait (not produced, not active), at most 2 waiting; old series migrate to onaylandi', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [{ id: 'eski', kanal: 'k', durum: 'aktif', bolumler: [bolum(1)] }] });
+  let n = 0;
+  const yeniDizi = async () => { n++; return { id: 'y' + n, kanal: 'k', durum: 'aktif', metin_onay: 'bekliyor', bolumler: [bolum(1), bolum(2)] }; };
+  const uret = fakeUret();
+  const r = await calistir(ctx({ gunluk_hedef: 3 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: uret, yeniDizi });
+  assert.strictEqual(n, 2, 'two stories wait for their text, no more');
+  assert.deepStrictEqual(uret.calls, ['eski:1'], 'only the approved (migrated) series is produced');
+  const v = yukle(k, 'k').diziler;
+  assert.deepStrictEqual(v.map(d => [d.id, d.metin_onay]), [['eski', 'onaylandi'], ['y1', 'bekliyor'], ['y2', 'bekliyor']]);
+  assert.ok(r.notlar.some(x => /eski dizi metin onaylı sayıldı/.test(x)));
+  // next run: still two waiting -> nothing new is opened
+  await calistir(ctx({ gunluk_hedef: 3 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi });
+  assert.strictEqual(n, 2);
+  // approved: it is produced next run
+  const v2 = yukle(k, 'k'); v2.diziler[1].metin_onay = 'onaylandi'; kaydet(k, 'k', v2);
+  const u3 = fakeUret();
+  await calistir(ctx({ gunluk_hedef: 3 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: u3, yeniDizi });
+  assert.ok(u3.calls.includes('y1:1'));
+});
+
+test('yeniDiziYap marks the new series bekliyor unless dizi.metin_onayi is false', async () => {
+  const { yeniDiziYap } = require('../calistir');
+  const k = kok(); kaydet(k, 'k', { diziler: [] });
+  const bol = { bol: async (cx, h) => ({ ok: true, dizi: { id: h.id, kanal: 'k', durum: 'aktif', bolumler: [bolum(1), bolum(2)] } }) };
+  const kaynak = { adaylar: async () => ({ ogeler: [{ id: 'eksi-1', tur: 'eksi', puan: 5 }], notlar: [] }) };
+  const d1 = await yeniDiziYap({ kaynak, bol })({ kanal: 'k', ayar: { dizi: {} } }, { simdi: SIMDI, diziler: [], kok: k, sonuc: { notlar: [] } });
+  assert.strictEqual(d1.metin_onay, 'bekliyor');
+  const d2 = await yeniDiziYap({ kaynak, bol })({ kanal: 'k', ayar: { dizi: { metin_onayi: false } } }, { simdi: SIMDI, diziler: [], kok: k, sonuc: { notlar: [] } });
+  assert.ok(!('metin_onay' in d2));
+});
