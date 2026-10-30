@@ -73,7 +73,7 @@ async function doldur(ctx, { kok = O.KOK, simdi = new Date(), getir, hikayeMi, u
       let k;
       try { k = await hikayeMi(ctx, h); } catch (e) { notlar.push(`${h.id}: hikâye kontrolü yapılamadı: ${e.message}`); continue; }   // not recorded: tried again next week
       const kelime = kelimeSay(h.metin);
-      const oge = { id: h.id, konu: t.ad, baslik: h.baslik, link: h.url, fav: h.puan || 0, tarih: h.tarih || null, kelime, ozet: k.ozet || '', tahmini_bolum: oneri(kelime), durum: k.hikaye ? 'havuzda' : 'elendi', eklendi: new Date(simdi).toISOString() };
+      const oge = { id: h.id, konu: t.ad, baslik: h.baslik, link: h.url, fav: h.puan || 0, tarih: h.tarih || null, kelime, ozet: k.ozet || '', metin: h.metin, tahmini_bolum: oneri(kelime), durum: k.hikaye ? 'havuzda' : 'elendi', eklendi: new Date(simdi).toISOString() };
       if (!k.hikaye) oge.neden = 'hikaye_degil: ' + (k.neden || '');
       H.hikayeler.push(oge);
       H.guncelleme = new Date(simdi).toISOString();

@@ -90,7 +90,9 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
       for (const x of havuz.sirala(H, sira)) {
         if (kullanilan.has(x.id)) { Object.assign(x, { durum: 'kullanildi' }); kaydetH(); continue; }
         let h;
-        try {
+        // the pool may carry the entry text (filled on a machine Ekşi does not block): no fetch needed
+        if (x.metin) h = { id: x.id, tur: 'eksi', url: x.link, baslik: x.baslik, metin: x.metin, puan: x.fav, dil: 'tr' };
+        else try {
           const e = await entryGetir(x.id.replace(/^eksi-/, ''));
           h = { id: x.id, tur: 'eksi', url: x.link, baslik: e.baslik || x.baslik, metin: e.metin, puan: e.fav ?? x.fav, dil: 'tr' };
         } catch (e) {
