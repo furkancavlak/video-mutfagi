@@ -28,7 +28,7 @@ node uretim/ses.js videolar/<video>            # karakter sayısı ve kalan kota
 node uretim/ses.js videolar/<video> --onay     # ElevenLabs ile üretir
 ```
 
-- **Kendi sesiyle anlatacak kullanıcı** her satırı telefonda kaydeder. Dosyaları `ses/01-<rol>.mp3`, `02-<rol>.mp3`… adıyla koyar; bu adımı atlar.
+- **Kendi sesiyle anlatacak kullanıcı** her satırı telefonda kaydeder. Dosyaları `ses/01-<rol>.mp3`, `02-<rol>.mp3`… adıyla koyar; bu adımı atlar. Telefon kaydının başındaki/sonundaki boşluğu ve 0,7 sn'den uzun duraklamaları kısaltmak için `video.json`'a `"sessizlik_kirp": true` yazar (4. adımda `mix.js` kırpar, kelime zamanlarını kaydırır; oda gürültüsü -40 dB'den yüksekse kırpma yapılmaz).
 - 🔒 Kullanıcı satırları dinler. Beğenmediği satırın dosyası silinir ve komut tekrar çalıştırılır. Yalnız o satır yeniden üretilir.
 
 ## 3. Kelime zamanları

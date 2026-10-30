@@ -159,7 +159,7 @@ Kod kopyalamadık; kuralları okuyup kendi motorumuza ve istemlerimize uyarladı
 
 - **LottieFiles / motion-design-skill** (MIT): hareket süreleri, giriş-çıkış zamanlaması. https://github.com/LottieFiles/motion-design-skill
 - **whaleyxbt / claude-motion** (MIT): kareleri olay anında kontrol etme, okuma süresi kuralı. https://github.com/whaleyxbt/claude-motion
-- **nateherkai / herk-edit-kit** (MIT): GSAP `fromTo` tuzağı, kelimeden önce giriş, `<defs>` id çakışması. https://github.com/nateherkai/herk-edit-kit
+- **nateherkai / herk-edit-kit** (MIT): GSAP `fromTo` tuzağı, kelimeden önce giriş, `<defs>` id çakışması, kendi ses kaydında sessizlik kırpma fikri. https://github.com/nateherkai/herk-edit-kit
 
 ---
 

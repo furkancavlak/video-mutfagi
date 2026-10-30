@@ -8,6 +8,7 @@
 // The sting is not played after the hook: its riser starts under the hook's last words, the hit lands right
 // after the sentence, and the voice comes back ~0.75 s later over the ducked tail (like a video transition).
 const fs = require('fs'), path = require('path');
+const { spawnSync } = require('child_process');
 const { videoYukle, okuJson, sh, sure, fail, KOK } = require('./cekirdek');
 const { hizala } = require('./hizala');
 
@@ -42,13 +43,37 @@ const CHIME_LEAD = 0.75;
 const anons = new Set(video.anons_rolleri || []);
 const rol = f => f.replace(/^\d+-/, '').replace(/\.[^.]+$/, '');
 
+// Phone recordings carry dead air before/after the line and long hesitations inside it ("sessizlik_kirp": true
+// in video.json). Silences come from the audio itself (ffmpeg silencedetect), not from Whisper, whose word
+// edges stretch over pauses. Head keeps .15 s, tail .25 s, pauses longer than .7 s shrink to .35 s.
+// Word times are shifted by the audio removed before them. Idea from herk-edit-kit's cut-silences (MIT).
+function sessizlikler(file) {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-i', file, '-af', 'silencedetect=noise=-40dB:d=0.5', '-f', 'null', '-'], { encoding: 'utf8' });
+  const D = sure(file), out = []; let s0 = null;
+  for (const m of (r.stderr || '').matchAll(/silence_(start|end): ([\d.]+)/g)) {
+    if (m[1] === 'start') s0 = +m[2]; else if (s0 != null) { out.push([s0, +m[2]]); s0 = null; }
+  }
+  if (s0 != null) out.push([s0, D]);
+  const kes = [];
+  for (const [a, b] of out) {
+    if (a <= 0.02) { if (b - 0.15 > 0) kes.push([0, b - 0.15]); }
+    else if (b >= D - 0.02) kes.push([a + 0.25, D]);
+    else if (b - a > 0.7) kes.push([a + 0.175, b - 0.175]);
+  }
+  return kes.filter(([a, b]) => b - a > 0.05);
+}
+const kaydir = (kes, x) => x - kes.reduce((t, [a, b]) => t + (x <= a ? 0 : Math.min(x, b) - a), 0);
+
 // tempo + per-voice treatment (announcers get a narrow-band PA sound)
 const proc = {};
 for (const f of lines) {
   const out = path.join(tmp, f.replace(/\.[^.]+$/, '.wav'));
   const pa = anons.has(rol(f)) ? ',highpass=f=380,lowpass=f=3300,acompressor=threshold=-20dB:ratio=4,volume=1.4' : '';
-  sh('ffmpeg', ['-loglevel', 'error', '-y', '-i', path.join(sesDir, f), '-af', `aresample=${SR},atempo=${TEMPO},loudnorm=I=-15:TP=-1.5${pa}`, '-ac', '2', out]);
-  proc[f] = { wav: out, d: sure(out) };
+  const kes = video.sessizlik_kirp ? sessizlikler(path.join(sesDir, f)) : [];
+  const sec = kes.length ? `aselect='not(${kes.map(([a, b]) => `between(t,${a.toFixed(3)},${b.toFixed(3)})`).join('+')})',asetpts=N/SR/TB,` : '';
+  sh('ffmpeg', ['-loglevel', 'error', '-y', '-i', path.join(sesDir, f), '-af', `${sec}aresample=${SR},atempo=${TEMPO},loudnorm=I=-15:TP=-1.5${pa}`, '-ac', '2', out]);
+  proc[f] = { wav: out, d: sure(out), kes };
+  if (kes.length) console.log(`${f}: ${kes.reduce((t, [a, b]) => t + b - a, 0).toFixed(2)} sn sessizlik kırpıldı`);
 }
 
 // timeline
@@ -61,7 +86,8 @@ lines.forEach((f, i) => {
   ev.push([proc[f].wav, start, 1, 'ses']);
   Z.satirlar.push({ dosya: f, kim, bas: +start.toFixed(3), son: +(start + proc[f].d).toFixed(3) });
   // caption text comes from the script; Whisper only supplies the timing (uretim/hizala.js)
-  const hizali = hizala(video.satirlar[i].metin, words[f]) || words[f];
+  const kes = proc[f].kes, ham = kes.length ? words[f].map(([w, a, b]) => [w, kaydir(kes, a), kaydir(kes, b)]) : words[f];
+  const hizali = hizala(video.satirlar[i].metin, ham) || ham;
   for (const [w, a, b] of hizali) {
     const son = Z.kelimeler[Z.kelimeler.length - 1];
     // Whisper splits Turkish suffixes after an apostrophe ("Karadeniz" + "'in"): glue them back onto the word
