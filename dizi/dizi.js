@@ -22,8 +22,8 @@ function elleKarar(dizi, n, karar, neden) {
 // ---- manual decisions (panel). The caller holds kilitAl. A decision must change something and stays overridable only
 // until the next episode has been produced.
 const sonrakiAcik = b => !b || b.durum === 'metin' || b.durum === 'atlandi' || (b.durum === 'uretimde' && !b.video);
-// The last episode takes Kes (the series is then bitti); Devam only to reactivate a cut series. A kontrol_et episode takes Kes or Tekrar dene; on a cut
-// series it also takes Devam, which only reactivates the series so Tekrar dene works again.
+// The last episode takes Kes (the series is then bitti); Devam only to reactivate a cut series. A kontrol_et episode
+// takes Kes or Tekrar dene; on a cut series it also takes Devam, which only reactivates it so Tekrar dene works again.
 const sonBolum = (d, n) => n >= (d.bolumler || []).length;
 function kararHata(d, n, karar) {
   const b = bul(d, n);
