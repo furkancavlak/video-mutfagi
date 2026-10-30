@@ -278,6 +278,23 @@ function kapakYolu(v) {
   return fs.existsSync(path.join(c, 'son-kare.png')) ? path.join(c, 'son-kare.png') : null;
 }
 
+// production stage marks of every video folder (uretim.json) for the calendar's stage bar; read only.
+// son = the newest of the marks and the folder's own files, so a long step still counts as alive
+const ASAMA = { metin: A => A.metin, ses: A => A.mix, sahneler: A => A.sahne || A.ucretli_tarif || A.sablon_tarif, video: A => A.render };
+function asamalar(kanal) {
+  if (kanal && !kanallar().includes(kanal)) throw new Error('kanal yok');
+  const v = path.join(KOK, 'videolar'), out = {};
+  for (const ad of fs.existsSync(v) ? fs.readdirSync(v) : []) {
+    const dir = path.join(v, ad), U = okuJ(path.join(dir, 'uretim.json'));
+    if (!U || typeof U !== 'object' || !U.adimlar || typeof U.adimlar !== 'object' || (kanal && U.kanal !== kanal)) continue;
+    const A = U.adimlar, t = Object.values(A).map(x => x && Date.parse(x.zaman)).filter(Number.isFinite);
+    for (const f of fs.readdirSync(dir)) { try { t.push(fs.statSync(path.join(dir, f)).mtimeMs); } catch {} }
+    out[`videolar/${ad}`] = { kanal: U.kanal || null, bitti: Object.fromEntries(Object.entries(ASAMA).map(([k, f]) => [k, !!(f(A) || A.render)])),
+      kuyruk: !!A.kuyruk, bekleyen: U.bekleyen && U.bekleyen.adim ? String(U.bekleyen.adim) : null, son: t.length ? new Date(Math.max(...t)).toISOString() : null };
+  }
+  return out;
+}
+
 // how a channel reaches the language model: 'claude-cli' (the user's Claude subscription) or 'api' (pay as you go)
 const yzYolu = k => { try { return require(path.join(KOK, 'konu', 'llm.js')).yolSec((okuJ(path.join(KOK, 'kanal', k, 'konu.json'), {}) || {}).llm || {}); } catch { return null; } };
 
@@ -451,6 +468,7 @@ async function api(req, u) {
   if (GET && yol === 'instagram') return instagram(u.searchParams.has('yenile'), u.searchParams.get('hesap'));
   if (GET && yol === 'dersler') return okuJ(DERSLER, []);
   if (GET && yol === 'takipci') return takipci(u.searchParams.get('hesap'));
+  if (GET && yol === 'asamalar') return asamalar(u.searchParams.get('kanal') || undefined);
   if (GET && yol === 'diziler') return sunucu ? sunucuJson('--diziler', kanalAdi(u.searchParams.get('kanal'))) : dizilerCevap(u.searchParams.get('kanal'));
   if (!GET && yol === 'dizi/karar') return sunucu ? sunucuJson('--dizi-karar', diziKararGovde(b)) : diziKarar(b);
   if (!GET && yol === 'dizi/tekrar') return sunucu ? sunucuJson('--dizi-tekrar', diziTekrarGovde(b)) : diziTekrar(b);
@@ -513,7 +531,7 @@ const sunucuYap = () => http.createServer(async (req, res) => {
   } catch (e) { gonder(res, e.kod || 400, { hata: e.message }); }
 });
 
-module.exports = { kanca, kuyrukOzet, instagram, takipci, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
+module.exports = { kanca, kuyrukOzet, instagram, takipci, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
 if (require.main !== module) return;
 
   // ozellik: lets the home panel know this copy has the --dizi* flags

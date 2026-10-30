@@ -67,3 +67,22 @@ test('takipci: reads followers_count, caches per account, null when the API does
   assert.deepEqual([d.bagli, d.takipci], [false, null]);
   await assert.rejects(() => P.takipci('../kacak', sahte({})));
 });
+
+test('asamalar: stage marks per video folder from uretim.json, filtered by channel', () => {
+  const t = (s) => ({ zaman: s });
+  yaz('videolar/v-yarim/uretim.json', JSON.stringify({ kanal: 'kanal_a', baslangic: '2026-10-30T20:16:00Z', adimlar: { metin: t('2026-10-30T20:16:30Z'), ses: t('2026-10-30T20:17:01Z'), kelime: t('2026-10-30T20:17:32Z'), mix: t('2026-10-30T20:17:36Z') } }));
+  yaz('videolar/v-bitmis/uretim.json', JSON.stringify({ kanal: 'kanal_a', adimlar: { metin: t('a'), render: t('2026-10-30T18:20:04Z'), kuyruk: t('2026-10-30T18:20:05Z') } }));
+  yaz('videolar/v-kapi/uretim.json', JSON.stringify({ kanal: 'kanal_a', bekleyen: { adim: 'gorsel', kredi: 40 }, adimlar: { metin: t('x'), mix: t('y') } }));
+  yaz('videolar/v-baska/uretim.json', JSON.stringify({ kanal: 'kanal_b', adimlar: { metin: t('x') } }));
+  yaz('videolar/v-bozuk/uretim.json', '{bozuk');
+  const a = P.asamalar('kanal_a');
+  assert.deepEqual(Object.keys(a).sort(), ['videolar/v-bitmis', 'videolar/v-kapi', 'videolar/v-yarim']);
+  assert.deepEqual(a['videolar/v-yarim'].bitti, { metin: true, ses: true, sahneler: false, video: false });
+  assert.equal(a['videolar/v-yarim'].kuyruk, false); assert.equal(a['videolar/v-yarim'].bekleyen, null);
+  assert.ok(+new Date(a['videolar/v-yarim'].son) >= +new Date('2026-10-30T20:17:36Z'));
+  assert.deepEqual(a['videolar/v-bitmis'].bitti, { metin: true, ses: true, sahneler: true, video: true }, 'a rendered video has every earlier stage');
+  assert.equal(a['videolar/v-bitmis'].kuyruk, true);
+  assert.equal(a['videolar/v-kapi'].bekleyen, 'gorsel');
+  assert.deepEqual(Object.keys(P.asamalar()).sort(), ['videolar/v-baska', 'videolar/v-bitmis', 'videolar/v-kapi', 'videolar/v-yarim']);
+  assert.throws(() => P.asamalar('../kacak'), /kanal yok/);
+});
