@@ -204,6 +204,8 @@ async function sonuclar() {
 }
 
 // --- scheduler: every 15 min. every 5 min. Windows: Task Scheduler (runs a missed run as soon as the PC is on); Linux/Mac: cron.
+// the cron line (also used by tests); the dedup below matches on 'kuyruk/kuyruk.js' only, so old lines without the TZ/nice prefix are still replaced
+const kronSatiri = (kok, node, betik, log) => `*/5 * * * * cd "${kok}" && TZ=Europe/Istanbul nice -n 19 "${node}" "${betik}" calistir >> "${log}" 2>&1`;
 function zamanlayiciVarMi() {
   if (WIN) return spawnSync('schtasks', ['/Query', '/TN', GOREV], { encoding: 'utf8' }).status === 0;
   const r = spawnSync('crontab', ['-l'], { encoding: 'utf8' }); return r.status === 0 && r.stdout.includes('kuyruk/kuyruk.js');
@@ -220,7 +222,7 @@ Register-ScheduledTask -TaskName '${GOREV}' -Action $a -Trigger $t -Settings $s 
       const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8' });
       if (r.status !== 0) fail('zamanlayıcı kurulamadı: ' + (r.stderr || r.stdout).trim().slice(0, 400));
     } else {
-      const satir = `*/5 * * * * cd "${KOK}" && "${node}" "${betik}" calistir >> "${LOG}" 2>&1`;
+      const satir = kronSatiri(KOK, node, betik, LOG);
       const eski = spawnSync('crontab', ['-l'], { encoding: 'utf8' }).stdout || '';
       const r = spawnSync('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js')).concat(satir).join('\n') + '\n', encoding: 'utf8' });
       if (r.status !== 0) fail('crontab yazılamadı: ' + r.stderr);
@@ -258,7 +260,7 @@ function durumGoster() {
   console.log(uyari.length ? '\nDİKKAT:\n' + uyari.map(u => '  • ' + u).join('\n') : '\nHer şey yolunda.');
 }
 
-module.exports = { sonrakiSlot, gunlukSayi };
+module.exports = { sonrakiSlot, gunlukSayi, kronSatiri };
 const k = process.argv[2];
 if (require.main === module) (async () => {
   if (k === 'ekle') ekle();
