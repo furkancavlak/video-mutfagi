@@ -166,3 +166,6 @@ label.kutu{flex-direction:row;align-items:center;gap:7px;padding-bottom:8px}
   .cubuk{grid-template-columns:minmax(0,1fr) 60px;gap:6px 10px}.cubuk .ray{grid-column:1/-1;grid-row:2}
   .gun{min-height:70px;padding:4px}.olay{font-size:10px;padding:2px 4px}
 }
+
+.kanal-sec{margin-left:auto;font-weight:600;max-width:220px}
+.kanal-sec+.isler-dugme{margin-left:0}
