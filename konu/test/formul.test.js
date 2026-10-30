@@ -75,3 +75,14 @@ test('sample scene: builds in the sandbox with the channel character, no NaN or 
   assert.ok(!/NaN|undefined/.test(hepsi), 'no NaN/undefined in the scene');
   assert.strictEqual((S.html.match(/class="sh"/g) || []).length, 8, 'one shot per line plus the 1000-year card');
 });
+
+// a long episode's scene file took the CLI past the 15 minute default (real run 30.10.2026): the scene call gets its own limit
+test('scene writing: own time limit (konu.json llm.sahne_zaman_asimi_dk, default 45 min), passed through LLM.sor', async () => {
+  assert.strictEqual(U.sahneZamanAsimi({}), 45 * 60e3);
+  assert.strictEqual(U.sahneZamanAsimi({ sahne_zaman_asimi_dk: 60 }), 60 * 60e3);
+  assert.strictEqual(U.sahneZamanAsimi({ sahne_zaman_asimi_dk: 'x' }), 45 * 60e3);
+  const LLM = require('../llm');
+  let gelen;
+  await LLM.sor('istem', { json: false, zamanAsimiMs: 1234, calistir: async (i, o) => { gelen = o; return { metin: 'ok' }; } });
+  assert.strictEqual(gelen.zamanAsimiMs, 1234);
+});

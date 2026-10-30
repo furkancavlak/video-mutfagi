@@ -172,6 +172,8 @@ function sureAyari(sure = [60, 80]) {
 }
 
 // ---- formul layer helpers
+// the scene file is the longest answer of the run: a long episode took the CLI past its 15 min default (30.10.2026)
+const sahneZamanAsimi = llm => ((llm && +llm.sahne_zaman_asimi_dk > 0) ? +llm.sahne_zaman_asimi_dk : 45) * 60e3;
 // the ```js block of a model answer (the longest one that exports a function); null if none
 function kodCikar(metin) {
   const bloklar = [...String(metin).matchAll(/```(?:js|javascript)?[ \t]*\r?\n([\s\S]*?)```/g)].map(m => m[1]).filter(k => /module\.exports\s*=/.test(k));
@@ -315,7 +317,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
           karakter: fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.',
           motor: basYorum(path.join(O.KOK, 'uretim', 'motor.js')), satirlar, sure: Z.toplam.toFixed(1), marka: (Z.sting[0] || 0).toFixed(2),
           ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'), duzeltme,
-        }), { is: 'sahne-yaz', json: false, efor: llm.efor_sahne || 'high' });   // fast / cheap models can think themselves out of an answer: lower it per channel
+        }), { is: 'sahne-yaz', json: false, efor: llm.efor_sahne || 'high', zamanAsimiMs: sahneZamanAsimi(llm) });   // fast / cheap models can think themselves out of an answer: lower it per channel
         const yeni = kodCikar(cevap);
         if (!yeni) { sorunlar = ['- Cevapta module.exports içeren bir \`\`\`js kod bloğu yok. Dosyanın tamamını tek blokta döndür.']; continue; }
         kod = yeni;
@@ -546,4 +548,4 @@ function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap =
   return f;
 }
 
-module.exports = { uret, isHesabi, kodCikar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, isHesabi, kodCikar, sahneZamanAsimi, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };

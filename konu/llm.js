@@ -191,19 +191,19 @@ function jsonCikar(metin) {
 
 // One call. `is` names the job in the log (kayit/konu/llm.jsonl), which also records time, cost and tokens
 // (subscription routes such as codex-cli have no per-call price, so their tokens are the usage measure).
-async function sor(istem, { is = 'genel', ayar = {}, model, efor, araclar = [], resimler = [], json = true, calistir } = {}) {
+async function sor(istem, { is = 'genel', ayar = {}, model, efor, araclar = [], resimler = [], json = true, calistir, zamanAsimiMs } = {}) {
   const yol = calistir ? 'test' : yolSec(ayar);
   const t0 = Date.now();
   const dizinler = [...new Set(resimler.map(f => path.dirname(path.resolve(f))))];
   let r;
-  if (calistir) r = await calistir(istem, { model, efor, araclar, resimler });
+  if (calistir) r = await calistir(istem, { model, efor, araclar, resimler, zamanAsimiMs });
   else if (yol === 'api') r = await apiCalistir(istem, { model, efor, araclar, resimler });
-  else if (yol === 'codex-cli') r = await codexCalistir(istem, { model, efor, araclar, resimler });
+  else if (yol === 'codex-cli') r = await codexCalistir(istem, { model, efor, araclar, resimler, ...(zamanAsimiMs ? { zamanAsimiMs } : {}) });
   else if (yol === 'openrouter') r = await openrouterCalistir(istem, { model, efor, araclar, resimler });
   else if (yol === 'ollama') r = await ollamaCalistir(istem, { model, resimler });
   else {
     const ek = resimler.length ? `\n\nBakman gereken resim dosyaları (Read aracıyla aç):\n${resimler.map(f => '- ' + path.resolve(f)).join('\n')}\n` : '';
-    r = await cliCalistir(istem + ek, { model, efor, araclar: resimler.length ? [...new Set([...araclar, 'Read'])] : araclar, dizinler });
+    r = await cliCalistir(istem + ek, { model, efor, araclar: resimler.length ? [...new Set([...araclar, 'Read'])] : araclar, dizinler, ...(zamanAsimiMs ? { zamanAsimiMs } : {}) });
   }
   if (!calistir) O.satirEkle(path.join(O.KAYIT, 'llm.jsonl'), { zaman: new Date().toISOString(), is, yol, model, sure_sn: Math.round((Date.now() - t0) / 1000), maliyet_usd: r.maliyet, token: r.token || null });
   return json ? jsonCikar(r.metin) : r.metin;
