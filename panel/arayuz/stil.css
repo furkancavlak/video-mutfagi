@@ -558,3 +558,8 @@ dialog{width:min(880px,94vw);margin:auto}
 .mt-bolum>span{font:700 14px var(--body)}.mt-bolum small{font-weight:500;color:var(--ink-3)}
 .mt-bolum textarea{width:100%;min-height:170px;resize:vertical;background:var(--paper);border:1px solid var(--line-2);border-radius:12px;padding:12px 14px;line-height:1.55;font-size:14.5px}
 .mt-bolum textarea:focus{outline:2px solid var(--mor);outline-offset:1px;border-color:transparent}
+/* loading states: data that is still on its way, never shown as "—" */
+.yuk{display:inline-flex;align-items:center;gap:7px;font:600 12.5px var(--body);color:var(--ink-3)}
+.yuk .ik{animation:don 1.2s linear infinite}
+.iskelet{display:block;width:46px;height:20px;border-radius:6px;background:linear-gradient(90deg,var(--paper-2),var(--line-2),var(--paper-2));background-size:200% 100%;animation:iskelet 1.2s ease-in-out infinite}
+@keyframes iskelet{0%{background-position:100% 0}100%{background-position:-100% 0}}
