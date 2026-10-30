@@ -142,3 +142,39 @@ test('default sonucAl counts continue-keyword comments (tr lowercase)', async ()
   assert.strictEqual((await sonucAlYap(P({ token: 't' }))('M', 'h', [])).yorum_devam, 0);
   assert.strictEqual((await sonucAlYap(P(null))('M', 'h', kel)).yorum_devam, 0);
 });
+
+test('non-kuru run persists son-kosu.json; kuru does not', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [{ id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1)] }] });
+  const f = path.join(k, 'kayit', 'dizi', 'k', 'son-kosu.json');
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, kuru: true, uretBolum: fakeUret(), yeniDizi: async () => null });
+  assert.ok(!fs.existsSync(f));
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi: async () => null });
+  const s = JSON.parse(fs.readFileSync(f, 'utf8'));
+  assert.strictEqual(s.zaman, SIMDI.toISOString());
+  assert.deepStrictEqual(s.uretilecek, [{ id: 'a', n: 1 }]);
+  assert.ok(Array.isArray(s.notlar) && Array.isArray(s.kararlar));
+});
+
+test('budget stop sets bolum.bekleme=butce, shown in the run notes; it clears once production proceeds', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [{ id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1)] }] });
+  const butce = async () => ({ durum: 'butce-bekliyor', neden: 'limit' });
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, uretBolum: butce, yeniDizi: async () => null });
+  let b = yukle(k, 'k').diziler[0].bolumler[0];
+  assert.strictEqual(b.durum, 'uretimde'); assert.strictEqual(b.bekleme, 'butce');
+  const s = JSON.parse(fs.readFileSync(path.join(k, 'kayit', 'dizi', 'k', 'son-kosu.json'), 'utf8'));
+  assert.ok(s.notlar.some(n => /bütçe bekliyor/.test(n)));
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, uretBolum: fakeUret(), yeniDizi: async () => null });
+  b = yukle(k, 'k').diziler[0].bolumler[0];
+  assert.strictEqual(b.durum, 'sirada'); assert.ok(!('bekleme' in b));
+});
+
+test('account names are normalised when matching queue jobs (@Foo == foo)', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [] });
+  is(k, 'bekleyen', 'j1', { video: 'v-x', ne_zaman: SIMDI.toISOString(), hesap: 'foo' });
+  const c = { kanal: 'k', kimlik: { hesap: ' @Foo ' }, ayar: { dizi: { ...AYAR, gunluk_hedef: 1 } } };
+  const r = await calistir(c, { simdi: SIMDI, kok: k, kuru: true });
+  assert.strictEqual(r.yeniler, 0, 'the job already fills the daily target');
+});

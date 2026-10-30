@@ -8,7 +8,7 @@ const MAX_AKTIF = 3, ESKALASYON_SAAT = 72, KILIT_SAAT = 6;
 const bul = (d, n) => (d.bolumler || []).find(b => b.n === n);
 const saatFark = (simdi, t) => (new Date(simdi).getTime() - new Date(t).getTime()) / 3600e3;
 const gunIst = t => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date(t));   // YYYY-MM-DD
-const hesapAd = h => h || 'oxygbio';
+const hesapAd = h => String(h || '').trim().replace(/^@/, '').trim().toLowerCase() || 'oxygbio';   // same rule as the panel's hesapTemiz
 
 // ---- queue files
 function kuyrukOku(kok) {
@@ -204,6 +204,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     const liste = uretilecekler(diziler);
     sonuc.uretilecek = liste;
     if (kuru) { for (const u of liste) notlar.push(`üretilecek: ${u.id} bölüm ${u.n}`); return sonuc; }
+    const sonKosu = () => ortak.yazJson(path.join(kok, 'kayit', 'dizi', ctx.kanal, 'son-kosu.json'), { zaman: new Date(simdi).toISOString(), notlar: sonuc.notlar, kararlar: sonuc.kararlar, uretilecek: sonuc.uretilecek });
     if (liste.length && !uretBolum) {
       try { uretBolum = require('./uret-bolum').uretBolum; } catch (e) { notlar.push(eksikModul(e)); }
     }
@@ -213,12 +214,15 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
         const r = await uretBolum(ctx, d, u.n, { onayGerekli: !!ayar.onay_donemi, kok });
         // uretBolum contract: returns {durum, dir?, mp4?}; the state is written whatever the episode's current one
         if (r && r.durum) b.durum = r.durum === 'butce-bekliyor' ? 'uretimde' : r.durum;
+        // the panel shows this chip; it clears as soon as production gets past the budget gate
+        if (r && r.durum === 'butce-bekliyor') b.bekleme = 'butce'; else delete b.bekleme;
         // a budget stop keeps the episode due (uretimde without a video), so it is resumed next run
         if (r && r.durum !== 'butce-bekliyor' && (r.dir || r.mp4) && !b.video) b.video = r.dir || r.mp4;
         if (r && r.durum === 'butce-bekliyor') notlar.push(`${u.id} bölüm ${u.n}: bütçe bekliyor${r.neden ? ': ' + r.neden : ''}`);
       } catch (e) { notlar.push(`${u.id} bölüm ${u.n}: üretim hatası: ${e.message}`); }
       kaydetSon();
     }
+    sonKosu();
     return sonuc;
   } finally { kilit.birak(); }
 }
