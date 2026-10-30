@@ -167,6 +167,11 @@ async function calistir() {
   fs.writeFileSync(KILIT, String(process.pid));
   const yaz = ek => yazJ(DURUM, { ...durum, son_calisma: new Date().toISOString(), makine: os.hostname(), ...ek });
   try {
+    // tokens expire after 60 days: refreshed in-process, at most one try per account a day; never blocks posting
+    if (!kuru && !hazirla) {
+      try { for (const r of await require('../instagram/yenile.js').otoYenile()) if (r.sonuc === 'yenilendi' || r.sonuc === 'hata') log(`Instagram anahtarı (@${r.hesap}): ${r.sonuc === 'yenilendi' ? 'yenilendi' : 'YENİLENEMEDİ: ' + r.neden}`); }
+      catch (e) { log('Instagram anahtarı yenileme denetimi çalışmadı: ' + e.message); }
+    }
     saatAta(a);
     const posted = isler(D.paylasilan).filter(j => j.paylasildi), bugunG = gun(Date.now());
     const sirada = isler().filter(j => !j.onay_gerekli && new Date(j.ne_zaman) <= Date.now() && !(j.sonraki_deneme && new Date(j.sonraki_deneme) > Date.now()))
@@ -278,6 +283,7 @@ function durumGoster() {
     const hs = f === 'instagram.json' ? HESAP0 : f.slice(10, -5), t = okuJ(path.join(dir, f)), bas = new Date(t.yenilendi || t.kaydedildi), kalan = 60 - (Date.now() - bas) / 864e5;
     if (kalan < 10) uyari.push(`Instagram anahtarının (@${t.username || hs}) süresi ~${Math.max(0, Math.round(kalan))} gün içinde doluyor: node instagram/paylas.js yenile${hs === HESAP0 ? '' : ' --hesap ' + hs}`);
   }
+  try { uyari.push(...require('../instagram/yenile.js').uyarilar()); } catch (e) { }
   console.log(uyari.length ? '\nDİKKAT:\n' + uyari.map(u => '  • ' + u).join('\n') : '\nHer şey yolunda.');
 }
 

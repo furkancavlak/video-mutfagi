@@ -179,11 +179,10 @@ if (require.main !== module) return;
     const m = await me(a.token);
     console.log(`Bağlı hesap: @${m.username} (${m.account_type}, ${m.media_count} gönderi)`);
   } else if (cmd === 'yenile') {
-    const a = readAyar(hesap); if (!a) fail('kayıtlı token yok');
-    const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(a.token)}`).then(r => r.json());
-    if (!r.access_token) fail('yenilenemedi: ' + JSON.stringify(r.error || r));
-    writeAyar(Object.assign(a, { token: r.access_token, yenilendi: new Date().toISOString() }), hesap);
-    console.log(`Token yenilendi, ${Math.round(r.expires_in / 86400)} gün geçerli.`);
+    if (!readAyar(hesap)) fail('kayıtlı token yok');
+    // same refresh the queue runs daily (instagram/yenile.js); the token is never printed
+    const r = await require('./yenile.js').tokenYenile(ayarYolu(hesap)).catch(e => fail(e.message));
+    console.log(`Token yenilendi, ${r.gun} gün geçerli.`);
   } else if (cmd === 'gonder') {
     const i = rest.indexOf('--aciklama');
     const j = rest.indexOf('--adres');

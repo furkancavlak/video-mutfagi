@@ -79,6 +79,7 @@ function saglik(hesap, hesapYok) {
   if (gec.length) uyari.push(`${gec.length} video gecikti`);
   const hat = isler('hatali').filter(kendi).length;
   if (hat) uyari.push(`${hat} video hatalı`);
+  if (!hesapYok) try { uyari.push(...require(path.join(KOK, 'instagram', 'yenile.js')).uyarilar(undefined, hesap || undefined)); } catch (e) { }   // failed automatic token refresh
   return { zamanlayici, son_calisma: d && d.son_calisma, son_sonuc: d && d.son_sonuc, makine: d ? d.makine : os.hostname(), instagram: { bagli: !!ig, gun: igGun }, uyari };
 }
 // kanal: channel name; only that channel's account is shown (no kanal = every account)
