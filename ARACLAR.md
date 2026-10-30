@@ -153,6 +153,14 @@ Bedava. Telefonla sessiz bir odada kaydet. Repo kaydını kelime kelime zamanlar
 - **Durum:** Bedava, açık kaynak (MIT).
 - **Bağlantı:** https://threejs.org
 
+## 8. Yararlandığımız açık kaynak çalışmalar
+
+Kod kopyalamadık; kuralları okuyup kendi motorumuza ve istemlerimize uyarladık.
+
+- **LottieFiles / motion-design-skill** (MIT): hareket süreleri, giriş-çıkış zamanlaması. https://github.com/LottieFiles/motion-design-skill
+- **whaleyxbt / claude-motion** (MIT): kareleri olay anında kontrol etme, okuma süresi kuralı. https://github.com/whaleyxbt/claude-motion
+- **nateherkai / herk-edit-kit** (MIT): GSAP `fromTo` tuzağı, kelimeden önce giriş, `<defs>` id çakışması. https://github.com/nateherkai/herk-edit-kit
+
 ---
 
 Bir fiyatın değiştiğini ya da yanlış olduğunu görürsen GitHub'da bir issue aç. Kontrol tarihini de güncelleriz.

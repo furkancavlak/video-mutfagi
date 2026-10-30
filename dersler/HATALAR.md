@@ -90,6 +90,9 @@ Her madde aynı biçimde yazılmıştır: **ne oldu**, ardından **→ ne yap**.
   - `fromTo` içinde `opacity: 1` yalnız başlangıç değerlerinde duruyordu (`{x: -900, opacity: 1} → {x: 0}`). Tek kare alınca (`--kare`) dolmuş görünüyordu, tam render'da hiç görünmedi: render önce sona, sonra başa sarıyor ve böyle bir tween görünürlüğü geri getirmiyor.
     → Görünürlüğü ayrı bir `tl.set(..., {opacity: 1}, t)` ile ya da iki uçta da `opacity` vererek aç. Tam render'dan sonra her eşyanın karesine videonun kendisinden bak.
 
+  - `M.zipla`, `M.titre` ve `M.nefes` mutlak değerli `fromTo` kullanıyordu. Daha önce `M.git` ile yürüyen bir nesne zıplama anında eski yerine ışınlandı; `M.nefes` sayfa açılırken ölçeği 1'e çekip `M.belir`'in büyüyerek girişini sildi (GSAP `fromTo` başlangıç değerini hemen uygular).
+    → Yerinde tekrarlanan hareketler göreli yazılır (`y: '-=14'`, `x: '+=6'`); `fromTo` gerekiyorsa `immediateRender: false` eklenir.
+
 ## 7. Görüntü (ücretli, Higgsfield)
 
 - **Yapay zekâ istenmeyen bir insan ekledi** (herkesin yok olduğu dünyaya bir çocuk koydu).

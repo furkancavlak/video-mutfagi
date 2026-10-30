@@ -21,6 +21,8 @@
 //   M.bitir(css)                      -> { html, tl, css } for kurgu.js
 //
 // Motion rules baked in: no elastic/bounce eases, entrances >= .25 s, slams .3 s with power3.out (dersler/KURGU-DILI.md).
+// Shake/hop/breathe are relative to where the element already is: an absolute fromTo snapped a moved element back
+// to its origin and, rendered at build time, cancelled M.belir's scale-in (GSAP immediateRender, see HATALAR.md).
 module.exports = function motor({ T, at, f }) {
   const { L, cue } = T;
   const html = [], tl = [];
@@ -39,15 +41,15 @@ module.exports = function motor({ T, at, f }) {
     `<g transform="translate(${f(x)},${f(y)})${r ? ` rotate(${r})` : ''}${s !== 1 ? ` scale(${s})` : ''}"><g class="${sinif}">${ic}</g></g>`;
   M.belir = (sel, t, { sure = .3, olcek = .6, oda = '0 0' } = {}) =>
     tl.push(`gsap.set('${sel}',{opacity:0,scale:${olcek},svgOrigin:'${oda}'});tl.to('${sel}',{opacity:1,scale:1,duration:${sure},ease:'power3.out'},${at(t)});`);
-  M.kaybol = (sel, t, sure = .25) => tl.push(`tl.to('${sel}',{opacity:0,duration:${sure}},${at(t)});`);
+  M.kaybol = (sel, t, sure = .25) => tl.push(`tl.to('${sel}',{opacity:0,duration:${sure},ease:'power2.in'},${at(t)});`);
   M.vur = (sel, t, oda = '0 0') =>
     tl.push(`gsap.set('${sel}',{opacity:0,scale:1.3,svgOrigin:'${oda}'});tl.to('${sel}',{opacity:1,scale:1,duration:.3,ease:'power3.out'},${at(t)});`);
   M.dus = (sel, t, { yuk = 900, sure = .32 } = {}) =>
-    tl.push(`gsap.set('${sel}',{y:-${yuk},opacity:0});tl.to('${sel}',{y:0,opacity:1,duration:${sure},ease:'power3.in'},${at(t)});tl.fromTo('${sel}',{scaleY:.86,svgOrigin:'0 0'},{scaleY:1,duration:.18,ease:'power2.out'},${at(t + sure)});`);
+    tl.push(`gsap.set('${sel}',{y:-${yuk},opacity:0});tl.to('${sel}',{y:0,opacity:1,duration:${sure},ease:'power3.in'},${at(t)});tl.fromTo('${sel}',{scaleY:.86,svgOrigin:'0 0'},{scaleY:1,duration:.18,ease:'power2.out',immediateRender:false},${at(t + sure)});`);
   M.titre = (sel, t, { kac = 10, genlik = 6 } = {}) =>
-    tl.push(`tl.fromTo('${sel}',{x:-${genlik}},{x:${genlik},duration:.08,yoyo:true,repeat:${kac - 1},ease:'none'},${at(t)});tl.to('${sel}',{x:0,duration:.05},${at(t + kac * .08)});`);
+    tl.push(`tl.fromTo('${sel}',{x:'-=${genlik}'},{x:'+=${2 * genlik}',duration:.08,yoyo:true,repeat:${kac - 1},ease:'none',immediateRender:false},${at(t)});tl.to('${sel}',{x:'${kac % 2 ? '-' : '+'}=${genlik}',duration:.05},${at(t + kac * .08)});`);
   M.zipla = (sel, t, { kac = 3, yuk = 14 } = {}) =>
-    tl.push(`tl.fromTo('${sel}',{y:0},{y:-${yuk},duration:.18,yoyo:true,repeat:${kac * 2 - 1},ease:'sine.inOut'},${at(t)});`);
+    tl.push(`tl.to('${sel}',{y:'-=${yuk}',duration:.18,yoyo:true,repeat:${kac * 2 - 1},ease:'sine.inOut'},${at(t)});`);
   M.git = (sel, t, { x = 0, y = 0, sure = .5, don = null, oda = '0 0' } = {}) =>
     tl.push(`tl.to('${sel}',{x:${f(x)},y:${f(y)}${don != null ? `,rotation:${don},svgOrigin:'${oda}'` : ''},duration:${sure},ease:'power2.inOut'},${at(t)});`);
   M.yol = (sel, t, sure, noktalar) => {
@@ -58,7 +60,7 @@ module.exports = function motor({ T, at, f }) {
   };
   M.renk = (sel, t, renk, sure = .5) => tl.push(`tl.to('${sel}',{attr:{fill:'${renk}'},duration:${sure}},${at(t)});`);
   M.nefes = (sel, t, { kac = 3, olcek = 1.035, oda = '0 0', sure = .7 } = {}) =>
-    tl.push(`tl.fromTo('${sel}',{scale:1},{scale:${olcek},svgOrigin:'${oda}',duration:${sure},yoyo:true,repeat:${kac * 2 - 1},ease:'sine.inOut'},${at(t)});`);
+    tl.push(`tl.to('${sel}',{scale:${olcek},svgOrigin:'${oda}',duration:${sure},yoyo:true,repeat:${kac * 2 - 1},ease:'sine.inOut'},${at(t)});`);
   M.bitir = (css = '') => ({ html: html.join('\n'), tl, css: `.sh{position:absolute;inset:0}\n${css}` });
   return M;
 };

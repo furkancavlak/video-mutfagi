@@ -14,6 +14,9 @@ Her kareyi şu hatalar için kontrol et:
 - kahraman ya da önemli yazı altyazı bandına (karenin alttan yaklaşık beşte biri) ya da marka etiketine girmiş
 - görüntü o anda okunan cümleyi göstermiyor, ilgisiz ya da boş
 - nesne tanınmıyor (ne olduğu anlaşılmıyor)
+- okunacak yazı okuma anında hâlâ hareket ediyor, yarı saydam ya da sol/sağ kenara 60 pikselden yakın
+- damga (vurulan etiket) hedefi görünmeden inmiş
+- aynı nesne iki karede farklı görünüyor (renk, oran, yön)
 - aynı anda çok fazla şey hareket ediyor, göz nereye bakacağını bilmiyor
 - örnek videodan kopyalanmış nesne (oksijen tüpü, hurdacı kamyoneti, termometre, balkon korkuluğu, ölçer kadranı, CO₂/O₂ baloncukları) bu hikâyede geçmediği hâlde çizilmiş
 

@@ -41,6 +41,11 @@ Aşağıdaki dosya başka bir hikâyenin videosudur. Ondan şunları öğren: do
 - Nesneleri SVG yollarıyla (path, rect, circle, ellipse, polygon, text) düz renkli çiz. Tanınır olsun: bir nesne 3-12 şekilden oluşur, gerekirse detay ekle.
 - Kahraman ve önemli yazı y = 230 ile y = 1560 arasında kalır.
 - Karakter kanalın dosyasından gelir (`karakter.ciz`, `karakter.ifade`); karakteri kendin yeniden çizme. `karakter` null ise karakter yoktur.
+- Giriş hareketini kelimeden 0,15 sn önce başlat; kelime duyulduğunda nesne yerine oturmuş olsun. Damga (`M.vur`) tam kelimede iner, hedefi göründükten en az 0,1 sn sonra.
+- Okunacak yazı oturduktan sonra en az 1 sn yerinde ve hareketsiz kalır (3 kelimeden sonraki her kelime için +0,25 sn). Esprinin vurucu görüntüsü en az 1,5 sn ekranda kalır.
+- Aynı nesneye üst üste binen iki hareket ya da iki opaklık animasyonu verme; tek harekette birleştir.
+- Ekran yüksekliğinin üçte birinden uzun yol tek düz çizgi olmasın: `M.yol` ile ara nokta koy.
+- `<defs>` içindeki id'lere sahne öneki koy (`s3-golge`); aynı id iki sahnede olursa ilki kazanır. `M.tl.push` içinde `repeat:-1`, `setTimeout`, `async` yok; tekrar sayısını hesapla.
 - Rastgelelik gerekiyorsa yalnız `r2(a, b)` kullan (sabit tohumlu; `Math.random` kullanma).
 - `require`, `process`, dosya, ağ yok: dosya korumalı kutuda çalışır.
 - Dosya `module.exports = function ({ C, T, at, f, r2, rnd, W, H, M, karakter }) { ... return M.bitir(); };` biçimindedir.
