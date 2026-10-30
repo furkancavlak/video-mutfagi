@@ -22,17 +22,20 @@ function kuyrukOku(kok) {
 }
 
 // ---- default collaborators (all injectable)
-// factory so tests can pass a fake paylas module: returns {metrik, yorum_devam}; yorum_devam = comments containing a keyword (tr-lowercase)
+// factory so tests can pass a fake paylas module: returns {metrik, yorum_devam, not?}; yorum_devam = comments containing a keyword (tr-lowercase).
+// A failed comments fetch never blocks the measurement: yorum_devam is 0 and `not` says why.
 const sonucAlYap = P => async (mediaId, hesap, kelimeler) => {
   const metrik = await P.sonuc(mediaId, hesap);
-  let yorum_devam = 0;
+  let yorum_devam = 0, not;
   const a = P.readAyar(hesap);
   if (a && kelimeler && kelimeler.length) {
-    const j = await P.graph('GET', `/${mediaId}/comments`, { fields: 'text', access_token: a.token });
-    const kl = kelimeler.map(k => String(k).toLocaleLowerCase('tr'));
-    yorum_devam = (j.data || []).filter(c => { const t = String(c.text || '').toLocaleLowerCase('tr'); return kl.some(k => t.includes(k)); }).length;
+    try {
+      const j = await P.graph('GET', `/${mediaId}/comments`, { fields: 'text', access_token: a.token });
+      const kl = kelimeler.map(k => String(k).toLocaleLowerCase('tr'));
+      yorum_devam = (j.data || []).filter(c => { const t = String(c.text || '').toLocaleLowerCase('tr'); return kl.some(k => t.includes(k)); }).length;
+    } catch (e) { not = `yorumlar okunamadı, devam yorumu 0 sayıldı: ${e.message}`; }
   }
-  return { metrik, yorum_devam };
+  return { metrik, yorum_devam, ...(not ? { not } : {}) };
 };
 const varsayilanSonucAl = (...a) => sonucAlYap(require('../instagram/paylas'))(...a);
 // Ekşi favourites and Reddit scores are not one scale: rank inside each source, then take them in turns (Ekşi first).
@@ -129,11 +132,17 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
         if (!(gecen >= ayar.bekle_saat)) continue;
         // `elle` only overrides the decision (kararVer), never the measurement: the next episode needs this one's views
         if (kuru) { notlar.push(`ölçülecek: ${d.id} bölüm ${b.n}`); sonuc.olculen++; continue; }
-        if (!b.media_id) { notlar.push(`${d.id} bölüm ${b.n}: media_id yok, ölçülemedi`); continue; }
+        // a measurement that keeps failing would leave the episode yayinda forever: past the wait + 72 h a human looks at it
+        const olcemedi = neden => {
+          if (gecen > ayar.bekle_saat + ESKALASYON_SAAT) { b.durum = 'kontrol_et'; b.karar_neden = `${ESKALASYON_SAAT} saatten uzun süredir ölçülemiyor: ${neden}`; notlar.push(`${d.id} bölüm ${b.n}: ölçülemiyor, kontrol_et (${neden})`); }
+          else notlar.push(`${d.id} bölüm ${b.n}: ${neden}`);
+        };
+        if (!b.media_id) { olcemedi('media_id yok, ölçülemedi'); continue; }
         try {
           const r = (await sonucAl(b.media_id, hesap, ayar.yorum_kelimeleri || [])) || {};
           b.metrik = r.metrik || r; b.yorum_devam = r.yorum_devam ?? 0; sonuc.olculen++;
-        } catch (e) { notlar.push(`${d.id} bölüm ${b.n}: ölçüm hatası: ${e.message}`); continue; }
+          if (r.not) notlar.push(`${d.id} bölüm ${b.n}: ${r.not}`);
+        } catch (e) { olcemedi(`ölçüm hatası: ${e.message}`); continue; }
         const k = kararVer(d, b.n, diziler, ayar, simdi);
         b.karar = k.karar; b.karar_neden = k.neden;
         if (k.karar === 'bekle') {

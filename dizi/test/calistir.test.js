@@ -216,3 +216,28 @@ test('son-kosu.json is also written when the run throws or the lock refuses it',
   await calistir(ctx(), { simdi: SIMDI, kok: k });
   assert.ok(JSON.parse(fs.readFileSync(f, 'utf8')).notlar.some(n => /kilit/.test(n)));
 });
+
+test('a failed comments fetch still measures the episode: yorum_devam 0 and a run note', async () => {
+  const P = { sonuc: async () => ({ views: 500 }), readAyar: () => ({ token: 't' }), graph: async () => { throw new Error('GET /M/comments: 500'); } };
+  const r0 = await sonucAlYap(P)('M', 'h', ['devam']);
+  assert.strictEqual(r0.yorum_devam, 0); assert.deepStrictEqual(r0.metrik, { views: 500 }); assert.match(r0.not, /yorum/);
+  const k = kok();
+  kaydet(k, 'k', { diziler: [{ id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'yayinda', video: 'v', paylasildi: saatOnce(25), media_id: 'M' }), bolum(2), bolum(3)] }] });
+  const r = await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: sonucAlYap(P), uretBolum: fakeUret(), yeniDizi: async () => null });
+  const b = yukle(k, 'k').diziler[0].bolumler[0];
+  assert.strictEqual(b.durum, 'olculdu'); assert.strictEqual(b.yorum_devam, 0);
+  assert.ok(r.notlar.some(n => /a bölüm 1: .*yorum/.test(n)), r.notlar.join(' | '));
+});
+
+test('measurement that keeps failing past bekle_saat + 72 h goes to kontrol_et with the reason; earlier it stays yayinda', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [
+    { id: 'a', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'yayinda', video: 'v', paylasildi: saatOnce(93), media_id: 'M' })] },
+    { id: 'b', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'yayinda', video: 'w', paylasildi: saatOnce(30), media_id: 'N' })] },
+    { id: 'c', kanal: 'k', durum: 'aktif', bolumler: [bolum(1, { durum: 'yayinda', video: 'x', paylasildi: saatOnce(93) })] }] });
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async () => { throw new Error('token süresi doldu'); }, uretBolum: fakeUret(), yeniDizi: async () => null });
+  const [a, b, c] = yukle(k, 'k').diziler.map(d => d.bolumler[0]);
+  assert.strictEqual(a.durum, 'kontrol_et'); assert.match(a.karar_neden, /ölçüm.*token süresi doldu/);
+  assert.strictEqual(b.durum, 'yayinda');
+  assert.strictEqual(c.durum, 'kontrol_et'); assert.match(c.karar_neden, /media_id/);
+});
