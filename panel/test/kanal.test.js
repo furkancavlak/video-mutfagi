@@ -88,3 +88,9 @@ test('ekleHesap validates the account read from kimlik', () => {
   yaz('kanal/kanal_bozuk/kimlik.json', { hesap: 'a b/../c' }); yaz('kanal/kanal_bozuk/konu.json', {});
   assert.throws(() => P.ekleHesap({ kanal: 'kanal_bozuk' }), /geçersiz/);
 });
+
+test('kuyrukOzet: a series channel without hesaplar.<hesap> shows its konu.json dizi hours and limit', () => {
+  yaz('kanal/kanal_d/kimlik.json', { hesap: '@Seri_Hesap' }); yaz('kanal/kanal_d/konu.json', { dizi: { saatler: ['12:00', '17:00'], onay_gunluk: 2, gunluk_hedef: 3 } });
+  const o = P.kuyrukOzet('kanal_d');
+  assert.deepEqual(o.saatler, ['12:00', '17:00']); assert.equal(o.gunluk, 2);
+});

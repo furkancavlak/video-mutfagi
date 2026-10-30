@@ -85,7 +85,8 @@ function kuyrukOzet(kanal) {
   const hesap = kanal ? hesapGuvenli(kanalHesap(kanal)) : null, hesapYok = !!kanal && !hesap, kendi = j => hesapYok ? false : !hesap || isHesap(j) === hesap;
   const temiz = j => ({ id: j.id, hesap: isHesap(j), mp4: j.mp4, aciklama: j.aciklama, ne_zaman: j.ne_zaman, onay_gerekli: !!j.onay_gerekli, kaynak: j.kaynak, hata: j.son_hata || null, kontrol_et: !!j.kontrol_et, paylasildi: j.paylasildi, link: j.link, sonuc: j.sonuc || null });
   const ayar = Object.assign(okuJ(path.join(KUYRUK, 'ayar-ornek.json'), {}), okuJ(path.join(KOK, 'ayarlar', 'kuyruk.json'), {}));
-  const hs = (ayar.hesaplar || {})[hesap] || {};
+  // the same resolution the queue uses (hesaplar.<hesap> > the series channel's dizi block > global)
+  const hs = hesap ? require('../kuyruk/hesap-ayar.js').hesapAyar(ayar, hesap, KOK) : {};
   return {
     hesap, hesapYok, saglik: saglik(hesap, hesapYok),
     kuyruk: isler('bekleyen').filter(kendi).sort((a, b) => String(a.ne_zaman).localeCompare(String(b.ne_zaman))).map(temiz),

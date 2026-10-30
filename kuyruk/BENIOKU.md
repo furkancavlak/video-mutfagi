@@ -21,7 +21,7 @@ node kuyruk/kuyruk.js zamanlayici kur | kaldir | durum
 
 ## Birden fazla Instagram hesabı
 
-Her hesabın kendi anahtarı olur: `oxygbio` (varsayılan) `~/.video-mutfagi/instagram.json`, diğerleri `instagram-<ad>.json`. Bağlamak için `node instagram/paylas.js kaydet <token-dosyasi> --hesap <ad>`; `kontrol`, `yenile`, `gonder` komutları da `--hesap <ad>` alır. Kuyruğa `ekle ... --hesap <ad>` ile atanan iş o hesaptan çıkar, `--hesap` yoksa `oxygbio` sayılır. `ayarlar/kuyruk.json` içindeki `hesaplar.<ad>` altına o hesabın `paylasim_saatleri` ve `gunluk_en_fazla` değerleri yazılır (yoksa genel değerler geçerli). Günlük sınır ve boş saat hesabı her hesap için ayrı sayılır; bir hesabın dolması diğerini bekletmez. `durum` komutu bulunan her anahtar dosyası için süre uyarısı verir.
+Her hesabın kendi anahtarı olur: `oxygbio` (varsayılan) `~/.video-mutfagi/instagram.json`, diğerleri `instagram-<ad>.json`. Bağlamak için `node instagram/paylas.js kaydet <token-dosyasi> --hesap <ad>`; `kontrol`, `yenile`, `gonder` komutları da `--hesap <ad>` alır. Kuyruğa `ekle ... --hesap <ad>` ile atanan iş o hesaptan çıkar, `--hesap` yoksa `oxygbio` sayılır. `ayarlar/kuyruk.json` içindeki `hesaplar.<ad>` altına o hesabın `paylasim_saatleri` ve `gunluk_en_fazla` değerleri yazılır; yoksa hesabı o olan dizi kanalının `konu.json → dizi` bölümü (`saatler`, onay döneminde `onay_gunluk`, sonra `gunluk_hedef`), o da yoksa genel değerler geçerli (`kurulum/SUNUCU.md`). Günlük sınır ve boş saat hesabı her hesap için ayrı sayılır; bir hesabın dolması diğerini bekletmez. `durum` komutu bulunan her anahtar dosyası için süre uyarısı verir.
 
 ## Kurulum (ajan yapar, kullanıcı onaylar)
 

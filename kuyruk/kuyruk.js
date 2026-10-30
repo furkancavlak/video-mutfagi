@@ -49,20 +49,17 @@ function zamanCoz(s) {
   return d.toISOString();
 }
 
-// per-account settings: a.hesaplar[hesap] overrides the global hours/limit; default account is oxygbio
-const HESAP0 = 'oxygbio';
-const hesapAd = h => String(h || '').replace(/^@/, '').trim().toLowerCase() || HESAP0;
-function hesapAyar(a, hesap) {
-  const o = (a.hesaplar || {})[hesapAd(hesap)] || {};
-  return { paylasim_saatleri: o.paylasim_saatleri || a.paylasim_saatleri, gunluk_en_fazla: o.gunluk_en_fazla ?? a.gunluk_en_fazla };
-}
+// per-account settings: a.hesaplar[hesap] > the series channel's konu.json → dizi > global (kuyruk/hesap-ayar.js); default account is oxygbio
+const HA = require('./hesap-ayar');
+const { HESAP0, hesapAd } = HA;
+const hesapAyar = (a, hesap, kok = KOK) => HA.hesapAyar(a, hesap, kok);
 // how many of this account's jobs (posted or planned; `t` = paylasildi or ne_zaman) fall on local day `g` (YYYY-MM-DD)
 const gunlukSayi = (isl, g, hesap) => isl.filter(j => hesapAd(j.hesap) === hesapAd(hesap) && gun(j.paylasildi || j.ne_zaman) === g).length;
 
 // next free posting slot: the account's hours, at most its daily limit per day, never in the past.
-// dolu: ISO strings (oxygbio) or { t, hesap }; only the account's own entries count. simdi is injectable for tests.
-function sonrakiSlot(a, dolu, hesap, simdi = Date.now()) {
-  const h = hesapAyar(a, hesap), kendi = dolu.map(x => typeof x === 'string' ? { t: x } : x).filter(x => hesapAd(x.hesap) === hesapAd(hesap)).map(x => x.t);
+// dolu: ISO strings (oxygbio) or { t, hesap }; only the account's own entries count. simdi and kok are injectable for tests.
+function sonrakiSlot(a, dolu, hesap, simdi = Date.now(), kok = KOK) {
+  const h = hesapAyar(a, hesap, kok), kendi = dolu.map(x => typeof x === 'string' ? { t: x } : x).filter(x => hesapAd(x.hesap) === hesapAd(hesap)).map(x => x.t);
   const sayac = {}; for (const t of kendi) sayac[gun(t)] = (sayac[gun(t)] || 0) + 1;
   for (let g = 0; g < 60; g++) {
     for (const s of h.paylasim_saatleri) {
@@ -73,7 +70,7 @@ function sonrakiSlot(a, dolu, hesap, simdi = Date.now()) {
       return d.toISOString();
     }
   }
-  fail('60 gün içinde boş paylaşım saati bulunamadı (' + hesapAd(hesap) + '). ayarlar/kuyruk.json → paylasim_saatleri / gunluk_en_fazla (hesaplar.<ad> altında da olabilir)');
+  fail('60 gün içinde boş paylaşım saati bulunamadı (' + hesapAd(hesap) + '). ayarlar/kuyruk.json → paylasim_saatleri / gunluk_en_fazla (hesaplar.<ad> altında da olabilir) ya da dizi kanalının konu.json → dizi.saatler');
 }
 // jobs dropped without a time (e.g. by the topic radar) get the next free slot the first time the queue sees them
 function saatAta(a) {
@@ -269,7 +266,7 @@ function durumGoster() {
   console.log(uyari.length ? '\nDİKKAT:\n' + uyari.map(u => '  • ' + u).join('\n') : '\nHer şey yolunda.');
 }
 
-module.exports = { sonrakiSlot, gunlukSayi, kronSatiri, zamanlayici };
+module.exports = { sonrakiSlot, gunlukSayi, hesapAyar, kronSatiri, zamanlayici };
 const k = process.argv[2];
 if (require.main === module) (async () => {
   if (k === 'ekle') ekle();

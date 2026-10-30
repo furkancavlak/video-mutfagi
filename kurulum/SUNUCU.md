@@ -59,6 +59,16 @@ node dizi/zamanlayici.js durum ornek_kanal   # iki satırı da göstermeli
 
 Onay dönemi açıkken her bölüm panelde onay bekler, kendiliğinden paylaşılmaz.
 
+### Paylaşım saatleri nereden gelir
+
+Kuyruk bir hesabın saatlerini ve günlük sınırını şu sırayla bulur:
+
+1. `ayarlar/kuyruk.json` → `hesaplar.<hesap>` varsa o.
+2. Yoksa hesabı `kimlik.json → hesap` olan dizi kanalının `konu.json → dizi` bölümü: saatler `dizi.saatler`, günlük sınır onay dönemi açıkken (`onay_donemi` yazılmamışsa da açık sayılır) `dizi.onay_gunluk`, kapalıyken `dizi.gunluk_hedef`.
+3. Yoksa `ayarlar/kuyruk.json` içindeki genel `paylasim_saatleri` ve `gunluk_en_fazla`.
+
+Dizi kanalı için `hesaplar` bölümü yazmana gerek yok: paneldeki Diziler → saatler alanı doğrudan kuyruğun saatleridir. `hesaplar.<hesap>` yazarsan o kazanır ve paneldeki saatler alanı o hesap için etkisiz kalır. Dizi bölümü olmayan kanallar (ör. tek videoluk kanal) genel değerlerle devam eder.
+
 ## 5. Panelden bağla
 
 Bilgisayarındaki `ayarlar/panel.json` içine `sunucu` bölümünü ekle (örnek: `panel/ayar-ornek.json`). Panel sunucuya senin kendi `ssh` bağlantınla ulaşır; parola saklamaz. Bağlanınca Sıra ve Diziler sayfalarında "Bu bilgisayar / Sunucu" seçici çıkar.

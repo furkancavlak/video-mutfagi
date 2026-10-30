@@ -7,7 +7,7 @@
   ],
   "gunluk_en_fazla": 1,
   "_gunluk_en_fazla": "Yeni hesapta ilk haftalarda 1'i geçme (spam işareti riski).",
-  "_hesaplar": "Hesap başına saat ve günlük sınır (yoksa yukarıdaki genel değerler). Hesap adı instagram-<ad>.json token dosyasıyla eşleşir; işe --hesap <ad> ile atanır, atanmayan iş oxygbio sayılır.",
+  "_hesaplar": "Hesap başına saat ve günlük sınır (yoksa hesabı bu olan dizi kanalının konu.json → dizi bölümü, o da yoksa yukarıdaki genel değerler). Hesap adı instagram-<ad>.json token dosyasıyla eşleşir; işe --hesap <ad> ile atanır, atanmayan iş oxygbio sayılır.",
   "hesaplar": {
     "ornek_hesap": {
       "paylasim_saatleri": [

@@ -38,3 +38,46 @@ test('sonrakiSlot: plain ISO strings still count as oxygbio (backward compatible
   const simdi = new Date(2026, 10, 1, 0, 0).getTime();
   assert.equal(sonrakiSlot(a, [new Date(2026, 10, 1, 19).toISOString()], undefined, simdi), new Date(2026, 10, 2, 19).toISOString());
 });
+
+// ---- the series channel's own hours and limit (konu.json → dizi) when ayarlar/kuyruk.json has no hesaplar.<hesap>
+const fs = require('fs'), os = require('os'), path = require('path');
+const { hesapAyar } = require('../kuyruk.js');
+function kanalKok(dizi, hesap = '@Ornek_Hesap') {
+  const k = fs.mkdtempSync(path.join(os.tmpdir(), 'kuyruk-kanal-'));
+  const yaz = (rel, j) => { const f = path.join(k, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(j)); };
+  yaz('kanal/seri/kimlik.json', { hesap }); yaz('kanal/seri/konu.json', dizi ? { dizi } : {});
+  yaz('kanal/oxygbio/kimlik.json', { hesap: '@oxygbio' }); yaz('kanal/oxygbio/konu.json', { otomasyon: {} });
+  return k;
+}
+const GENEL = { paylasim_saatleri: ['19:00'], gunluk_en_fazla: 1 };
+const DZ = { saatler: ['12:00', '17:00', '21:00'], onay_donemi: true, onay_gunluk: 2, gunluk_hedef: 3 };
+
+test('hesapAyar: channel dizi block gives the hours; onay_gunluk in the approval period, gunluk_hedef after it', () => {
+  assert.deepEqual(hesapAyar(GENEL, 'ornek_hesap', kanalKok(DZ)), { paylasim_saatleri: DZ.saatler, gunluk_en_fazla: 2 });
+  assert.deepEqual(hesapAyar(GENEL, '@ORNEK_hesap ', kanalKok(DZ)).gunluk_en_fazla, 2, 'account name normalised');
+  assert.equal(hesapAyar(GENEL, 'ornek_hesap', kanalKok({ ...DZ, onay_donemi: false })).gunluk_en_fazla, 3);
+  const { onay_donemi, ...yok } = DZ;
+  assert.equal(hesapAyar(GENEL, 'ornek_hesap', kanalKok(yok)).gunluk_en_fazla, 2, 'missing onay_donemi = approval on');
+});
+
+test('hesapAyar: hesaplar.<hesap> wins over the channel; no dizi block or another account = global', () => {
+  const a = { ...GENEL, hesaplar: { ornek_hesap: { paylasim_saatleri: ['08:00'], gunluk_en_fazla: 5 } } };
+  assert.deepEqual(hesapAyar(a, 'ornek_hesap', kanalKok(DZ)), { paylasim_saatleri: ['08:00'], gunluk_en_fazla: 5 });
+  assert.deepEqual(hesapAyar(GENEL, 'ornek_hesap', kanalKok(null)), GENEL);
+  assert.deepEqual(hesapAyar(GENEL, 'hesap_b', kanalKok(DZ)), GENEL);
+});
+
+test('hesapAyar: oxygbio (no dizi block) is unchanged, with or without a hesap', () => {
+  const k = kanalKok(DZ);
+  assert.deepEqual(hesapAyar(GENEL, undefined, k), GENEL);
+  assert.deepEqual(hesapAyar(GENEL, '@oxygbio', k), GENEL);
+  const simdi = new Date(2026, 10, 1, 0, 0).getTime();
+  assert.equal(sonrakiSlot(GENEL, [], undefined, simdi, k), new Date(2026, 10, 1, 19).toISOString());
+});
+
+test('sonrakiSlot uses the channel hours and limit', () => {
+  const k = kanalKok(DZ), simdi = new Date(2026, 10, 1, 0, 0).getTime(), at = (d, h) => new Date(2026, 10, d, h, 0).toISOString();
+  assert.equal(sonrakiSlot(GENEL, [], 'ornek_hesap', simdi, k), at(1, 12));
+  const dolu = [{ t: at(1, 12), hesap: 'ornek_hesap' }, { t: at(1, 17), hesap: 'ornek_hesap' }];
+  assert.equal(sonrakiSlot(GENEL, dolu, 'ornek_hesap', simdi, k), at(2, 12), 'limit 2 in the approval period');
+});
