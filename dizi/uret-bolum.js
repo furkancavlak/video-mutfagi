@@ -64,9 +64,10 @@ async function uretBolum(ctx, dizi, n, { onayGerekli = true, calistir, kok = O.K
   uret = uret || require('../konu/uret').uret;
   const b = (dizi.bolumler || []).find(x => x.n === n);
   if (!b) throw new Error(`bölüm ${n} yok`);
+  const hazir = hazirYap(dizi, n);      // before any state change: a bad episode leaves it as it was
   b.durum = 'uretimde';
   // the scheduler is automation: spending follows konu.json → otomasyon.butce, never an interactive gate
-  const r = await uret(ctx, null, { hazir: hazirYap(dizi, n), onay: true, otomatik: true, onayGerekli, calistir, kok, yaz });
+  const r = await uret(ctx, null, { hazir, onay: true, otomatik: true, onayGerekli, calistir, kok, yaz });
   const durum = { uretildi: onayGerekli ? 'onay-bekliyor' : 'sirada', 'onay-bekliyor': 'onay-bekliyor', 'butce-bekliyor': 'butce-bekliyor', 'insan-bekliyor': 'kontrol_et' }[r.durum] || 'kontrol_et';
   if (durum === 'butce-bekliyor') {
     b.durum = 'uretimde';

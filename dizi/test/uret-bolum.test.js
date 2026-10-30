@@ -182,6 +182,40 @@ test('uret without hazir: idea pool, model-written script with the oxygbio examp
   await assert.rejects(U.uret(ctx2, 'f-1', { yaz: sessiz, calistir: model }), /ornek-yok-xyz/);
 });
 
+// what uretim/ses.js prints (stderr, captured) when the month's ElevenLabs characters are not enough
+const kotaBitti = () => ({ ok: false, cikti: '3 satır, 0 tanesi hazır. Üretilecek: 3 satır, ~300 karakter.\nElevenLabs kalan karakter: 12. Bu iş ~300 harcar.\n\nHATA: Bu ay kalan karakter yetmiyor. Metni kısalt ya da planı yükselt.' });
+
+test('episode out of ElevenLabs quota waits like a budget stop: uretimde, no video, no queue file', async () => {
+  const kok = tmp('dizi-ub-kota-'), d = dizi();
+  const ctx = { ...kanalCtx(), ayar: { otomasyon: { katman: 'formul', butce: { gunluk_karakter: 5000, aylik_karakter: 50000 } }, llm: {} } };
+  let cagri = 0;
+  const uret = (cx, id, o) => U.uret(cx, id, { ...o, sesKontrol: () => { cagri++; return kotaBitti(); } });
+  const r = await uretBolum(ctx, d, 1, { kok, uret, yaz: sessiz });
+  assert.strictEqual(cagri, 1);
+  assert.strictEqual(r.durum, 'butce-bekliyor');
+  assert.match(r.neden, /kalan karakter yetmiyor/);
+  assert.strictEqual(d.bolumler[0].durum, 'uretimde');
+  assert.strictEqual(d.bolumler[0].video, undefined);
+  assert.deepStrictEqual(kuyrukDosyalari(kok), []);
+});
+
+test('oxygbio (no hazir): the same quota message still stops for a human', async () => {
+  const ctx = kanalCtx(), vdir = tmp('dizi-ub-kota-fikir-');
+  const fikir = { id: 'f-1', baslik: 'Deneme fikri', oncul: 'ö', kanca: 'k', tirmanis: [], kapanis: 'son', kaynaklar: [], durum: 'secildi', puan: 7, puan_detay: {}, video: path.relative(O.KOK, vdir) };
+  O.yazJson(path.join(ctx.dir, 'fikirler.json'), { kanal: 'k', fikirler: [fikir], ham_konular: [] });
+  let n = 0;
+  const model = async () => ({ metin: JSON.stringify(++n === 1 ? { baslik: 'B', oncul: 'ö', satirlar: [{ rol: 'Ali', metin: 'Bir.' }, { rol: 'Ali', metin: 'İki.' }, { rol: 'Ali', metin: 'Üç.' }], bilgiler: [], aciklama_instagram: 'a' } : { bilgiler: [], eksik: [] }) });
+  const r = await U.uret(ctx, 'f-1', { onay: true, yaz: sessiz, calistir: model, kok: tmp('dizi-ub-kota-k-'), sesKontrol: kotaBitti });
+  assert.strictEqual(r.durum, 'insan-bekliyor');
+  assert.match(r.neden, /ses\.js çalışmadı/);
+});
+
+test('an episode that cannot be built leaves its state untouched', async () => {
+  const d = dizi({ anlatici: null });
+  await assert.rejects(uretBolum(kanalCtx(), d, 1, { kok: tmp('dizi-ub-bozuk-'), uret: async () => { throw new Error('must not run'); }, yaz: sessiz }));
+  assert.strictEqual(d.bolumler[0].durum, 'metin');
+});
+
 test('kuyrugaYaz: hesap only when given; the oxygbio job shape is unchanged', () => {
   const kok = tmp('dizi-ub-is-');
   const a = JSON.parse(fs.readFileSync(U.kuyrugaYaz({ video: 'videolar/a', mp4: 'a.mp4', aciklama: 'x', onayGerekli: true }, kok), 'utf8'));

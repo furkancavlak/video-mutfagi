@@ -112,4 +112,6 @@ test('new channel: card sound effects resolve to kanal/<kanal>/muzik/<name>.wav,
   const c = K.kapanisYukle(kimlik, dir)({ C: K.palet(kimlik), at: K.at, bas: 10, sonraki: null, hesap: '@x' });
   assert.deepStrictEqual(K.kapanisSesleri(c, dir), [[path.join(dir, 'muzik', 'pop.wav'), 10.05, .5], [path.join(dir, 'muzik', 'tik.wav'), 0, .2]]);
   assert.deepStrictEqual(K.kapanisSesleri({}, dir), []);
+  // a volume that is not a number never reaches ffmpeg as NaN
+  assert.deepStrictEqual(K.kapanisSesleri({ sfx: [['pop', 1, 'yuksek'], ['tik', 2, null], ['pop', 3, undefined]] }, dir).map(e => e[2]), [1, 1, 1]);
 });

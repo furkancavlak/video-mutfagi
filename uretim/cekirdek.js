@@ -141,12 +141,12 @@ function kapanisYukle(kimlik, kimlikDir) {
   return guvenliYukle(f);
 }
 // The card's sound effects ({sfx: [[name, time, volume]]}) as mix inputs: kanal/<kanal>/muzik/<name>.wav. A name that is
-// not a plain word or has no file is skipped (the card still plays, just without that sound).
+// not a plain word or has no file is skipped, a non-numeric volume plays at 1 (the card still plays, just without that sound).
 function kapanisSesleri(k, kimlikDir) {
   const out = [];
   for (const e of (k && k.sfx) || []) {
     const [ad, t, ses] = [].concat(e), f = /^[\w-]+$/.test(String(ad)) ? path.join(kimlikDir, 'muzik', ad + '.wav') : null;
-    if (f && fs.existsSync(f) && isFinite(t)) out.push([f, Math.max(0, +t), ses == null ? 1 : +ses]);
+    if (f && fs.existsSync(f) && isFinite(t)) out.push([f, Math.max(0, +t), isFinite(ses) && ses !== null && ses !== '' ? +ses : 1]);   // odd volume -> 1, never NaN
   }
   return out;
 }

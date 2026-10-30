@@ -181,7 +181,7 @@ function kodCikar(metin) {
 const basYorum = f => { const out = []; for (const l of fs.readFileSync(f, 'utf8').split('\n')) { if (!l.startsWith('//')) break; out.push(l.replace(/^\/\/ ?/, '')); } return out.join('\n'); };
 
 // ---- the run
-async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir, not = null, hazir = null, kok = O.KOK } = {}) {
+async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir, not = null, hazir = null, kok = O.KOK, sesKontrol } = {}) {
   if (hazir && !/^[\w.-]+$/.test(hazir.ad || '')) O.hata(`hazir.ad geçersiz: "${hazir.ad}" (harf, rakam, - _ . olmalı)`);
   const fikir = hazir ? { id: hazir.ad, baslik: hazir.baslik || hazir.ad } : H.fikirBul(H.havuzOku(ctx), fikirId);
   if (!hazir && fikir.durum === 'reddedildi') O.hata('Bu fikir reddedilmiş. Önce seç: node konu/radar.js sec ' + ctx.kanal + ' ' + fikir.id);
@@ -380,7 +380,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       const eksik = video.satirlar.filter((s, i) => !fs.existsSync(path.join(sesDir, `${String(i + 1).padStart(2, '0')}-${s.rol}.mp3`)));
       const karakter = eksik.reduce((a, s) => a + s.metin.length, 0);
       yaz(`\n💳 SES: ${eksik.length} satır, ~${karakter} ElevenLabs karakteri.`);
-      const sesBilgi = node('uretim/ses.js', [dir], { yakala: true });
+      const sesBilgi = sesKontrol ? sesKontrol(dir) : node('uretim/ses.js', [dir], { yakala: true });   // stdout + stderr
       if (sesBilgi.cikti) yaz(sesBilgi.cikti.split('\n').map(l => '   ' + l).join('\n'));
       let krediTahmin = null;
       if (katman === 'ucretli') {
@@ -392,6 +392,8 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       if (!izin.izin) throw new Dur(otomatik ? 'butce' : 'onay', izin.neden);
       if (!izinli('ses', karakter)) throw bekle('ses', { karakter, satir: eksik.length, kredi_tahmin: krediTahmin }, `Hiçbir şey harcanmadı. Önce metni oku: ${rel(path.join(dir, 'metin.md'))}\nBeğendiysen devam: ${devam}`);
       if (karakter) {
+        // a story episode out of monthly ElevenLabs characters waits like a budget stop (the scheduler retries it)
+        if (!sesBilgi.ok && hazir && /kalan karakter yetmiyor/.test(sesBilgi.cikti || '')) throw new Dur('butce', 'ElevenLabs bu ay kalan karakter yetmiyor; kota yenilenince ya da plan yükselince devam eder.');
         if (!sesBilgi.ok) throw new Dur('insan', 'ses.js çalışmadı (anahtar ya da kota). Çıktı yukarıda.');
         const r = node('uretim/ses.js', [dir, '--onay']);
         if (!r.ok) throw new Dur('insan', 'Ses üretimi yarıda kaldı (ElevenLabs). Çıktı yukarıda; tekrar çalıştırınca eksik satırlardan devam eder.');
@@ -494,7 +496,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
 
     // 14. hand-off to the posting queue (kuyruk/ is built separately; we only drop the job file)
     // yayinDk: the job is timed N minutes after the video is finished (otherwise the queue picks the next free slot)
-    // the job names its account (kimlik.hesap, an Instagram account name like "dur_anlatayim"; "@oxygbio" is a handle, not one)
+    // the job names its account (kimlik.hesap, an Instagram account name like "ornek_hesap"; "@oxygbio" is a handle, not one)
     const hesap = /^[\w.]+$/.test(ctx.kimlik.hesap || '') ? ctx.kimlik.hesap : null;
     const relK = f => path.relative(kok, f).split(path.sep).join('/');
     const is = kuyrugaYaz({ video: relK(dir), mp4: relK(mp4), aciklama: video.aciklama_instagram || video.baslik, onayGerekli, neZaman: typeof neZaman === 'number' ? new Date(Date.now() + neZaman * 60e3).toISOString() : neZaman, hesap, kaynak: hazir ? 'dizi' : undefined }, kok);
