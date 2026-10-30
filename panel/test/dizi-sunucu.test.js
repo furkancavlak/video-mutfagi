@@ -119,3 +119,12 @@ test('without makine=sunucu nothing goes to ssh', async () => {
   const r = await istek('GET', '/api/diziler?kanal=kanal_a');
   assert.equal(r.kod, 200); assert.equal(r.j.diziler.length, 1); assert.equal(kayit.length, 0);
 });
+
+test('--ozet reports ozellik: diziler (the home panel gates the server toggle on it); dizi hops get a short timeout', async () => {
+  const r = cli('--ozet');
+  assert.equal(r.status, 0); assert.ok(JSON.parse(r.stdout).ozellik.includes('diziler'));
+  const sureler = [];
+  P.kanca.sunucuda = (komut, sure) => { sureler.push(sure); return '{"ok":true}'; };
+  await istek('POST', '/api/dizi/tekrar', { makine: 'sunucu', kanal: 'kanal_a', id: 'd1', n: 1 });
+  assert.deepEqual(sureler, [20e3]);
+});

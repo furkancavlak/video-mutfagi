@@ -191,6 +191,15 @@ function sonuclarCiz() {
 // ---------------- Series (Diziler): one card per story, 3 episode chips, continuation settings
 const DZ_ET = { metin: ['', 'metin'], uretimde: ['sari', 'üretimde'], 'onay-bekliyor': ['sari', 'onay bekliyor'], sirada: ['yesil', 'sırada'], yayinda: ['yesil', 'yayında'], olculdu: ['yesil', 'ölçüldü'], atlandi: ['kirmizi', 'kesildi'], kontrol_et: ['kirmizi', 'kontrol et'] };
 let DZ = null, dzKirli = false;
+// the server toggle needs a server panel that knows the dizi flags (an old panel.js would just fail or hang): --ozet reports ozellik: ['diziler']
+const dzSunucuVar = () => !!(SV && !SV.hata && Array.isArray(SV.ozellik) && SV.ozellik.includes('diziler'));
+const dzM = () => makine === 'sunucu' && dzSunucuVar() ? 'sunucu' : 'yerel';   // machine Diziler actually talks to
+// every machine switch (Sıra or Diziler) goes through here: Diziler is reset with it; unsaved settings need a yes first
+function makineDegis(m) {
+  if (m !== makine && dzKirli && !confirm('Devam ayarlarında kaydedilmemiş değişiklik var. Atılsın mı?')) return false;
+  if (m !== makine) { makine = m; DZ = null; dzKirli = false; dizilerCiz(); dizilerYukle(); }
+  return true;
+}
 function dzEtiket(b) {
   if (b.durum === 'onay-bekliyor' && b.kuyruk_onay_gerekli === false) return ['yesil', 'sırada'];   // approved in the queue, waiting for its slot
   return DZ_ET[b.durum] || ['', b.durum];
@@ -202,15 +211,16 @@ function dzBolum(d, b) {
   return `<div class="dz-bolum"><div class="dz-bolum-ust"><b>Bölüm ${esc(b.n)}</b><span class="etiket ${r}">${esc(y)}</span>${b.bekleme === 'butce' ? '<span class="etiket sari">bütçe bekliyor</span>' : ''}</div>
     <div class="ince-yazi">${b.metrik && b.metrik.views != null ? sayi(b.metrik.views) + ' izlenme' : b.paylasildi ? 'sayılar henüz yok' : (b.kelime ? sayi(b.kelime) + ' kelime' : '')}${b.paylasildi ? ' · ' + esc(tarih(b.paylasildi, { weekday: undefined })) : ''}</div>
     ${karar || b.karar_neden ? `<div class="dz-karar ${b.karar === 'kes' ? 'kes' : ''}">${karar ? `<b>${esc(karar)}</b> ` : ''}${esc(b.karar_neden || '')}</div>` : ''}
-    <div class="dz-islem">${onayBekler ? `<button class="dugme ince sari" data-onayla="${esc(b.kuyruk_id)}" data-makine="${makine}">Onayla</button>` : ''}
+    <div class="dz-islem">${onayBekler ? `<button class="dugme ince sari" data-onayla="${esc(b.kuyruk_id)}" data-makine="${dzM()}">Onayla</button>` : ''}
       ${iz.devam ? `<button class="dugme ince" data-dkarar="devam" ${dk}>Devam ettir</button>` : ''}${iz.kes ? `<button class="dugme ince tehlike" data-dkarar="kes" ${dk}>Kes</button>` : ''}${iz.tekrar ? `<button class="dugme ince" data-dtekrar="1" ${dk}>Tekrar dene</button>` : ''}
-      ${b.mp4 && makine === 'yerel' ? `<button class="dugme ince" data-izle="${esc(b.mp4)}">Videoyu aç</button>` : ''}
+      ${b.mp4 && dzM() === 'yerel' ? `<button class="dugme ince" data-izle="${esc(b.mp4)}">Videoyu aç</button>` : ''}
       ${guvenli(b.link) ? `<a class="dugme ince" href="${esc(guvenli(b.link))}" target="_blank" rel="noopener">Reels</a>` : ''}</div></div>`;
 }
 const DZ_DURUM = { aktif: ['yesil', 'sürüyor'], bitti: ['', 'bitti'], kesildi: ['kirmizi', 'kesildi'] };
 function dizilerCiz() {
-  $('#dz-makine').innerHTML = ['yerel', ...(O.sunucu ? ['sunucu'] : [])].map(m => `<button data-dz-makine="${m}" class="${m === makine ? 'on' : ''}">${esc(makineAd(m))}</button>`).join('');
-  $('#dz-makine').hidden = !O.sunucu;
+  const dzSv = !!O.sunucu && dzSunucuVar();
+  $('#dz-makine').innerHTML = ['yerel', ...(dzSv ? ['sunucu'] : [])].map(m => `<button data-dz-makine="${m}" class="${m === dzM() ? 'on' : ''}">${esc(makineAd(m))}</button>`).join('');
+  $('#dz-makine').hidden = !dzSv;
   if (!DZ) { $('#dz-liste').innerHTML = '<div class="liste-bos">Diziler yükleniyor…</div>'; return; }
   $('#dz-say').textContent = DZ.diziler.length;
   const s = DZ.son_kosu;
@@ -252,25 +262,25 @@ function dzAyarOku() {
   return o;
 }
 async function dizilerYukle() {
-  const at = kanal, mk = makine; if (!at) return;
-  const ayni = () => at === kanal && mk === makine;   // channel or machine switched while waiting: drop the answer
+  const at = kanal, mk = dzM(); if (!at) return;
+  const ayni = () => at === kanal && mk === dzM();   // channel or machine switched while waiting: drop the answer
   try { const r = await api('diziler?kanal=' + encodeURIComponent(at) + (mk === 'sunucu' ? '&makine=sunucu' : '')); if (ayni()) DZ = r; } catch (e) { if (ayni()) DZ = { ayar: {}, diziler: [], son_kosu: null, hata: e.message }; }
   dizilerCiz();
 }
 async function dzKaydet(e) {
   e.preventDefault();
   const h = $('#dz-hata'); h.textContent = '';
-  try { await api('dizi/ayar', { kanal, makine, ayar: dzAyarOku() }); dzKirli = false; bildir('Ayarlar kaydedildi ✓'); await dizilerYukle(); }
+  try { await api('dizi/ayar', { kanal, makine: dzM(), ayar: dzAyarOku() }); dzKirli = false; bildir('Ayarlar kaydedildi ✓'); await dizilerYukle(); }
   catch (err) { h.textContent = err.message; bildir(err.message, true); }
 }
 async function dzTekrar(d) {
-  try { await api('dizi/tekrar', { kanal, makine, id: d.did, n: +d.dn }); bildir('Bölüm yeniden denenecek'); await dizilerYukle(); }
+  try { await api('dizi/tekrar', { kanal, makine: dzM(), id: d.did, n: +d.dn }); bildir('Bölüm yeniden denenecek'); await dizilerYukle(); }
   catch (err) { bildir(err.message, true); }
 }
 async function dzKarar(d) {
   const kes = d.dkarar === 'kes';
   if (kes && !confirm('Bu hikâyenin devamı kesilsin mi? Sonraki bölümler üretilmez.')) return;
-  try { await api('dizi/karar', { kanal, makine, id: d.did, n: +d.dn, karar: d.dkarar, neden: kes ? 'Furkan kesti' : 'Furkan devam ettirdi' }); bildir(kes ? 'Kesildi' : 'Devam edecek'); await dizilerYukle(); }
+  try { await api('dizi/karar', { kanal, makine: dzM(), id: d.did, n: +d.dn, karar: d.dkarar, neden: kes ? 'Furkan kesti' : 'Furkan devam ettirdi' }); bildir(kes ? 'Kesildi' : 'Devam edecek'); await dizilerYukle(); }
   catch (err) { bildir(err.message, true); }
 }
 
@@ -362,7 +372,7 @@ async function yukle() {
   } catch (e) { if (no !== yukleNo) return; $('main').innerHTML = `<div class="liste-bos" style="margin-top:40px">${esc(e.message)}</div>`; return; }
   hepsi();
   dizilerYukle();
-  if (O.sunucu) api('sunucu' + kq()).then(s => { if (no === yukleNo) SV = s; }).catch(e => { if (no === yukleNo) SV = { hata: 'Sunucuya ulaşılamadı: ' + e.message }; }).finally(() => { if (no === yukleNo) hepsi(); });
+  if (O.sunucu) api('sunucu' + kq()).then(s => { if (no === yukleNo) SV = s; }).catch(e => { if (no === yukleNo) SV = { hata: 'Sunucuya ulaşılamadı: ' + e.message }; }).finally(() => { if (no === yukleNo) { hepsi(); if (makine === 'sunucu') dizilerYukle(); } });
   if (IG === null) igYukle();
   if (J.some(x => x.durum === 'calisiyor')) islerYukle();
 }
@@ -383,9 +393,9 @@ document.addEventListener('click', e => {
   const d = b.dataset;
   if (d.kapat !== undefined) $('#pencere').close();
   else if (d.s) sekme(d.s);
-  else if (d.sira) { makine = d.sira; siraCiz(); sekme('sira'); }
-  else if (d.dzMakine) { makine = d.dzMakine; DZ = null; dzKirli = false; siraCiz(); dizilerCiz(); dizilerYukle(); }
-  else if (d.makineSec) { makine = d.makineSec; siraCiz(); }
+  else if (d.sira) { if (makineDegis(d.sira)) { siraCiz(); sekme('sira'); } }
+  else if (d.dzMakine) { if (makineDegis(d.dzMakine)) siraCiz(); }
+  else if (d.makineSec) { if (makineDegis(d.makineSec)) siraCiz(); }
   else if (d.onayla) islem('kuyruk/onayla', { id: d.onayla, makine: d.makine }, 'Onaylandı ✓');
   else if (d.iptal) { if (confirm('Bu video sıradan çıkarılsın mı?')) islem('kuyruk/iptal', { id: d.iptal, makine: d.makine }, 'Sıradan çıkarıldı'); }
   else if (d.fikir) islem('fikir', { is: d.fikir, kanal: d.kanal, id: d.id }, d.fikir === 'sec' ? 'Seçildi' : 'Reddedildi');

@@ -313,7 +313,7 @@ function diziKararGovde(b) {
 }
 const diziTekrarGovde = b => ({ kanal: kanalAdi(b.kanal), id: diziId(b.id), n: bolumNo(b.n) });
 const diziAyarGovde = b => ({ kanal: kanalAdi(b.kanal), ayar: diziAyarTemiz(b.ayar) });
-const sunucuJson = (bayrak, deger) => JSON.parse(kanca.sunucuda(`panel/panel.js ${bayrak} ${q(typeof deger === 'string' ? deger : JSON.stringify(deger))}`));
+const sunucuJson = (bayrak, deger) => JSON.parse(kanca.sunucuda(`panel/panel.js ${bayrak} ${q(typeof deger === 'string' ? deger : JSON.stringify(deger))}`, 20e3));
 const DiziDepo = () => require('../dizi/dizi.js');
 // manual decisions run under the scheduler's lock, so a running calistir cannot overwrite them
 function kilitli(kanal, fn) {
@@ -450,8 +450,9 @@ const sunucuYap = () => http.createServer(async (req, res) => {
 module.exports = { kanca, kuyrukOzet, instagram, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, ANAHTAR };
 if (require.main !== module) return;
 
+  // ozellik: lets the home panel know this copy has the --dizi* flags
 if (process.argv.includes('--ozet')) {
-  try { process.stdout.write(JSON.stringify(kuyrukOzet(arg('--kanal') || undefined))); process.exit(0); }
+  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler'] })); process.exit(0); }
   catch (e) { console.error('HATA: ' + e.message); process.exit(1); }
 }
 if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'); zamanDegistir(process.argv[i + 1], process.argv[i + 2]); console.log('Saat değişti.'); process.exit(0); }

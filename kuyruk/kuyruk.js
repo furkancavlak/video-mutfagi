@@ -210,28 +210,29 @@ function zamanlayiciVarMi() {
   if (WIN) return spawnSync('schtasks', ['/Query', '/TN', GOREV], { encoding: 'utf8' }).status === 0;
   const r = spawnSync('crontab', ['-l'], { encoding: 'utf8' }); return r.status === 0 && r.stdout.includes('kuyruk/kuyruk.js');
 }
-function zamanlayici(alt) {
-  const node = process.execPath, betik = path.join(__dirname, 'kuyruk.js');
+function zamanlayici(alt, o = {}) {
+  const sp = o.spawn || spawnSync, win = o.win ?? WIN;
+  const node = o.node || process.execPath, betik = path.join(__dirname, 'kuyruk.js');
   if (alt === 'kur') {
     fs.mkdirSync(path.dirname(LOG), { recursive: true });
-    if (WIN) {
+    if (win) {
       const ps = `$a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c ""${node}"" ""${betik}"" calistir >> ""${LOG}"" 2>&1' -WorkingDirectory '${KOK}';
 $t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5);
 $s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -MultipleInstances IgnoreNew;
 Register-ScheduledTask -TaskName '${GOREV}' -Action $a -Trigger $t -Settings $s -Description 'video-mutfagi: zamani gelen videoyu Instagram''a paylasir' -Force | Out-Null`;
-      const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8' });
+      const r = sp('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8' });
       if (r.status !== 0) fail('zamanlayıcı kurulamadı: ' + (r.stderr || r.stdout).trim().slice(0, 400));
     } else {
-      const satir = kronSatiri(KOK, node, betik, LOG);
-      const eski = spawnSync('crontab', ['-l'], { encoding: 'utf8' }).stdout || '';
-      const r = spawnSync('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js')).concat(satir).join('\n') + '\n', encoding: 'utf8' });
+      const satir = kronSatiri(KOK, node, betik.split(path.sep).join('/'), LOG);
+      const eski = sp('crontab', ['-l'], { encoding: 'utf8' }).stdout || '';
+      const r = sp('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js')).concat(satir).join('\n') + '\n', encoding: 'utf8' });
       if (r.status !== 0) fail('crontab yazılamadı: ' + r.stderr);
     }
     console.log(`Zamanlayıcı kuruldu: her 5 dakikada bir "calistir" çalışır. Kayıt: ${path.relative(KOK, LOG)}`);
     if (!/sunucu/i.test(ayar().makine_turu || '')) console.log('Ev bilgisayarı: paylaşım saatinde bilgisayar AÇIK ve UYANIK olmalı. Kapalıysa video açılınca, gecikmeli paylaşılır. Her gün `node kuyruk/kuyruk.js durum` ile bak.');
   } else if (alt === 'kaldir') {
-    if (WIN) spawnSync('schtasks', ['/Delete', '/TN', GOREV, '/F']);
-    else { const eski = spawnSync('crontab', ['-l'], { encoding: 'utf8' }).stdout || ''; spawnSync('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js')).join('\n') + '\n' }); }
+    if (win) sp('schtasks', ['/Delete', '/TN', GOREV, '/F']);
+    else { const eski = sp('crontab', ['-l'], { encoding: 'utf8' }).stdout || ''; sp('crontab', ['-'], { input: eski.split('\n').filter(l => l && !l.includes('kuyruk/kuyruk.js')).join('\n') + '\n' }); }
     console.log('Zamanlayıcı kaldırıldı. Kuyruktaki videolar duruyor, artık kendiliğinden paylaşılmayacak.');
   } else console.log(zamanlayiciVarMi() ? 'Zamanlayıcı kurulu.' : 'Zamanlayıcı KURULU DEĞİL: kuyruk kendiliğinden paylaşmaz. Kur: node kuyruk/kuyruk.js zamanlayici kur');
 }
@@ -260,7 +261,7 @@ function durumGoster() {
   console.log(uyari.length ? '\nDİKKAT:\n' + uyari.map(u => '  • ' + u).join('\n') : '\nHer şey yolunda.');
 }
 
-module.exports = { sonrakiSlot, gunlukSayi, kronSatiri };
+module.exports = { sonrakiSlot, gunlukSayi, kronSatiri, zamanlayici };
 const k = process.argv[2];
 if (require.main === module) (async () => {
   if (k === 'ekle') ekle();

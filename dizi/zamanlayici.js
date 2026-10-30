@@ -48,7 +48,13 @@ function kronSatiri(kok, node, kanal) {
 // deps are injectable (tests run without a real crontab): { kok, node, win, spawn }
 function olustur(o = {}) {
   const kok = o.kok || KOK0, node = o.node || process.execPath, win = o.win ?? process.platform === 'win32', spawn = o.spawn || ((c, a, x) => spawnSync(c, a, { encoding: 'utf8', ...x }));
-  const kronOku = () => { const r = spawn('crontab', ['-l']); return r.status === 0 ? String(r.stdout || '') : ''; };   // no crontab yet = status 1 = empty
+  // only "no crontab for <user>" means empty; any other failure aborts (writing back a partial read would wipe the user's crontab)
+  const kronOku = () => {
+    const r = spawn('crontab', ['-l']);
+    if (r.status === 0) return String(r.stdout || '');
+    if (/no crontab/i.test(String(r.stderr || ''))) return '';
+    throw new Error('crontab okunamadı: ' + String(r.stderr || r.error || 'bilinmeyen hata').trim().slice(0, 200));
+  };
   const kronYaz = satirlar => {
     const r = spawn('crontab', ['-'], { input: satirlar.join('\n').replace(/\n+$/, '') + '\n' });
     if (r.status !== 0) throw new Error('crontab yazılamadı: ' + (r.stderr || '').trim());
@@ -69,7 +75,8 @@ Register-ScheduledTask -TaskName '${gorevAdi(kanal)}' -Action $a -Trigger $t -Se
       if (r.status !== 0) throw new Error('zamanlayıcı kurulamadı: ' + String(r.stderr || r.stdout || '').trim().slice(0, 400));
       return { kanal, mesaj: `Zamanlayıcı kuruldu (${gorevAdi(kanal)}): her saat 20. dakikada bir "${kanal}" dizisi çalışır. Kayıt: kayit/dizi-${kanal}.log` };
     }
-    const isaret = diziIsareti(kanal), kalan = satirlar().filter(l => l.trim() && !isaret.test(l));
+    const isaret = diziIsareti(kanal), kalan = satirlar().filter(l => !isaret.test(l));
+    while (kalan.length && !kalan[kalan.length - 1].trim()) kalan.pop();   // trailing blanks only; inner ones stay
     kronYaz(kalan.concat(kronSatiri(kok, node, kanal)));
     return { kanal, mesaj: `Zamanlayıcı kuruldu: her saat 20. dakikada bir "${kanal}" dizisi çalışır. Kayıt: kayit/dizi-${kanal}.log` };
   }
@@ -77,7 +84,7 @@ Register-ScheduledTask -TaskName '${gorevAdi(kanal)}' -Action $a -Trigger $t -Se
   function kaldir(kanalAd) {
     const kanal = kanalSec(kok, kanalAd);
     if (win) spawn('schtasks', ['/Delete', '/TN', gorevAdi(kanal), '/F']);
-    else { const isaret = diziIsareti(kanal); kronYaz(satirlar().filter(l => l.trim() && !isaret.test(l))); }
+    else { const isaret = diziIsareti(kanal); kronYaz(satirlar().filter(l => !isaret.test(l))); }
     return { kanal, mesaj: `"${kanal}" zamanlayıcısı kaldırıldı. Üretilmiş videolar ve kuyruk duruyor; kuyruk zamanlayıcısına dokunulmadı.` };
   }
 

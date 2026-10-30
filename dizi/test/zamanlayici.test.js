@@ -16,7 +16,7 @@ function sahte(baslangic = '', bozuk = false) {
   d.spawn = (c, a, x = {}) => {
     d.cagri.push([c, ...a]);
     if (c !== 'crontab') return { status: 0, stdout: '', stderr: '' };
-    if (a[0] === '-l') return d.tab === null ? { status: 1, stdout: '', stderr: 'no crontab' } : { status: 0, stdout: d.tab, stderr: '' };
+    if (a[0] === '-l') return d.tab === null ? { status: 1, stdout: '', stderr: d.hata || 'no crontab for u' } : { status: 0, stdout: d.tab, stderr: '' };
     if (bozuk) return { status: 1, stdout: '', stderr: 'hata' };
     d.tab = x.input; return { status: 0, stdout: '', stderr: '' };
   };
@@ -79,6 +79,14 @@ test('kanal is validated against kanal/ folders; no channel works only when exac
   assert.throws(() => z.kur('kanal_a; rm -rf /'), /kanal yok/);
   assert.equal(d.tab, '');   // nothing written
   z.kur(); assert.ok(d.tab.includes('dizi/calistir.js') && d.tab.includes(' kanal_a '));
+});
+
+test('a crontab -l failure other than "no crontab" aborts and writes nothing; blank lines are kept', () => {
+  const d = sahte(null); d.hata = 'crontab: cannot open /var/spool: permission denied';
+  assert.throws(() => yap(d).kur('kanal_a'), /crontab okunamadı/);
+  assert.ok(!d.cagri.some(c => c[1] === '-'));
+  const e = sahte('# a\n\n# b\n'); yap(e).kur('kanal_a');
+  assert.ok(e.tab.startsWith('# a\n\n# b\n20 * * * *'));
 });
 
 test('a failing crontab write is an error, not silent success', () => {
