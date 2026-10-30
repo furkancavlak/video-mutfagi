@@ -49,33 +49,76 @@ function sirayaKoy(ogeler) {
   return out;
 }
 // candidates are fetched once per run (the source's notes go to the run notes); a story whose split fails (too short,
-// not faithful) is recorded in kayit/dizi/<kanal>/reddedilen.json and never split again. sonuc: the run's result
-// (notlar, reddedilen count), optional.
+// not faithful, no story) is recorded in kayit/dizi/<kanal>/reddedilen.json and never split again. sonuc: the run's
+// result (notlar, reddedilen count), optional.
+// With themes (konu.json → dizi.kaynak.konular) the next story comes from the weekly pool (dizi/havuz.js) by theme
+// rotation (least recently used theme, never one already used today) and favourites; a dry pool falls back to the live
+// search with a "havuz azaldı" note. The new series carries its theme in `konu`.
 const redDosya = (kok, kanal) => path.join(kok, 'kayit', 'dizi', kanal, 'reddedilen.json');
-function yeniDiziYap({ kaynak, bol } = {}) {
-  kaynak = kaynak || require('./kaynak'); bol = bol || require('./bol');
+// live candidates: themed ones of the allowed themes in rotation order (favourites inside a theme), then the rest
+function siraliAdaylar(aday, sira) {
+  const i = new Map(sira.map((k, n) => [k, n]));
+  const temali = aday.filter(h => h.konu && i.has(h.konu)).sort((a, b) => i.get(a.konu) - i.get(b.konu) || (b.puan || 0) - (a.puan || 0));
+  return [...temali, ...sirayaKoy(aday.filter(h => !h.konu))];
+}
+function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
+  kaynak = kaynak || require('./kaynak'); bol = bol || require('./bol'); havuz = havuz || require('./havuz');
+  entryGetir = entryGetir || (no => require('../konu/kaynaklar/eksi').entryGetir(no));
+  const tema = require('./tema');
   let aday = null;
   return async (ctx, { simdi, diziler, kok, sonuc }) => {
     kok = kok || ctx.kok || ortak.KOK;
-    if (!aday) {
-      const k = (await kaynak.adaylar(ctx, { simdi, kok })) || {};
-      if (sonuc) for (const n of k.notlar || []) sonuc.notlar.push('kaynak: ' + n);
-      aday = sirayaKoy(k.ogeler || []);
-    }
+    const not = m => { if (sonuc) sonuc.notlar.push(m); };
     const f = redDosya(kok, ctx.kanal);
-    let red; try { red = ortak.okuJson(f, { reddedilen: [] }); } catch (e) { red = { reddedilen: [] }; if (sonuc) sonuc.notlar.push(`reddedilen.json okunamadı, baştan yazılacak: ${e.message}`); }
+    let red; try { red = ortak.okuJson(f, { reddedilen: [] }); } catch (e) { red = { reddedilen: [] }; not(`reddedilen.json okunamadı, baştan yazılacak: ${e.message}`); }
     if (!Array.isArray(red.reddedilen)) red.reddedilen = [];
-    const kullanilan = new Set([...(diziler || []).map(d => d.id), ...red.reddedilen.map(x => x.id)]);
-    while (aday.length) {
-      const h = aday.shift();
-      if (kullanilan.has(h.id)) continue;
-      const r = await bol.bol(ctx, h, {});
-      if (r && r.ok) return { id: h.id, kanal: ctx.kanal, kaynak: { tur: h.tur, url: h.url, puan: h.puan }, ...r.dizi, olusturma: new Date(simdi).toISOString() };
+    const kullanilan = new Set([...(diziler || []).flatMap(d => [d.id, d.kaynak && d.kaynak.id]).filter(Boolean), ...red.reddedilen.map(x => x.id)]);
+    const reddet = (h, r) => {
       const ayrinti = r && r.ayrinti != null ? String(typeof r.ayrinti === 'string' ? r.ayrinti : JSON.stringify(r.ayrinti)).slice(0, 300) : undefined;
       red.reddedilen.push({ kaynak: h.tur || null, id: h.id, neden: (r && r.neden) || 'bölünemedi', ...(ayrinti ? { ayrinti } : {}), zaman: new Date(simdi).toISOString() });
       kullanilan.add(h.id);
       ortak.yazJson(f, red);
       if (sonuc) sonuc.reddedilen = (sonuc.reddedilen || 0) + 1;
+    };
+    const yeni = (h, r, konu) => ({ id: h.id, kanal: ctx.kanal, kaynak: { tur: h.tur, url: h.url, puan: h.puan }, ...r.dizi, ...(konu ? { konu } : {}), olusturma: new Date(simdi).toISOString() });
+    const temalar = tema.konular(ctx), sira = tema.temaSirasi(temalar, diziler, simdi);
+
+    // 1. the weekly pool
+    if (temalar.length) {
+      const H = havuz.yukle(kok, ctx.kanal), esik = havuz.ayar(ctx).azaldi;
+      const kaydetH = () => havuz.kaydet(kok, ctx.kanal, H);
+      for (const x of havuz.sirala(H, sira)) {
+        if (kullanilan.has(x.id)) { Object.assign(x, { durum: 'kullanildi' }); kaydetH(); continue; }
+        let h;
+        try {
+          const e = await entryGetir(x.id.replace(/^eksi-/, ''));
+          h = { id: x.id, tur: 'eksi', url: x.link, baslik: e.baslik || x.baslik, metin: e.metin, puan: e.fav ?? x.fav, dil: 'tr' };
+        } catch (e) {
+          not(`havuz ${x.id}: entry alınamadı: ${e.message}`);
+          if (/HTTP 404|bulunamadı/.test(e.message)) { Object.assign(x, { durum: 'elendi', neden: 'entry artık yok' }); kaydetH(); }
+          continue;
+        }
+        const r = await bol.bol(ctx, h, {});
+        if (r && r.ok) { Object.assign(x, { durum: 'kullanildi', kullanildi: new Date(simdi).toISOString() }); kaydetH(); return yeni(h, r, x.konu); }
+        Object.assign(x, { durum: 'elendi', neden: (r && r.neden) || 'bölünemedi' }); kaydetH();
+        reddet(h, r);
+      }
+      const kalan = H.hikayeler.filter(x => x.durum === 'havuzda').length;
+      not(`havuz azaldı: ${kalan} hikâye kaldı${sira.length ? ', bugün kullanılabilecek temada hikâye yok: canlı aramaya geçildi' : ''} (node dizi/havuz.js doldur ${ctx.kanal})`);
+    }
+
+    // 2. live search
+    if (!aday) {
+      const k = (await kaynak.adaylar(ctx, { simdi, kok })) || {};
+      for (const n of k.notlar || []) not('kaynak: ' + n);
+      aday = k.ogeler || [];
+    }
+    for (const h of siraliAdaylar(aday, sira)) {
+      aday = aday.filter(x => x !== h);
+      if (kullanilan.has(h.id)) continue;
+      const r = await bol.bol(ctx, h, {});
+      if (r && r.ok) return yeni(h, r, h.konu);
+      reddet(h, r);
     }
     return null;
   };
@@ -254,7 +297,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
   finally { kilit.birak(); sonKosu(); }
 }
 
-module.exports = { calistir, sonucAlYap, uretilecekler, senkronla, yeniDiziYap, sirayaKoy };
+module.exports = { calistir, sonucAlYap, uretilecekler, senkronla, yeniDiziYap, sirayaKoy, siraliAdaylar };
 
 if (require.main === module) {
   const kanal = process.argv[2], kuru = process.argv.includes('--kuru');

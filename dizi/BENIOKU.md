@@ -27,3 +27,11 @@ Test: `node --test "dizi/test/*.test.js"`
 - `bol(ctx, hikaye)`: hikâyeyi kendi akışına göre **2-5 bölüme** böler (bölüm başı yaklaşık 1 dakika; uzun hikâye daha çok bölüm alır). Uzunluk ret sebebi değildir. Ret: kaynak 250 kelimenin altındaysa `kisa`; biçim bozuksa (bölüm sayısı, boş bölüm, özet kuralı) bir kez düzeltilip yine bozuksa `bicim`; uydurma iki denemede de varsa `sadakat`.
 - 2. ve sonraki bölümler "Önceki bölümde…" ile açılan tek cümlelik özet paragrafıyla başlar (hedef en fazla 15 kelime; 2 cümleyi ya da 25 kelimeyi geçen özet reddedilip yeniden istenir).
 - Dizinin bölüm sayısı her yerde dizinin kendisinden okunur: son bölüm `n === bolumler.length`, kapanış kartı `toplam_bolum`, açıklama "Final." yalnız son bölümde, panel 1-5.
+
+## Temalar ve haftalık hikâye havuzu (tema.js, havuz.js)
+
+- `konu.json → dizi.kaynak.konular: [{ad, basliklar: ['/slug--id']}]`: sabit temalar ve Ekşi hikâye başlıkları. Başlığın en beğenilenler sayfası (`?a=nice`, girişsiz çalışır) okunur; tema içinde yalnız favori sırası, eski entry de olur.
+- Yeni dizinin teması: en uzun süredir kullanılmayan tema; aynı gün (İstanbul) kullanılmış tema yeniden seçilmez. Dizi temasını `konu` alanında taşır.
+- `node dizi/havuz.js doldur <kanal>` (zamanlayıcı her pazartesi 04:00 İstanbul): temaları tarayıp `kayit/dizi/<kanal>/havuz.json`'u ~1 aylık stoğa (`dizi.havuz.hedef`, 60) doldurur. Her hikâye `hikayeMi` kontrolünden geçer (2-3 cümlelik özetle); geçmeyen `elendi` olarak kalır. Kullanılmış/reddedilmiş/havuzdaki id yeniden eklenmez. 403/429'da durur, istekler arası `kaynak.aralik_ms`.
+- `calistir` yeni diziyi önce havuzdan alır (tema sırası + favori); havuz boşsa "havuz azaldı" notuyla canlı aramaya düşer.
+- Panel: `GET /api/dizi/havuz?kanal=` (tema başına stok, sıradaki hikâyeler), `POST /api/dizi/havuz/ele {kanal, id, neden}` (kilitli). Arayüzü ayrı iş.

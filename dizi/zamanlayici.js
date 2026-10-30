@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Scheduler for the series runner: installs / removes / shows the hourly (:20) job for one channel.
+// Scheduler for the series runner: installs / removes / shows the hourly (:20) job for one channel, plus its weekly
+// story-pool fill (Monday 04:00 Istanbul time, dizi/havuz.js doldur).
 //   node dizi/zamanlayici.js kur [kanal] | kaldir [kanal] | durum [kanal]
 // Linux/Mac: one crontab line per channel. Windows: one Task Scheduler task per channel.
 // Each channel is found by its own marker (`dizi/calistir.js` + channel name), so installing or removing one channel never
@@ -35,7 +36,9 @@ const guvenliYol = (p, ad) => { if (/["$`\\\r\n]/.test(p) && process.platform !=
 
 // the line that belongs to this channel (any quoting of the paths) / to the queue
 const diziIsareti = kanal => new RegExp(`dizi/calistir\\.js"?\\s+${kacis(kanal)}(\\s|$)`);
-const herDiziSatiri = /dizi\/calistir\.js/;
+const herDiziSatiri = /dizi\/(calistir|havuz)\.js/;
+const havuzIsareti = kanal => new RegExp(`dizi/havuz\\.js"?\\s+doldur\\s+${kacis(kanal)}(\\s|$)`);
+const havuzGorevAdi = kanal => `Video Mutfagi Havuz ${kanal}`;
 const kuyrukSatiriMi = l => l.includes('kuyruk/kuyruk.js');
 const gorevAdi = kanal => `Video Mutfagi Dizi ${kanal}`;
 
@@ -45,7 +48,17 @@ function kronSatiri(kok, node, kanal) {
   return `20 * * * * cd "${kok}" && ${ON} "${node}" "${betik}" ${kanal} >> "${log}" 2>&1`;
 }
 
-// deps are injectable (tests run without a real crontab): { kok, node, win, spawn }
+// weekly pool fill: Monday 04:00 in Istanbul (UTC+3, no DST), written in the machine's own cron time
+// (yerelDk: this machine's UTC offset in minutes, e.g. 0 on a UTC server -> Monday 01:00)
+function havuzKronSatiri(kok, node, kanal, yerelDk = -new Date().getTimezoneOffset()) {
+  guvenliYol(kok, 'repo'); guvenliYol(node, 'node');
+  let dk = 4 * 60 + (yerelDk - 180), gun = 1;
+  if (dk < 0) { dk += 1440; gun = 0; } else if (dk >= 1440) { dk -= 1440; gun = 2; }
+  const betik = path.join(kok, 'dizi', 'havuz.js').split(path.sep).join('/'), log = path.join(kok, 'kayit', `havuz-${kanal}.log`).split(path.sep).join('/');
+  return `${dk % 60} ${Math.floor(dk / 60)} * * ${gun} cd "${kok}" && ${ON} "${node}" "${betik}" doldur ${kanal} >> "${log}" 2>&1`;
+}
+
+// deps are injectable (tests run without a real crontab): { kok, node, win, spawn, yerelDk }
 function olustur(o = {}) {
   const kok = o.kok || KOK0, node = o.node || process.execPath, win = o.win ?? process.platform === 'win32', spawn = o.spawn || ((c, a, x) => spawnSync(c, a, { encoding: 'utf8', ...x }));
   // only "no crontab for <user>" means empty; any other failure aborts (writing back a partial read would wipe the user's crontab)
@@ -73,29 +86,37 @@ $s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -
 Register-ScheduledTask -TaskName '${gorevAdi(kanal)}' -Action $a -Trigger $t -Settings $s -Description 'video-mutfagi: dizi uretimi' -Force | Out-Null`;
       const r = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps]);
       if (r.status !== 0) throw new Error('zamanlayıcı kurulamadı: ' + String(r.stderr || r.stdout || '').trim().slice(0, 400));
-      return { kanal, mesaj: `Zamanlayıcı kuruldu (${gorevAdi(kanal)}): her saat 20. dakikada bir "${kanal}" dizisi çalışır. Kayıt: kayit/dizi-${kanal}.log` };
+      // weekly pool fill: this PC runs on Istanbul time
+      const hb = path.join(kok, 'dizi', 'havuz.js'), hl = path.join(kok, 'kayit', `havuz-${kanal}.log`);
+      const ps2 = `$a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c ""${t(node)}"" ""${t(hb)}"" doldur ${kanal} >> ""${t(hl)}"" 2>&1' -WorkingDirectory '${t(kok)}';
+$t = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 04:00;
+$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 4) -MultipleInstances IgnoreNew -Priority 9;
+Register-ScheduledTask -TaskName '${havuzGorevAdi(kanal)}' -Action $a -Trigger $t -Settings $s -Description 'video-mutfagi: haftalik hikaye havuzu' -Force | Out-Null`;
+      const r2 = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps2]);
+      if (r2.status !== 0) throw new Error('havuz zamanlayıcısı kurulamadı: ' + String(r2.stderr || r2.stdout || '').trim().slice(0, 400));
+      return { kanal, mesaj: `Zamanlayıcı kuruldu (${gorevAdi(kanal)}): her saat 20. dakikada bir "${kanal}" dizisi çalışır. Kayıt: kayit/dizi-${kanal}.log. Hikâye havuzu her pazartesi 04:00'te dolar (${havuzGorevAdi(kanal)}).` };
     }
-    const isaret = diziIsareti(kanal), kalan = satirlar().filter(l => !isaret.test(l));
+    const isaret = diziIsareti(kanal), hIsaret = havuzIsareti(kanal), kalan = satirlar().filter(l => !isaret.test(l) && !hIsaret.test(l));
     while (kalan.length && !kalan[kalan.length - 1].trim()) kalan.pop();   // trailing blanks only; inner ones stay
-    kronYaz(kalan.concat(kronSatiri(kok, node, kanal)));
-    return { kanal, mesaj: `Zamanlayıcı kuruldu: her saat 20. dakikada bir "${kanal}" dizisi çalışır. Kayıt: kayit/dizi-${kanal}.log` };
+    kronYaz(kalan.concat(kronSatiri(kok, node, kanal), havuzKronSatiri(kok, node, kanal, o.yerelDk)));
+    return { kanal, mesaj: `Zamanlayıcı kuruldu: her saat 20. dakikada bir "${kanal}" dizisi çalışır. Kayıt: kayit/dizi-${kanal}.log. Hikâye havuzu her pazartesi 04:00'te (İstanbul) dolar: kayit/havuz-${kanal}.log` };
   }
 
   function kaldir(kanalAd) {
     const kanal = kanalSec(kok, kanalAd);
-    if (win) spawn('schtasks', ['/Delete', '/TN', gorevAdi(kanal), '/F']);
-    else { const isaret = diziIsareti(kanal); kronYaz(satirlar().filter(l => !isaret.test(l))); }
-    return { kanal, mesaj: `"${kanal}" zamanlayıcısı kaldırıldı. Üretilmiş videolar ve kuyruk duruyor; kuyruk zamanlayıcısına dokunulmadı.` };
+    if (win) { spawn('schtasks', ['/Delete', '/TN', gorevAdi(kanal), '/F']); spawn('schtasks', ['/Delete', '/TN', havuzGorevAdi(kanal), '/F']); }
+    else { const isaret = diziIsareti(kanal), hIsaret = havuzIsareti(kanal); kronYaz(satirlar().filter(l => !isaret.test(l) && !hIsaret.test(l))); }
+    return { kanal, mesaj: `"${kanal}" zamanlayıcısı (saatlik dizi + haftalık havuz) kaldırıldı. Üretilmiş videolar ve kuyruk duruyor; kuyruk zamanlayıcısına dokunulmadı.` };
   }
 
   function durum(kanalAd) {
     const kanal = kanalAd ? kanalSec(kok, kanalAd) : null;
     if (win) {
       const adlar = kanal ? [kanal] : kanallar(kok);
-      const var_ = adlar.filter(k => spawn('schtasks', ['/Query', '/TN', gorevAdi(k)]).status === 0);
-      return { dizi: var_.map(k => gorevAdi(k)), kuyruk: spawn('schtasks', ['/Query', '/TN', 'Video Mutfagi Kuyruk']).status === 0 };
+      const var_ = adlar.flatMap(k => [gorevAdi(k), havuzGorevAdi(k)]).filter(g => spawn('schtasks', ['/Query', '/TN', g]).status === 0);
+      return { dizi: var_, kuyruk: spawn('schtasks', ['/Query', '/TN', 'Video Mutfagi Kuyruk']).status === 0 };
     }
-    const l = satirlar(), isaret = kanal ? diziIsareti(kanal) : herDiziSatiri;
+    const l = satirlar(), isaret = kanal ? { test: x => diziIsareti(kanal).test(x) || havuzIsareti(kanal).test(x) } : herDiziSatiri;
     return { dizi: l.filter(x => isaret.test(x)), kuyruk: l.some(kuyrukSatiriMi) };
   }
   return { kur, kaldir, durum };
@@ -114,5 +135,5 @@ function cli(argv = process.argv.slice(2), ortam = {}) {
   } catch (e) { console.error('\nHATA: ' + e.message + '\n'); process.exit(1); }
 }
 
-module.exports = { olustur, kronSatiri, diziIsareti, kanallar, kanalSec, ON };
+module.exports = { olustur, kronSatiri, havuzKronSatiri, diziIsareti, havuzIsareti, kanallar, kanalSec, ON };
 if (require.main === module) cli();

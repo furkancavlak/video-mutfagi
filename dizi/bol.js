@@ -52,11 +52,11 @@ function bicimHatalari(o) {
   return h;
 }
 
-// is it a real-life anecdote with events, a turn and an outcome? -> {hikaye, neden}. Also used by the story pool.
+// is it a real-life anecdote with events, a turn and an outcome? -> {hikaye, neden, ozet}. Also used by the story pool.
 async function hikayeMi(ctx, hikaye, { calistir } = {}) {
   const llm = ctx.ayar && ctx.ayar.llm;
   const r = await LLM.sor(LLM.istem('hikaye-mi', { baslik: hikaye.baslik || '', metin: hikaye.metin }), { ayar: llm, model: llm && llm.model_metin, efor: 'low', json: true, calistir, is: 'hikaye-mi' });
-  return { hikaye: !!(r && r.hikaye === true), neden: String((r && r.neden) || '').slice(0, 200) };
+  return { hikaye: !!(r && r.hikaye === true), neden: String((r && r.neden) || '').slice(0, 200), ozet: String((r && r.ozet) || '').trim().slice(0, 600) };
 }
 
 async function bol(ctx, hikaye, { calistir } = {}) {
@@ -102,4 +102,4 @@ async function bol(ctx, hikaye, { calistir } = {}) {
   return { ok: true, dizi };
 }
 
-module.exports = { bol, hikayeMi, sesSec, bicimHatalari, MIN_KAYNAK, MAX_SAYI };
+module.exports = { bol, hikayeMi, oneri, sesSec, bicimHatalari, MIN_KAYNAK, MAX_SAYI };

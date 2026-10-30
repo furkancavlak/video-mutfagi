@@ -18,8 +18,8 @@ Metin şu üçünü birden taşıyorsa **hikâyedir**:
 
 ## Yanıt biçimi
 
-Yalnız şu JSON'u döndür:
+Yalnız şu JSON'u döndür. Hikâyeyse `ozet` alanına 2-3 cümlelik Türkçe bir özet yaz (ne oldu, dönüm noktası, nasıl bitti; kaynakta olmayan bir şey ekleme). Hikâye değilse `ozet` boş kalır.
 
 ```json
-{"hikaye": true, "neden": "tek cümlelik gerekçe"}
+{"hikaye": true, "neden": "tek cümlelik gerekçe", "ozet": "2-3 cümle"}
 ```

@@ -1,12 +1,15 @@
 // Story candidates with full text: Ekşi entries (debe page + configured topics/ids) and Reddit self posts.
+// With themes (kaynak.konular, dizi/tema.js) the Ekşi candidates come from the themes' story topics (best-of pages) and
+// carry `konu`; the generic debe page is then read only when kaynak.debe is true.
 // adaylar(ctx, {simdi, getir, kok}) -> {ogeler: Hikaye[], notlar}. Never throws on a source failure: it adds a note and goes on.
-//   Hikaye = {id:'eksi-<entry>'|'reddit-<post>', tur, url, baslik, metin, puan, dil}
+//   Hikaye = {id:'eksi-<entry>'|'reddit-<post>', tur, url, baslik, metin, puan, dil, konu?, tarih?}
 // Config (ctx.ayar.dizi.kaynak): subredditler, eksi_basliklar (entry ids/paths or topic paths), eksi_min_fav, min_kelime, aralik_ms.
 const eksi = require('../konu/kaynaklar/eksi'), reddit = require('../konu/kaynaklar/reddit');
 const { rssAyristir } = reddit;
 const { uyu } = require('../konu/kaynaklar/ag');
 const { KOK } = require('../konu/ortak');
 const { yukle } = require('./dizi');
+const tema = require('./tema');
 
 const VARSAYILAN = { subredditler: ['tifu', 'AmItheAsshole', 'relationship_advice', 'confession', 'pettyrevenge'], eksi_basliklar: [], eksi_min_fav: 300, min_kelime: 250, aralik_ms: 2000, reddit_adet: 5, eksi_adet: 10 };
 // min_kelime 250 = bol.js MIN_KAYNAK: a story the splitter can split is a candidate (30.10: no fixed episode length)
@@ -29,8 +32,17 @@ async function adaylar(ctx, { simdi, getir = varsayilanGetir, kok } = {}) {
 
   // ---- Ekşi
   try {
-    const idler = [], konular = [];
-    try {
+    const idler = [], konular = [], temalar = tema.konular(ctx);
+    // themes first: each theme's topics, best-of page 1; a story needs min_kelime words, favourites rank it later
+    for (const t of temalar) for (const b of t.basliklar) {
+      try {
+        for (const h of await tema.basliktanAl(b, { getir: u => al(u) })) {
+          if (gorulen.has(h.id) || kullanilan.has(h.id) || kelimeSay(h.metin) < a.min_kelime) continue;
+          gorulen.add(h.id); ogeler.push({ ...h, konu: t.ad });
+        }
+      } catch (e) { notlar.push(`ekşi tema ${t.ad} ${b}: ${e.message}`); if (engelMi(e)) throw e; }
+    }
+    if (!temalar.length || a.debe === true) try {
       const ids = eksi.debeEntryIdleri(await al('https://eksisozluk.com/debe'));
       if (!ids.length) notlar.push('ekşi debe: sayfada entry bulunamadı (site yapısı değişmiş olabilir)');
       idler.push(...ids.slice(0, a.eksi_adet));

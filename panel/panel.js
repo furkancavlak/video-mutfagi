@@ -6,7 +6,7 @@
 //   node panel/panel.js [--port 4747] [--acma] [--kok <repo>]
 //   node panel/panel.js --ozet                    print the queue summary as JSON (the panel uses it over SSH)
 //   node panel/panel.js --zaman <is-id> "YYYY-MM-DD HH:MM"
-//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json>
+//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json>
 //                                                 the Diziler page on a server: print JSON; on error "HATA: ..." and exit 1 (3 = lock busy, HTTP 409)
 //
 // Listens on 127.0.0.1 only; every API call carries a random key made at start (it is in the printed link).
@@ -334,6 +334,17 @@ function bolumMp4(video, isMp4) {
   if (c && fs.existsSync(c)) { const m = fs.readdirSync(c).filter(f => f.endsWith('.mp4')).sort((a, b) => /ucretli/.test(a) - /ucretli/.test(b)); if (m.length) return goreli(path.join(c, m[0])); }
   const j = dene(isMp4); return j && fs.existsSync(j) ? goreli(j) : null;
 }
+// weekly story pool (dizi/havuz.js): stock per theme + the next stories; "Ele" strikes one before it is used (lock taken there)
+function havuzCevap(kanal) {
+  if (!kanallar().includes(kanal)) throw new Error('kanal yok');
+  return require('../dizi/havuz.js').ozet({ kanal, ayar: okuJ(path.join(KOK, 'kanal', kanal, 'konu.json'), {}) || {} }, KOK);
+}
+const havuzEleGovde = b => { if (typeof b.id !== 'string' || !/^eksi-\d{1,12}$/.test(b.id)) throw new Error('hikâye id geçersiz'); return { kanal: kanalAdi(b.kanal), id: b.id, neden: String(b.neden || '').replace(/\s+/g, ' ').trim().slice(0, 200) }; };
+function havuzEle(b) {
+  const g = havuzEleGovde(b);
+  if (!kanallar().includes(g.kanal)) throw new Error('kanal yok');
+  return require('../dizi/havuz.js').ele(KOK, g.kanal, g.id, g.neden || 'elle elendi');
+}
 function dizilerCevap(kanal) {
   if (!kanallar().includes(kanal)) throw new Error('kanal yok');
   const konuDizi = (okuJ(path.join(KOK, 'kanal', kanal, 'konu.json'), {}) || {}).dizi, ayar = konuDizi && typeof konuDizi === 'object' && !Array.isArray(konuDizi) ? konuDizi : {};
@@ -474,6 +485,8 @@ async function api(req, u) {
   if (!GET && yol === 'dizi/karar') return sunucu ? sunucuJson('--dizi-karar', diziKararGovde(b)) : diziKarar(b);
   if (!GET && yol === 'dizi/tekrar') return sunucu ? sunucuJson('--dizi-tekrar', diziTekrarGovde(b)) : diziTekrar(b);
   if (!GET && yol === 'dizi/ayar') return sunucu ? sunucuJson('--dizi-ayar', diziAyarGovde(b)) : diziAyarYaz(b);
+  if (GET && yol === 'dizi/havuz') return sunucu ? sunucuJson('--dizi-havuz', kanalAdi(u.searchParams.get('kanal'))) : havuzCevap(u.searchParams.get('kanal'));
+  if (!GET && yol === 'dizi/havuz/ele') return sunucu ? sunucuJson('--dizi-havuz-ele', havuzEleGovde(b)) : havuzEle(b);
   if (!GET && yol === 'is') return isBaslat(b.tur, b);
   // ideas
   if (!GET && yol === 'fikir') {
@@ -544,7 +557,7 @@ if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'
 
 // Diziler on a server: the panel on the home PC calls these over ssh (same functions as the local routes)
 const jsonArg = s => { let j; try { j = JSON.parse(s); } catch { throw new Error('bozuk istek'); } if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('bozuk istek'); return j; };
-for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))]]) {
+for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))]]) {
   if (!process.argv.includes(bayrak)) continue;
   let cikti;
   try { cikti = JSON.stringify(fn(arg(bayrak))); } catch (e) { console.error('HATA: ' + e.message); process.exit(e.kod === 409 ? 3 : 1); }

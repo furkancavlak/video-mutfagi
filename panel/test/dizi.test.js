@@ -176,3 +176,21 @@ test('end of a series through the routes: Kes on ep 3 = bitti; a cut kontrol_et 
   assert.equal((await istek('POST', '/api/dizi/tekrar', { kanal: 'kanal_a', id: 'e2', n: 1 })).kod, 200);
   assert.equal(diziOku('e2').bolumler[0].durum, 'yayinda');
 });
+
+// weekly story pool (dizi/havuz.js): read-only overview + "Ele" (validated, under the series lock)
+test('havuz: stock per theme and next stories; Ele strikes a pooled story, bad input is 400', async () => {
+  const konu = JSON.parse(JSON.stringify(KONU)); konu.dizi.kaynak.konular = [{ ad: 'aşk', basliklar: ['/a--1'] }, { ad: 'iş', basliklar: ['/i--2'] }];
+  yaz('kanal/kanal_a/konu.json', konu);
+  yaz('kayit/dizi/kanal_a/havuz.json', { hikayeler: [{ id: 'eksi-1', konu: 'aşk', baslik: 'b', link: 'https://eksisozluk.com/entry/1', fav: 9, ozet: 'ö', durum: 'havuzda' }, { id: 'eksi-2', konu: 'aşk', fav: 3, durum: 'kullanildi' }] });
+  try {
+    const r = await istek('GET', '/api/dizi/havuz?kanal=kanal_a');
+    assert.equal(r.kod, 200);
+    assert.deepEqual(r.j.stok, [{ konu: 'aşk', adet: 1 }, { konu: 'iş', adet: 0 }]);
+    assert.deepEqual(r.j.siradaki.map(x => [x.id, x.ozet, x.link]), [['eksi-1', 'ö', 'https://eksisozluk.com/entry/1']]);
+    for (const [g, re] of [[{ kanal: 'kanal_a', id: '../x' }, /id geçersiz/], [{ kanal: '../x', id: 'eksi-1' }, /kanal/], [{ kanal: 'kanal_a', id: 'eksi-2' }, /zaten kullanildi/], [{ kanal: 'kanal_a', id: 'eksi-77' }, /böyle bir hikâye yok/]]) {
+      const x = await istek('POST', '/api/dizi/havuz/ele', g); assert.equal(x.kod, 400, JSON.stringify(g)); assert.match(x.j.hata, re);
+    }
+    assert.equal((await istek('POST', '/api/dizi/havuz/ele', { kanal: 'kanal_a', id: 'eksi-1', neden: 'sevmedim' })).kod, 200);
+    assert.deepEqual(oku('kayit/dizi/kanal_a/havuz.json').hikayeler[0].durum, 'elendi');
+  } finally { yaz('kanal/kanal_a/konu.json', KONU); }
+});

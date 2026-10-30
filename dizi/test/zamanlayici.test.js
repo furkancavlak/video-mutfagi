@@ -1,7 +1,7 @@
 // Series scheduler: crontab line, per-channel dedup, no collateral damage to the queue line (fake crontab, no real one is touched).
 const test = require('node:test'), assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path');
-const { olustur, kronSatiri, diziIsareti } = require('../zamanlayici.js');
+const { olustur, kronSatiri, havuzKronSatiri, diziIsareti, havuzIsareti } = require('../zamanlayici.js');
 const { kronSatiri: kuyrukSatiri } = require('../../kuyruk/kuyruk.js');
 
 const KOK = fs.mkdtempSync(path.join(os.tmpdir(), 'zaman-'));
@@ -34,8 +34,9 @@ test('kur: adds the line; reinstall replaces it (quoted path) instead of duplica
   const d = sahte(KUYRUK + '\n'), z = yap(d);
   z.kur('kanal_a'); z.kur('kanal_a'); z.kur('kanal_a');
   const l = d.tab.split('\n').filter(Boolean);
-  assert.equal(l.length, 2);
+  assert.equal(l.length, 3);
   assert.equal(l.filter(x => diziIsareti('kanal_a').test(x)).length, 1);
+  assert.equal(l.filter(x => havuzIsareti('kanal_a').test(x)).length, 1, 'one weekly pool line');
   assert.ok(l.includes(KUYRUK), 'queue line untouched');
   assert.ok(d.tab.endsWith('\n'));
 });
@@ -66,7 +67,7 @@ test('durum: shows dizi lines and whether the queue line exists', () => {
   assert.deepEqual(z.durum('kanal_a'), { dizi: [], kuyruk: true });
   z.kur('kanal_a');
   const s = z.durum();
-  assert.equal(s.dizi.length, 1); assert.ok(s.dizi[0].includes('kanal_a')); assert.equal(s.kuyruk, true);
+  assert.equal(s.dizi.length, 2); assert.ok(s.dizi.every(x => x.includes('kanal_a'))); assert.equal(s.kuyruk, true);
   assert.equal(yap(sahte('')).durum().kuyruk, false);
   assert.equal(yap(sahte(null)).durum().dizi.length, 0);   // no crontab at all
 });
@@ -99,7 +100,9 @@ test('Windows: one hourly task per channel at :20, created through the injected 
   const ps = d.cagri.find(c => c[0] === 'powershell.exe')[4];
   assert.ok(ps.includes("-TaskName 'Video Mutfagi Dizi kanal_a'") && ps.includes('AddMinutes(20)') && ps.includes('-RepetitionInterval (New-TimeSpan -Hours 1)') && ps.includes('dizi'));
   z.kaldir('kanal_a');
-  assert.deepEqual(d.cagri.at(-1), ['schtasks', '/Delete', '/TN', 'Video Mutfagi Dizi kanal_a', '/F']);
+  assert.deepEqual(d.cagri.slice(-2), [['schtasks', '/Delete', '/TN', 'Video Mutfagi Dizi kanal_a', '/F'], ['schtasks', '/Delete', '/TN', 'Video Mutfagi Havuz kanal_a', '/F']]);
+  const ps2 = d.cagri.filter(c => c[0] === 'powershell.exe')[1][4];
+  assert.ok(ps2.includes("-TaskName 'Video Mutfagi Havuz kanal_a'") && ps2.includes('-Weekly -DaysOfWeek Monday -At 04:00') && ps2.includes('doldur kanal_a'));
   assert.ok(!d.cagri.some(c => c[0] === 'crontab'));
 });
 
@@ -108,4 +111,24 @@ test('kuyruk.js cron line gets TZ + nice and is still found by its dedup marker'
   const eski = `*/5 * * * * cd "${REPO}" && "${NODE}" "${REPO}/kuyruk/kuyruk.js" calistir >> "${REPO}/kayit/kuyruk.log" 2>&1`;
   for (const l of [eski, KUYRUK]) assert.ok(l.includes('kuyruk/kuyruk.js'));   // the marker kuyruk.js dedups on
   assert.ok(!/dizi\/calistir/.test(KUYRUK));
+});
+
+// weekly story pool (Furkan 31.10): Monday 04:00 Istanbul, written in the machine's cron time
+test('havuz line: Monday 04:00 Istanbul in local cron time, TZ + nice, own log', () => {
+  const l = havuzKronSatiri('/r/vm', NODE, 'kanal_a', 180);
+  assert.equal(l, `0 4 * * 1 cd "/r/vm" && TZ=Europe/Istanbul nice -n 19 "${NODE}" "/r/vm/dizi/havuz.js" doldur kanal_a >> "/r/vm/kayit/havuz-kanal_a.log" 2>&1`);
+  assert.ok(havuzKronSatiri('/r/vm', NODE, 'kanal_a', 0).startsWith('0 1 * * 1 '), 'UTC server: 01:00 UTC');
+  assert.ok(havuzKronSatiri('/r/vm', NODE, 'kanal_a', -300).startsWith('0 20 * * 0 '), 'UTC-5: Sunday 20:00');
+  assert.ok(havuzKronSatiri('/r/vm', NODE, 'kanal_a', 330).startsWith('30 6 * * 1 '), 'UTC+5:30');
+});
+
+test('havuz line: reinstall and kaldir dedup per channel, other channel and the queue line untouched', () => {
+  const d = sahte(KUYRUK + '\n'), z = olustur({ kok: KOK, node: NODE, win: false, spawn: d.spawn, yerelDk: 0 });
+  z.kur('kanal_a'); z.kur('kanal_a'); z.kur('kanal_ab');
+  const say = re => d.tab.split('\n').filter(l => re.test(l)).length;
+  assert.equal(say(havuzIsareti('kanal_a')), 1); assert.equal(say(havuzIsareti('kanal_ab')), 1);
+  assert.ok(d.tab.includes('0 1 * * 1 cd'));
+  z.kaldir('kanal_a');
+  assert.equal(say(havuzIsareti('kanal_a')), 0); assert.equal(say(diziIsareti('kanal_a')), 0);
+  assert.equal(say(havuzIsareti('kanal_ab')), 1); assert.ok(d.tab.includes(KUYRUK));
 });

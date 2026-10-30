@@ -149,7 +149,7 @@ test('an essay or review is "hikaye_degil" after the story check alone, nothing 
 test('hikayeMi: a real anecdote passes; the check runs once before the split', async () => {
   const { hikayeMi } = require('../bol');
   const c = stub(() => ({ gecti: true, eklenenler: [] }), () => bolCikti(140));
-  assert.deepStrictEqual(await hikayeMi(ctx(), hikaye(300), { calistir: c }), { hikaye: true, neden: 'anı' });
+  assert.deepStrictEqual(await hikayeMi(ctx(), hikaye(300), { calistir: c }), { hikaye: true, neden: 'anı', ozet: '' });
   const c2 = stub(() => ({ gecti: true, eklenenler: [] }), () => bolCikti(140));
   assert.strictEqual((await bol(ctx(), hikaye(500), { calistir: c2 })).ok, true);
   assert.strictEqual(c2.kontrol.length, 1);

@@ -28,7 +28,7 @@ function listeAyristir(html, sayfa) {
 const TARAYICI_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 const entryUrl = id => `${KOK}/entry/${id}`;
 
-// Entry <li data-id=...> blocks of an entry or topic page -> [{id, baslik, metin, fav, yazar}]
+// Entry <li data-id=...> blocks of an entry or topic page -> [{id, baslik, metin, fav, yazar, tarih}]
 function entryleriAyristir(html) {
   const bs = html.match(/<h1 id="title"[^>]*data-title="([^"]*)"/);
   const baslik = bs ? varlikCoz(bs[1]).trim() : '';
@@ -41,7 +41,8 @@ function entryleriAyristir(html) {
       .split('\n').map(s => s.replace(/[ \t ]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
     const fav = +(oz.match(/data-favorite-count="(\d+)"/) || [])[1] || 0;
     const yazar = varlikCoz((oz.match(/data-author="([^"]*)"/) || [])[1] || '');
-    out.push({ id, baslik, metin, fav, yazar });
+    const tarih = ((ic.match(/class="entry-date[^"]*"[^>]*>([^<]+)</) || [])[1] || '').trim() || null;   // "04.11.2017 18:34[ ~ edit]"
+    out.push({ id, baslik, metin, fav, yazar, tarih });
   }
   return out;
 }
