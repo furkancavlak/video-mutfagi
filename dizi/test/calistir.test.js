@@ -266,3 +266,24 @@ test('an existing queue job for the episode video is adopted, never produced aga
   assert.deepStrictEqual(u2.calls, []);
   assert.strictEqual(yukle(k2, 'k').diziler[0].bolumler[0].durum, 'sirada');
 });
+
+test('rejected stories are recorded in reddedilen.json and skipped later; source notes reach the run notes', async () => {
+  const { yeniDiziYap } = require('../calistir');
+  const k = kok(), f = path.join(k, 'kayit', 'dizi', 'k', 'reddedilen.json');
+  const bolunen = [];
+  const bol = { bol: async (cx, h) => { bolunen.push(h.id); return h.id === 'eksi-1' ? { ok: false, neden: 'kisa', ayrinti: '120 kelime' } : { ok: true, dizi: { id: h.id, kanal: 'k', durum: 'aktif', bolumler: [bolum(1), bolum(2), bolum(3)] } }; } };
+  const kaynak = ogeler => ({ adaylar: async () => ({ ogeler, notlar: ['ekşi debe: HTTP 403 (kaynak atlandı)'] }) });
+  const r = await calistir(ctx({ gunluk_hedef: 1 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi: yeniDiziYap({ kaynak: kaynak([{ id: 'eksi-1', tur: 'eksi', puan: 900 }, { id: 'reddit-2', tur: 'reddit', puan: 5 }]), bol }) });
+  assert.deepStrictEqual(bolunen, ['eksi-1', 'reddit-2']);
+  const red = JSON.parse(fs.readFileSync(f, 'utf8')).reddedilen;
+  assert.deepStrictEqual(red.map(x => [x.kaynak, x.id, x.neden, x.zaman]), [['eksi', 'eksi-1', 'kisa', SIMDI.toISOString()]]);
+  assert.strictEqual(r.reddedilen, 1);
+  assert.ok(r.notlar.some(n => /ekşi debe: HTTP 403/.test(n)), r.notlar.join(' | '));
+  const s = JSON.parse(fs.readFileSync(path.join(k, 'kayit', 'dizi', 'k', 'son-kosu.json'), 'utf8'));
+  assert.strictEqual(s.reddedilen, 1);
+  // next run: the rejected id is never split again
+  bolunen.length = 0;
+  const veri = yukle(k, 'k'); veri.diziler.forEach(d => { d.durum = 'bitti'; d.bolumler.forEach(b => { b.durum = 'olculdu'; }); }); kaydet(k, 'k', veri);
+  await calistir(ctx({ gunluk_hedef: 1 }), { simdi: new Date(SIMDI.getTime() + 864e5), kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi: yeniDiziYap({ kaynak: kaynak([{ id: 'eksi-1', tur: 'eksi', puan: 900 }, { id: 'reddit-3', tur: 'reddit', puan: 5 }]), bol }) });
+  assert.deepStrictEqual(bolunen, ['reddit-3']);
+});

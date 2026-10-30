@@ -227,7 +227,8 @@ function dizilerCiz() {
   $('#dz-say').textContent = DZ.diziler.length;
   const s = DZ.son_kosu;
   $('#dz-son').innerHTML = `<div class="dz-son-ust"><b>Son çalışma</b><span class="ince-yazi">${s ? esc(tarih(s.zaman, { weekday: undefined })) : (DZ.hata ? esc(DZ.hata) : 'henüz çalışma kaydı yok')}</span></div>`
-    + (s ? ((s.notlar || []).length ? `<ul class="dz-notlar">${s.notlar.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '<div class="ince-yazi">Not yok, her şey yolunda.</div>') + ((s.kararlar || []).length ? `<div class="ince-yazi">Kararlar: ${s.kararlar.map(k => esc(`${k.id} bölüm ${k.n} → ${k.karar}`)).join(', ')}</div>` : '') : '');
+    + (s ? ((s.notlar || []).length ? `<ul class="dz-notlar">${s.notlar.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : '<div class="ince-yazi">Not yok, her şey yolunda.</div>') + ((s.kararlar || []).length ? `<div class="ince-yazi">Kararlar: ${s.kararlar.map(k => esc(`${k.id} bölüm ${k.n} → ${k.karar}`)).join(', ')}</div>` : '')
+      + (s.reddedilen || DZ.reddedilen_toplam ? `<div class="ince-yazi">Uygun bulunmayan hikâye: bu çalışmada ${esc(s.reddedilen || 0)} · toplam ${esc(DZ.reddedilen_toplam || 0)} (bir daha denenmez)</div>` : '') : '');
   $('#dz-liste').innerHTML = DZ.diziler.length ? DZ.diziler.map(d => {
     const [r, y] = DZ_DURUM[d.durum] || ['', d.durum], url = guvenli(d.kaynak && d.kaynak.url);
     return `<div class="kart dz-kart"><div class="dz-ust"><div class="ad"><span class="baslik"><span class="etiket ${r}">${esc(y)}</span>${esc(d.baslik_kisa || d.baslik)}</span><small>${esc(d.baslik || '')}</small></div>

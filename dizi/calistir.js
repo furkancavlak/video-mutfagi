@@ -48,18 +48,34 @@ function sirayaKoy(ogeler) {
   for (let i = 0; turler.some(t => i < gruplar[t].length); i++) for (const t of turler) if (i < gruplar[t].length) out.push(gruplar[t][i]);
   return out;
 }
-// candidates are fetched once per run; a story whose split fails (too short, not faithful) is skipped
+// candidates are fetched once per run (the source's notes go to the run notes); a story whose split fails (too short,
+// not faithful) is recorded in kayit/dizi/<kanal>/reddedilen.json and never split again. sonuc: the run's result
+// (notlar, reddedilen count), optional.
+const redDosya = (kok, kanal) => path.join(kok, 'kayit', 'dizi', kanal, 'reddedilen.json');
 function yeniDiziYap({ kaynak, bol } = {}) {
   kaynak = kaynak || require('./kaynak'); bol = bol || require('./bol');
   let aday = null;
-  return async (ctx, { simdi, diziler, kok }) => {
-    if (!aday) aday = sirayaKoy((await kaynak.adaylar(ctx, { simdi, kok })).ogeler || []);
-    const kullanilan = new Set((diziler || []).map(d => d.id));
+  return async (ctx, { simdi, diziler, kok, sonuc }) => {
+    kok = kok || ctx.kok || ortak.KOK;
+    if (!aday) {
+      const k = (await kaynak.adaylar(ctx, { simdi, kok })) || {};
+      if (sonuc) for (const n of k.notlar || []) sonuc.notlar.push('kaynak: ' + n);
+      aday = sirayaKoy(k.ogeler || []);
+    }
+    const f = redDosya(kok, ctx.kanal);
+    let red; try { red = ortak.okuJson(f, { reddedilen: [] }); } catch (e) { red = { reddedilen: [] }; if (sonuc) sonuc.notlar.push(`reddedilen.json okunamadı, baştan yazılacak: ${e.message}`); }
+    if (!Array.isArray(red.reddedilen)) red.reddedilen = [];
+    const kullanilan = new Set([...(diziler || []).map(d => d.id), ...red.reddedilen.map(x => x.id)]);
     while (aday.length) {
       const h = aday.shift();
       if (kullanilan.has(h.id)) continue;
       const r = await bol.bol(ctx, h, {});
       if (r && r.ok) return { id: h.id, kanal: ctx.kanal, kaynak: { tur: h.tur, url: h.url, puan: h.puan }, ...r.dizi, olusturma: new Date(simdi).toISOString() };
+      const ayrinti = r && r.ayrinti != null ? String(typeof r.ayrinti === 'string' ? r.ayrinti : JSON.stringify(r.ayrinti)).slice(0, 300) : undefined;
+      red.reddedilen.push({ kaynak: h.tur || null, id: h.id, neden: (r && r.neden) || 'bölünemedi', ...(ayrinti ? { ayrinti } : {}), zaman: new Date(simdi).toISOString() });
+      kullanilan.add(h.id);
+      ortak.yazJson(f, red);
+      if (sonuc) sonuc.reddedilen = (sonuc.reddedilen || 0) + 1;
     }
     return null;
   };
@@ -114,11 +130,11 @@ function senkronla(diziler, kuyruk, notlar) {
 
 async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi, kuru = false, kok } = {}) {
   kok = kok || ctx.kok || ortak.KOK;
-  const sonuc = { olculen: 0, kararlar: [], uretilecek: [], yeniler: 0, notlar: [] };
+  const sonuc = { olculen: 0, kararlar: [], uretilecek: [], yeniler: 0, reddedilen: 0, notlar: [] };
   const notlar = sonuc.notlar, ayar = (ctx.ayar && ctx.ayar.dizi) || {}, hesap = (ctx.kimlik && ctx.kimlik.hesap) || null;
   const kilit = kuru ? { birak() { } } : kilitAl(kok, ctx.kanal);
   // last run for the panel; written on every non-dry exit, also when the run throws or the lock refused it
-  const sonKosu = () => { if (kuru) return; try { ortak.yazJson(path.join(kok, 'kayit', 'dizi', ctx.kanal, 'son-kosu.json'), { zaman: new Date(simdi).toISOString(), notlar: sonuc.notlar, kararlar: sonuc.kararlar, uretilecek: sonuc.uretilecek }); } catch (e) { } };
+  const sonKosu = () => { if (kuru) return; try { ortak.yazJson(path.join(kok, 'kayit', 'dizi', ctx.kanal, 'son-kosu.json'), { zaman: new Date(simdi).toISOString(), notlar: sonuc.notlar, kararlar: sonuc.kararlar, uretilecek: sonuc.uretilecek, reddedilen: sonuc.reddedilen }); } catch (e) { } };
   if (kilit.mesaj) { notlar.push(kilit.mesaj); sonKosu(); return sonuc; }
   try {
     let veri = yukle(kok, ctx.kanal);
@@ -191,7 +207,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       catch (e) { notlar.push(eksikModul(e)); yeniDizi = null; }
       while (yeniDizi && sayi < (hedef || 0) && aktif < MAX_AKTIF) {
         let d;
-        try { d = await yeniDizi(ctx, { simdi, diziler, kok }); } catch (e) { notlar.push(`yeni dizi hatası: ${e.message}`); break; }
+        try { d = await yeniDizi(ctx, { simdi, diziler, kok, sonuc }); } catch (e) { notlar.push(`yeni dizi hatası: ${e.message}`); break; }
         if (!d) { notlar.push('yeni dizi için uygun hikâye bulunamadı'); break; }
         if (d.id && !diziler.some(x => x.id === d.id)) diziler.push(d);
         sayi++; aktif++; sonuc.yeniler++;

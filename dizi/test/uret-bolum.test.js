@@ -144,16 +144,17 @@ test('default new series: ranks within each source, interleaves, passes kok, kee
   let kokGelen = null; const sira = [];
   const kaynak = { adaylar: async (cx, o) => { kokGelen = o.kok; return { ogeler, notlar: [] }; } };
   const bol = { bol: async (cx, h) => { sira.push(h.id); return h.id === 'eksi-2' ? { ok: false, neden: 'kisa' } : { ok: true, dizi: { id: h.id, kanal: 'k', durum: 'aktif', bolumler: [] } }; } };
-  const yeni = yeniDiziYap({ kaynak, bol });
+  const yeni = yeniDiziYap({ kaynak, bol }), K = tmp('dizi-ub-yeni-');   // rejections are written under kok
   const simdi = new Date('2026-10-30T12:00:00Z');
-  const a = await yeni({ kanal: 'k' }, { simdi, diziler: [], kok: '/kok' });
-  const b = await yeni({ kanal: 'k' }, { simdi, diziler: [a], kok: '/kok' });
-  const c = await yeni({ kanal: 'k' }, { simdi, diziler: [a, b], kok: '/kok' });
-  assert.strictEqual(kokGelen, '/kok');
+  const a = await yeni({ kanal: 'k' }, { simdi, diziler: [], kok: K });
+  const b = await yeni({ kanal: 'k' }, { simdi, diziler: [a], kok: K });
+  const c = await yeni({ kanal: 'k' }, { simdi, diziler: [a, b], kok: K });
+  assert.strictEqual(kokGelen, K);
   assert.deepStrictEqual(sira, ['eksi-2', 'reddit-b', 'eksi-1', 'reddit-a']);   // eksi-2 failed the split and was skipped
   assert.deepStrictEqual([a.id, b.id, c.id], ['reddit-b', 'eksi-1', 'reddit-a']);   // 900 fav, then 20000, 400, 9000: turns, not one scale
   assert.strictEqual(a.olusturma, simdi.toISOString());
-  assert.strictEqual(await yeni({ kanal: 'k' }, { simdi, diziler: [a, b, c], kok: '/kok' }), null);
+  assert.strictEqual(await yeni({ kanal: 'k' }, { simdi, diziler: [a, b, c], kok: K }), null);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(K, 'kayit', 'dizi', 'k', 'reddedilen.json'), 'utf8')).reddedilen.map(x => x.id), ['eksi-2']);
 });
 
 test('uret without hazir: idea pool, model-written script with the oxygbio example, voice gate as before', async () => {

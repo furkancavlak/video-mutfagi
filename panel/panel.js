@@ -301,7 +301,8 @@ function dizilerCevap(kanal) {
     return { ...b, kelime: String(metin || '').split(/\s+/).filter(Boolean).length, mp4: bolumMp4(b.video, j && j.mp4), kuyruk_id: j ? j.id : null, kuyruk_onay_gerekli: j ? !!j.onay_gerekli : null,
       izin: { devam: !D.kararHata(d, b.n, 'devam'), kes: !D.kararHata(d, b.n, 'kes'), tekrar: !D.tekrarHata(d, b.n) } };   // the same checks the POST routes use
   }) }));
-  return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null) };
+  const red = (okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'reddedilen.json'), {}) || {}).reddedilen;
+  return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null), reddedilen_toplam: Array.isArray(red) ? red.length : 0 };
 }
 // route -> server hop goes through this object so tests can stub the ssh / scp call
 const kanca = { sunucuda: (...a) => sunucuda(...a), scp: (args, sure) => spawnSync('scp', args, { encoding: 'utf8', timeout: sure }) };

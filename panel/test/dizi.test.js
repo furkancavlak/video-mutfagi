@@ -63,6 +63,9 @@ test('GET /api/diziler: settings, series with queue id, mp4, permissions and no 
 test('GET /api/diziler returns son-kosu.json when present; unknown or hostile channel is refused', async () => {
   yaz('kayit/dizi/kanal_a/son-kosu.json', { zaman: '2026-10-30T12:00:00Z', notlar: ['n1'], kararlar: [], uretilecek: [] });
   assert.deepEqual((await istek('GET', '/api/diziler?kanal=kanal_a')).j.son_kosu.notlar, ['n1']);
+  assert.equal((await istek('GET', '/api/diziler?kanal=kanal_a')).j.reddedilen_toplam, 0);
+  yaz('kayit/dizi/kanal_a/reddedilen.json', { reddedilen: [{ kaynak: 'eksi', id: 'eksi-1', neden: 'kisa', zaman: 'z' }, { kaynak: 'reddit', id: 'reddit-2', neden: 'sadakat', zaman: 'z' }] });
+  assert.equal((await istek('GET', '/api/diziler?kanal=kanal_a')).j.reddedilen_toplam, 2);
   for (const k of ['yok_kanal', '../kacak', '']) { const r = await istek('GET', '/api/diziler?kanal=' + encodeURIComponent(k)); assert.equal(r.kod, 400, k); assert.match(r.j.hata, /kanal/); }
 });
 
