@@ -51,23 +51,26 @@ const zamanMetni = z => {
 
 // ---------- accounts: a job without `hesap` belongs to oxygbio; kimlik.hesap may be '@handle'
 const HESAP0 = 'oxygbio';
-const hesapTemiz = h => String(h || '').replace(/^@/, '').trim() || null;
+const hesapTemiz = h => String(h || '').replace(/^@/, '').trim().toLowerCase() || null;
 const isHesap = j => hesapTemiz(j.hesap) || HESAP0;
-const kanalHesap = k => hesapTemiz((okuJ(path.join(KOK, 'kanal', k, 'kimlik.json'), {}) || {}).hesap);
+// account of a channel; only for a name in kanal/ (never builds a path from raw input); null = the channel has none
+const kanalHesap = k => { if (!kanallar().includes(k)) throw new Error('kanal yok'); return kanalHesapOku(k); };
+const kanalHesapOku = k => hesapTemiz((okuJ(path.join(KOK, 'kanal', k, 'kimlik.json'), {}) || {}).hesap);
 const hesapGuvenli = h => { if (h && !/^[\w.-]+$/.test(h)) throw new Error('hesap adı geçersiz'); return h; };
 const igPaylas = () => { try { return require(path.join(KOK, 'instagram', 'paylas.js')); } catch { return null; } };
 
 // ---------- the posting queue on this machine
-function saglik(hesap) {
+function saglik(hesap, hesapYok) {
   const kendi = j => !hesap || isHesap(j) === hesap;
   const d = okuJ(path.join(KUYRUK, 'durum.json')), uyari = [];
   const z = spawnSync(process.execPath, [KUYRUK_JS, 'zamanlayici', 'durum'], { cwd: KOK, encoding: 'utf8' }).stdout || '';
   const zamanlayici = /kurulu\./i.test(z) && !/DEĞİL/.test(z);
-  const PZ = igPaylas(), ig = PZ ? PZ.readAyar(hesap === HESAP0 ? undefined : hesap) : (hesap && hesap !== HESAP0 ? null : okuJ(path.join(os.homedir(), '.video-mutfagi', 'instagram.json')));
+  const PZ = igPaylas(), ig = hesapYok ? null : PZ ? PZ.readAyar(hesap === HESAP0 ? undefined : hesap) : (hesap && hesap !== HESAP0 ? null : okuJ(path.join(os.homedir(), '.video-mutfagi', 'instagram.json')));
   const igGun = ig ? Math.max(0, Math.round(60 - (Date.now() - new Date(ig.yenilendi || ig.kaydedildi)) / 864e5)) : null;
   if (!zamanlayici) uyari.push('Otomatik paylaşım kapalı');
   else if (!d || Date.now() - new Date(d.son_calisma) > 45 * 60e3) uyari.push('Zamanlayıcı 45 dk’dır çalışmadı');
-  if (!ig) uyari.push('Instagram bağlı değil');
+  if (hesapYok) uyari.push('Bu kanalın Instagram hesabı tanımlı değil');
+  else if (!ig) uyari.push('Instagram bağlı değil');
   else if (igGun < 10) uyari.push(`Instagram anahtarı ${igGun} gün`);
   const gec = isler('bekleyen').filter(kendi).filter(j => !j.onay_gerekli && j.ne_zaman && new Date(j.ne_zaman) < Date.now() - 30 * 60e3);
   if (gec.length) uyari.push(`${gec.length} video gecikti`);
@@ -77,12 +80,12 @@ function saglik(hesap) {
 }
 // kanal: channel name; only that channel's account is shown (no kanal = every account)
 function kuyrukOzet(kanal) {
-  const hesap = kanal ? hesapGuvenli(kanalHesap(kanal) || hesapTemiz(kanal)) : null, kendi = j => !hesap || isHesap(j) === hesap;
+  const hesap = kanal ? hesapGuvenli(kanalHesap(kanal)) : null, hesapYok = !!kanal && !hesap, kendi = j => hesapYok ? false : !hesap || isHesap(j) === hesap;
   const temiz = j => ({ id: j.id, hesap: isHesap(j), mp4: j.mp4, aciklama: j.aciklama, ne_zaman: j.ne_zaman, onay_gerekli: !!j.onay_gerekli, kaynak: j.kaynak, hata: j.son_hata || null, kontrol_et: !!j.kontrol_et, paylasildi: j.paylasildi, link: j.link, sonuc: j.sonuc || null });
   const ayar = Object.assign(okuJ(path.join(KUYRUK, 'ayar-ornek.json'), {}), okuJ(path.join(KOK, 'ayarlar', 'kuyruk.json'), {}));
   const hs = (ayar.hesaplar || {})[hesap] || {};
   return {
-    hesap, saglik: saglik(hesap),
+    hesap, hesapYok, saglik: saglik(hesap, hesapYok),
     kuyruk: isler('bekleyen').filter(kendi).sort((a, b) => String(a.ne_zaman).localeCompare(String(b.ne_zaman))).map(temiz),
     paylasilan: isler('paylasilan').filter(kendi).sort((a, b) => String(b.paylasildi).localeCompare(String(a.paylasildi))).map(temiz),
     hatali: isler('hatali').filter(kendi).map(temiz), saatler: hs.paylasim_saatleri || ayar.paylasim_saatleri || [], gunluk: hs.gunluk_en_fazla ?? ayar.gunluk_en_fazla,
@@ -108,8 +111,15 @@ function sunucuda(komut, sure = 60e3) {
   if (r.status !== 0) throw new Error(((r.stderr || '') + (r.stdout || '')).trim().replace(/^[\s\S]*HATA:\s*/m, '').slice(0, 300) || 'sunucu komutu başarısız');
   return r.stdout;
 }
-const hesapArg = h => { const x = hesapGuvenli(hesapTemiz(h)); return x && x !== HESAP0 ? x : null; };
-function sunucuyaEkle({ mp4, aciklama, zaman, onay_gerekli, hesap }) {
+// account for a queue add: a named channel must have one (never falls back to oxygbio); without a channel the old `hesap` field is used
+function ekleHesap(b) {
+  const x = b.kanal ? kanalHesap(String(b.kanal)) : hesapGuvenli(hesapTemiz(b.hesap));
+  if (b.kanal && !x) throw new Error('Bu kanalın Instagram hesabı tanımlı değil');
+  return x && x !== HESAP0 ? x : null;
+}
+const hesapArg = ekleHesap;
+function sunucuyaEkle({ mp4, aciklama, zaman, onay_gerekli, hesap, kanal }) {
+  const hesapEk = ekleHesap({ hesap, kanal });
   const S = sunucuAyar(); if (!S) throw new Error('Sunucu tanımlı değil.');
   const yerel = path.resolve(KOK, mp4 || '');
   if (!icinde(yerel, path.join(KOK, 'videolar')) || !fs.existsSync(yerel)) throw new Error('video bulunamadı');
@@ -118,7 +128,7 @@ function sunucuyaEkle({ mp4, aciklama, zaman, onay_gerekli, hesap }) {
   if (up.status !== 0) throw new Error('video sunucuya gönderilemedi: ' + (up.stderr || '').trim().slice(0, 200));
   const b64 = Buffer.from(String(aciklama || ''), 'utf8').toString('base64');
   const hedef = `videolar/_gelen/${ad}`;
-  const ic = `cd ${q(S.kok)} && mkdir -p videolar/_gelen && cp ${gecici} ${q(hedef)} && ${S.node ? q(S.node) : 'node'} kuyruk/kuyruk.js ekle ${q(hedef)} --aciklama "$(echo ${b64} | base64 -d)"${zaman ? ' --zaman ' + q(zamanMetni(zaman)) : ''}${onay_gerekli ? ' --onay-gerekli' : ''}${hesapArg(hesap) ? ' --hesap ' + q(hesapArg(hesap)) : ''}`;
+  const ic = `cd ${q(S.kok)} && mkdir -p videolar/_gelen && cp ${gecici} ${q(hedef)} && ${S.node ? q(S.node) : 'node'} kuyruk/kuyruk.js ekle ${q(hedef)} --aciklama "$(echo ${b64} | base64 -d)"${zaman ? ' --zaman ' + q(zamanMetni(zaman)) : ''}${onay_gerekli ? ' --onay-gerekli' : ''}${hesapEk ? ' --hesap ' + q(hesapEk) : ''}`;
   const r = spawnSync('ssh', ['-o', 'BatchMode=yes', S.ssh, `chmod 644 ${gecici}; ${S.on_ek ? S.on_ek + ' ' : ''}bash -lc ${q(ic)}; s=$?; rm -f ${gecici}; exit $s`], { encoding: 'utf8', timeout: 120e3 });
   if (r.status !== 0) throw new Error(((r.stderr || '') + (r.stdout || '')).trim().slice(0, 300));
   return r.stdout.trim();
@@ -267,7 +277,7 @@ async function api(req, u) {
     const S = sunucuAyar();
     return { yerel: kuyrukOzet(u.searchParams.get('kanal') || undefined), sunucu: S ? { ad: S.ad || 'Sunucu' } : null, kanallar: kanalBilgi(), yz: Object.fromEntries(kanallar().map(k => [k, yzYolu(k)])) };
   }
-  if (GET && yol === 'sunucu') { const k = u.searchParams.get('kanal'); return JSON.parse(sunucuda('panel/panel.js --ozet' + (k && /^[\w.-]+$/.test(k) ? ' --kanal ' + q(k) : ''))); }
+  if (GET && yol === 'sunucu') { const k = u.searchParams.get('kanal'); if (k && !kanallar().includes(k)) throw new Error('kanal yok'); return JSON.parse(sunucuda('panel/panel.js --ozet' + (k ? ' --kanal ' + q(k) : ''))); }
   if (GET && yol === 'fikirler') return fikirler();
   if (GET && yol === 'uretim') return uretimler();
   if (GET && yol === 'rapor') return rapor(u.searchParams.get('p'));
@@ -286,10 +296,11 @@ async function api(req, u) {
   if (!GET && yol.startsWith('kuyruk/')) {
     const is = yol.split('/')[1];
     if (is === 'ekle') {
+      const hesapEk = ekleHesap(b);
       if (sunucu) return { mesaj: sunucuyaEkle(b) };
       const mp4 = path.resolve(KOK, b.mp4 || '');
       if (!icinde(mp4, path.join(KOK, 'videolar')) || !fs.existsSync(mp4)) throw new Error('video bulunamadı');
-      return { mesaj: nodeCalistir(KUYRUK_JS, ['ekle', mp4, '--aciklama', String(b.aciklama || ''), ...(b.zaman ? ['--zaman', zamanMetni(b.zaman)] : []), ...(b.onay_gerekli ? ['--onay-gerekli'] : []), ...(hesapArg(b.hesap) ? ['--hesap', hesapArg(b.hesap)] : [])]) };
+      return { mesaj: nodeCalistir(KUYRUK_JS, ['ekle', mp4, '--aciklama', String(b.aciklama || ''), ...(b.zaman ? ['--zaman', zamanMetni(b.zaman)] : []), ...(b.onay_gerekli ? ['--onay-gerekli'] : []), ...(hesapEk ? ['--hesap', hesapEk] : [])]) };
     }
     if (!/^[\w.-]+$/.test(String(b.id || ''))) throw new Error('kuyrukta böyle bir iş yok');
     if (is === 'onayla' || is === 'iptal') return { mesaj: sunucu ? sunucuda(`kuyruk/kuyruk.js ${is} ${q(b.id)}`) : nodeCalistir(KUYRUK_JS, [is, b.id]) };
@@ -314,10 +325,13 @@ async function api(req, u) {
   throw Object.assign(new Error('yok'), { kod: 404 });
 }
 
-module.exports = { kuyrukOzet, instagram, kanalBilgi };
+module.exports = { kuyrukOzet, instagram, kanalBilgi, ekleHesap };
 if (require.main !== module) return;
 
-if (process.argv.includes('--ozet')) { process.stdout.write(JSON.stringify(kuyrukOzet(arg('--kanal') || undefined))); process.exit(0); }
+if (process.argv.includes('--ozet')) {
+  try { process.stdout.write(JSON.stringify(kuyrukOzet(arg('--kanal') || undefined))); process.exit(0); }
+  catch (e) { console.error('HATA: ' + e.message); process.exit(1); }
+}
 if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'); zamanDegistir(process.argv[i + 1], process.argv[i + 2]); console.log('Saat değişti.'); process.exit(0); }
 
 const sunucu = http.createServer(async (req, res) => {

@@ -32,7 +32,7 @@ let makine = 'yerel', metrik = 'views', ayKaydir = 0, fikirFiltre = 'acik';
 let kanal = (() => { try { const k = localStorage.getItem('vm-kanal'); return /^[\w.-]+$/.test(k || '') ? k : null; } catch { return null; } })();
 const kanalAd0 = () => O && O.kanallar[0] ? O.kanallar[0].ad : null;
 const kanalHesap = ad => { const k = O && O.kanallar.find(x => x.ad === (ad || kanal)); return k ? k.hesap : null; };
-const hesapAd = h => String(h || '').replace(/^@/, '') || 'oxygbio';
+const hesapAd = h => String(h || '').replace(/^@/, '').toLowerCase() || 'oxygbio';
 const kq = () => kanal ? '?kanal=' + encodeURIComponent(kanal) : '';
 const Uk = () => U.filter(u => !kanal || u.kanal === kanal), Dk = () => D.filter(d => !d.kanal || d.kanal === kanal);
 const makineAd = m => m === 'sunucu' ? (O.sunucu ? O.sunucu.ad : 'Sunucu') : 'Bu bilgisayar';
@@ -124,6 +124,7 @@ function siraCiz() {
   $('#makine-sec').innerHTML = ['yerel', ...(O.sunucu ? ['sunucu'] : [])].map(m => `<button data-makine-sec="${m}" class="${m === makine ? 'on' : ''}">${esc(makineAd(m))}</button>`).join('');
   $('#makine-sec').hidden = !O.sunucu;
   const K = kuyrukOf(makine);
+  if (K && K.hesapYok) { $('#sira-saglik').innerHTML = ''; $('#sira-liste').innerHTML = '<div class="liste-bos">Bu kanalın Instagram hesabı tanımlı değil (kanal/&lt;ad&gt;/kimlik.json → hesap).</div>'; return; }
   if (!K) { $('#sira-saglik').innerHTML = ''; $('#sira-liste').innerHTML = `<div class="liste-bos">${esc(SV && SV.hata ? SV.hata : 'Sunucuya bağlanıyor…')}</div>`; return; }
   const s = K.saglik;
   $('#sira-saglik').innerHTML = `<span><i class="nokta ${s.zamanlayici ? '' : 'kotu'}"></i>${s.zamanlayici ? 'Otomatik paylaşım açık' : 'Otomatik paylaşım kapalı'}</span>
@@ -236,8 +237,9 @@ function ekleGoster(ad) {
       <label class="kutu"><input type="checkbox" id="e-onay"> Önce ben onaylayayım</label></div>
     <div class="p-alt"><button class="dugme" data-kapat>Vazgeç</button><button class="dugme sari" id="e-ekle">Sıraya ekle</button></div>`);
   $('#e-ekle').onclick = async () => {
+    if (!kanalHesap(u.kanal)) return bildir('Bu kanalın Instagram hesabı tanımlı değil: sıraya eklenemez', true);   // never falls back to oxygbio
     const m = $('#e-makine') ? $('#e-makine').value : 'yerel', b = $('#e-ekle'); b.disabled = true; b.textContent = m === 'sunucu' ? 'Sunucuya gönderiliyor…' : 'Ekleniyor…';
-    try { await api('kuyruk/ekle', { makine: m, mp4: $('#e-video').value, aciklama: $('#e-aciklama').value, hesap: hesapAd(kanalHesap(u.kanal)), zaman: ofsetli($('#e-zaman').value), onay_gerekli: $('#e-onay').checked }); $('#pencere').close(); bildir('Sıraya eklendi ✓'); makine = m; await yukle(); sekme('sira'); }
+    try { await api('kuyruk/ekle', { makine: m, mp4: $('#e-video').value, aciklama: $('#e-aciklama').value, kanal: u.kanal, zaman: ofsetli($('#e-zaman').value), onay_gerekli: $('#e-onay').checked }); $('#pencere').close(); bildir('Sıraya eklendi ✓'); makine = m; await yukle(); sekme('sira'); }
     catch (e) { bildir(e.message, true); b.disabled = false; b.textContent = 'Sıraya ekle'; }
   };
 }
@@ -261,13 +263,16 @@ function krediOnayGoster(ad) {
 }
 
 // ---------------- Loading
+let yukleNo = 0;
 async function yukle() {
+  const no = ++yukleNo;                           // a slower, older load must not overwrite a newer channel's data
   try {
     [O, F, U, D, J] = await Promise.all([api('ozet' + kq()), api('fikirler'), api('uretim'), api('dersler'), api('isler')]);
-    if (!O.kanallar.some(k => k.ad === kanal)) { kanal = kanalAd0(); if (kanal) O = await api('ozet' + kq()); }   // first start or a channel that is gone
-  } catch (e) { $('main').innerHTML = `<div class="liste-bos" style="margin-top:40px">${esc(e.message)}</div>`; return; }
+    if (!O.kanallar.some(k => k.ad === kanal)) { kanal = kanalAd0(); if (kanal) O = await api('ozet' + kq()); }
+    if (no !== yukleNo) return;   // first start or a channel that is gone
+  } catch (e) { if (no !== yukleNo) return; $('main').innerHTML = `<div class="liste-bos" style="margin-top:40px">${esc(e.message)}</div>`; return; }
   hepsi();
-  if (O.sunucu) api('sunucu' + kq()).then(s => { SV = s; }).catch(e => { SV = { hata: 'Sunucuya ulaşılamadı: ' + e.message }; }).finally(hepsi);
+  if (O.sunucu) api('sunucu' + kq()).then(s => { if (no === yukleNo) SV = s; }).catch(e => { if (no === yukleNo) SV = { hata: 'Sunucuya ulaşılamadı: ' + e.message }; }).finally(() => { if (no === yukleNo) hepsi(); });
   if (IG === null) igYukle();
   if (J.some(x => x.durum === 'calisiyor')) islerYukle();
 }

@@ -53,3 +53,24 @@ test('instagram caches per account', async () => {
   assert.ok(fs.existsSync(path.join(KOK, 'kayit', 'panel-instagram-hesap_b.json')));
   await assert.rejects(() => P.instagram(false, '../kacak', sahte));
 });
+
+test('a channel without an account gets an explicit empty state, never oxygbio or its name', () => {
+  const o = P.kuyrukOzet('kanal_c');
+  assert.equal(o.hesapYok, true); assert.equal(o.hesap, null);
+  assert.deepEqual([o.kuyruk.length, o.paylasilan.length, o.hatali.length], [0, 0, 0]);
+  assert.ok(o.saglik.uyari.includes('Bu kanalın Instagram hesabı tanımlı değil'));
+  assert.equal(o.saglik.instagram.bagli, false);
+});
+
+test('unknown channel is refused before any path is built', () => {
+  assert.throws(() => P.kuyrukOzet('yok_kanal'), /kanal yok/);
+  assert.throws(() => P.kuyrukOzet('../kacak'), /kanal yok/);
+});
+
+test('ekleHesap: account follows the channel, no account refuses, oxygbio stays default', () => {
+  assert.equal(P.ekleHesap({ kanal: 'kanal_b' }), 'ornek_hesap');
+  assert.equal(P.ekleHesap({ kanal: 'kanal_a' }), null);            // '@oxygbio' = default account, no --hesap
+  assert.throws(() => P.ekleHesap({ kanal: 'kanal_c' }), /hesabı tanımlı değil/);
+  assert.throws(() => P.ekleHesap({ kanal: 'kanal_c', hesap: 'oxygbio' }), /hesabı tanımlı değil/);
+  assert.equal(P.ekleHesap({ hesap: 'Hesap_B' }), 'hesap_b');       // old call without channel, lowercased
+});
