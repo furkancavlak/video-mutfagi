@@ -270,28 +270,27 @@ const KONU_YEDEK = ['#F472B6', '#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#2DD
 const konuRenk = k => { const a = String(k || '').toLocaleLowerCase('tr'); if (KONU_RENK[a]) return KONU_RENK[a]; let h = 0; for (const c of a) h = (h * 31 + c.charCodeAt(0)) >>> 0; return KONU_YEDEK[h % KONU_YEDEK.length]; };
 const konuAd = k => String(k || '').replace(/^./, c => c.toLocaleUpperCase('tr'));
 const DURUM_SATIR = { paylasildi: 'Paylaşıldı', sirada: 'Sırada', onay: 'Onay bekliyor', sorun: 'Sorun var', hazirlaniyor: 'Hazırlanıyor' };
-const gunBaslik = (d, t) => `<b>${d.getDate()}</b> ${esc(d.toLocaleDateString('tr-TR', { month: 'short' }))} ${esc(d.toLocaleDateString('tr-TR', { weekday: 'short' }))}${t ? ' · ' + esc(t) : ''}`;
 // one video = one big card: day + time, 9:16 still, theme dot line, status line, title
 function kart(e) {
-  const i = OL.indexOf(e), d = olayGunu(e), zaman = e.t ? saat(e.t) : e.durum === 'hazirlaniyor' ? 'bugün' : 'saat yok', bugun = ayniGun(d, Date.now());
-  return `<button class="gk-kart d-${e.durum}${bugun ? ' bugun' : ''}" data-olay="${i}">
-    <span class="gkk-ust">${gunBaslik(d, zaman)}${bugun ? '<em>Bugün</em>' : ''}</span>
+  const i = OL.indexOf(e), zaman = e.t ? saat(e.t) : e.durum === 'hazirlaniyor' ? 'bugün' : 'saat yok', ht = e.ep ? hikayeToplam(e.ep.d) : null;
+  return `<button class="gk-kart d-${e.durum}" data-olay="${i}">
+    <span class="gkk-ust"><b>${esc(zaman)}</b>${kanalRozet(false)}${e.makine === 'sunucu' ? `<span class="kanal-rozet acik">${esc(makineAd('sunucu'))}</span>` : ''}</span>
     <span class="gkk-kapak">${kapakVar(e.kapak) ? `<img src="${kapakUrl(e.kapak)}" alt="" loading="lazy" onerror="this.parentNode.classList.add('bos');this.remove()">` : ''}<span class="gkk-yer"><small>${esc(e.bolum || '')}</small>${esc(e.baslik)}</span>
       ${e.mp4 || e.link ? `<span class="gkk-oynat">${ikon('oynat', 14)}</span>` : ''}</span>
-    <span class="gkk-satir"><i class="nokta-k" style="--k:${e.konu ? konuRenk(e.konu) : 'var(--ink-3)'}"></i>${esc(zaman)}${e.konu ? ' · ' + esc(konuAd(e.konu)) : ''}${e.bolum ? ' · ' + esc(e.bolum) : ''}</span>
+    <span class="gkk-satir"><i class="nokta-k" style="--k:${e.konu ? konuRenk(e.konu) : 'var(--ink-3)'}"></i>${esc([e.konu && konuAd(e.konu), e.bolum].filter(Boolean).join(' · ') || '@' + hesapAd(kanalHesap() || kanal))}</span>
     <span class="gkk-durum">${e.durum === 'onay' ? '<i class="nabiz-nokta"></i>' : '<i class="nokta-d"></i>'}${esc(DURUM_SATIR[e.durum] || DURUM[e.durum].ad)}${e.views != null ? `<span class="gkk-izl">${ikon('goz', 13)}${esc(sayi(e.views))}</span>` : ''}</span>
     ${e.durum === 'hazirlaniyor' && e.asama ? asamaCubuk(e.asama) : ''}
     <span class="gkk-ad">${esc(e.baslik)}</span>
-    <span class="gkk-alt">${kanalRozet(true)}${e.makine === 'sunucu' ? `<span class="kanal-rozet acik">${esc(makineAd('sunucu'))}</span>` : ''}</span></button>`;
+    ${e.ep ? `<span class="gkk-hikaye">Hikâye: ${ht != null ? esc(sayi(ht)) + ' izlenme' : '—'}</span>` : ''}</button>`;
 }
-const bosKart = d => `<button class="gk-kart bos-gun${ayniGun(d, Date.now()) ? ' bugun' : ''}${d < gunBas(Date.now()) ? ' gecmis' : ''}" data-planla="${+d}" ${d < gunBas(Date.now()) ? 'disabled' : ''}>
-    <span class="gkk-ust">${gunBaslik(d)}${ayniGun(d, Date.now()) ? '<em>Bugün</em>' : ''}</span>
+const bosKart = d => `<button class="gk-kart bos-gun${d < gunBas(Date.now()) ? ' gecmis' : ''}" data-planla="${+d}" ${d < gunBas(Date.now()) ? 'disabled' : ''}>
     <span class="gkk-arti">${d < gunBas(Date.now()) ? '<small>Video yok</small>' : `${ikon('arti', 22)}<small>Video planla</small>`}</span></button>`;
 
-// ---------------- Calendar: continuous days from a few days back, filtered by status and story theme
-const ARALIK = 20, GERI = 5;                       // 20 days (4 rows of 5), starting 5 days before today
+// ---------------- Calendar: a week grid (Mon-Sun columns), 4 weeks from Monday of last week; ‹ › move one week
+const HAFTA = 4, GUN_ADI = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 let durumFiltre = 'hepsi', konuFiltre = null;
-function aralik() { const bas = gunBas(Date.now()); bas.setDate(bas.getDate() - GERI + ARALIK * ayKaydir); const son = new Date(bas); son.setDate(bas.getDate() + ARALIK - 1); return [bas, son]; }
+const KAPAK_COK = { 2: 'min(270px,26vh)', 3: 'min(200px,19vh)' };   // a busy day shrinks its covers so the week still fits on screen
+function aralik() { const bas = haftaBas(Date.now()); bas.setDate(bas.getDate() - 7 + 7 * ayKaydir); const son = new Date(bas); son.setDate(bas.getDate() + 7 * HAFTA - 1); return [bas, son]; }
 function takvimCiz() {
   OL = olaylar();
   const [bas, son] = aralik(), ici = OL.filter(e => { const d = olayGunu(e); return d >= bas && d <= son; });
@@ -308,14 +307,15 @@ function takvimCiz() {
   if (konuFiltre && !konular.includes(konuFiltre)) konuFiltre = null;
   $('#konu-filtre').innerHTML = konular.length ? `<button data-konu-f="" class="${!konuFiltre ? 'on' : ''}">Tümü</button>` + konular.map(k => `<button data-konu-f="${esc(k)}" class="${k === konuFiltre ? 'on' : ''}"><i class="nokta-k" style="--k:${konuRenk(k)}"></i>${esc(konuAd(k))}</button>`).join('') : '';
   const goster = e => (durumFiltre === 'hepsi' || e.durum === durumFiltre) && (!konuFiltre || e.konu === konuFiltre);
-  let h = '';
+  const bugun = gunBas(Date.now()), buHafta = +haftaBas(bugun);
+  let h = GUN_ADI.map(g => `<div class="gun-ad">${g}</div>`).join('');
   for (let d = new Date(bas); d <= son; d.setDate(d.getDate() + 1)) {
-    const o = ici.filter(e => ayniGun(olayGunu(e), d));
-    const g = o.filter(goster);
-    if (g.length) h += g.map(kart).join('');
-    else if (!o.length && durumFiltre === 'hepsi' && !konuFiltre) h += bosKart(new Date(d));
+    const o = ici.filter(e => ayniGun(olayGunu(e), d)), g = o.filter(goster), bu = ayniGun(d, bugun);
+    h += `<div class="gun-h${bu ? ' bugun' : ''}${d < bugun ? ' gecmis' : ''}${+haftaBas(d) === buHafta ? ' bu-hafta' : ''}${o.length ? '' : ' bos'}${g.length > 1 ? ' cok' : ''}" ${g.length > 1 ? ` style="--kmax:${KAPAK_COK[Math.min(g.length, 3)]}"` : ''}>
+      <div class="gh-ust"><b>${d.getDate()}</b> ${esc(d.toLocaleDateString('tr-TR', { month: 'short' }))} <span class="gh-gun">${esc(d.toLocaleDateString('tr-TR', { weekday: 'short' }))}</span>${bu ? '<em>Bugün</em>' : ''}</div>
+      ${g.length ? g.map(kart).join('') : !o.length && durumFiltre === 'hepsi' && !konuFiltre ? bosKart(new Date(d)) : '<div class="gh-yok">—</div>'}</div>`;
   }
-  $('#takvim').innerHTML = h || '<div class="liste-bos">Bu aralıkta seçtiğin türde video yok.</div>';
+  $('#takvim').innerHTML = h;
 }
 // "+ Yeni" and "Video planla": a ready video of this channel that is not queued yet → the add-to-queue dialog
 function yeniGoster(gun) {
@@ -344,7 +344,7 @@ function paylasimlar() {
 const sayiKart = (baslik, deger, alt, ipucu) => `<div class="kart sk"><span class="sk-ad">${esc(baslik)}</span><b class="sk-deger${deger === '—' ? ' yok' : ''}">${deger}</b>${alt ? `<span class="sk-alt">${alt}</span>` : ''}${ipucu ? `<span class="sk-ipucu">${esc(ipucu)}</span>` : ''}</div>`;
 function istatistikCiz() {
   const el = $('#istatistik'); if (!el) return;
-  if (IG && IG.hesapYok) { el.innerHTML = `<div class="sayilar">${['Son 7 gün izlenme', 'Takipçi', 'Bu hafta paylaşılan', 'Video başı ortalama'].map(x => sayiKart(x, '—', '', 'Bu kanalın Instagram hesabı tanımlı değil')).join('')}</div>${hikayeSeridi()}`; return; }
+  if (IG && IG.hesapYok) { el.innerHTML = `<div class="sayilar">${['Son 7 gün izlenme', 'Takipçi', 'Bu hafta paylaşılan', 'Video başı ortalama'].map(x => sayiKart(x, '—', '', 'Bu kanalın Instagram hesabı tanımlı değil')).join('')}${enHikaye()}</div>${hikayeSeridi()}`; return; }
   const P = paylasimlar(), simdi = Date.now(), gun = 864e5, gelmedi = IG === null ? 'Instagram’dan geliyor…' : null;
   const ara = (a, b) => P.filter(p => +p.t > simdi - a * gun && +p.t <= simdi - b * gun);
   const top = L => L.reduce((s, p) => s + (p.views || 0), 0), olculen = L => L.filter(p => p.views != null);
@@ -363,13 +363,21 @@ function istatistikCiz() {
   const k3 = sayiKart('Bu hafta paylaşılan', sayi(buHafta), sirada ? `bu hafta <b>${sirada}</b> video daha sırada` : '<span class="gri">bu hafta sırada video yok</span>', 'Pazartesiden bu yana');
   const O_ = olculen(P);
   const k4 = O_.length ? sayiKart('Video başı ortalama', sayi(Math.round(top(O_) / O_.length)), `son ${O_.length} videoda`, 'Toplam izlenme ÷ video sayısı') : sayiKart('Video başı ortalama', '—', '', gelmedi || 'Henüz izlenme sayısı yok');
-  el.innerHTML = `<div class="sayilar">${k1}${k2}${k3}${k4}</div>${grafik(P)}${hikayeSeridi()}`;
+  el.innerHTML = `<div class="sayilar">${k1}${k2}${k3}${k4}${enHikaye()}</div>${rakamAlt(P)}`;
 }
+function enHikaye() {
+  const L = DZ && !DZ.hata ? DZ.diziler : [], H = L.map(d => ({ d, t: hikayeToplam(d) })).filter(x => x.t != null).sort((a, b) => b.t - a.t)[0];
+  if (!H) return sayiKart('En çok izlenen hikâye', '—', '', L.length ? 'Henüz izlenme sayısı olan bölüm yok' : 'Bu kanalda hikâye yok');
+  const n = (H.d.bolumler || []).filter(b => bolumIzlenme(b) != null).length;
+  return sayiKart('En çok izlenen hikâye', sayi(H.t), `<b class="sk-hikaye">${esc(H.d.baslik_kisa || H.d.baslik)}</b>`, `${n} paylaşılan bölümün izlenme toplamı`);
+}
+// chart and the story strip side by side on wide screens
+const rakamAlt = P => { const s = hikayeSeridi(); rakamAlt.ikili = !!s && innerWidth >= 1300; return `<div class="rakam-alt${rakamAlt.ikili ? ' ikili' : ''}">${grafik(P)}${s}</div>`; };
 // the last 14 posts' views as bars (one series: one colour, labels on the highest and the newest)
 function grafik(P) {
   const L = P.filter(p => p.views != null).sort((a, b) => a.t - b.t).slice(-14);
   if (!L.length) return `<div class="kart grafik-kart"><div class="gk-ust"><b>Son videoların izlenmesi</b></div><div class="liste-bos ince">—<br><span class="ince-yazi">${IG === null ? 'Rakamlar Instagram’dan geliyor…' : 'Henüz izlenme sayısı olan video yok.'}</span></div></div>`;
-  const W = Math.max(300, Math.round(($('#istatistik').clientWidth || 760) - 38)), H = 210, ust = 26, alt = 28, sol = 8, adim = (W - sol * 2) / Math.max(L.length, 6), bw = Math.min(46, adim - 8), tepe = Math.max(...L.map(p => p.views), 1);
+  const W = Math.max(300, Math.round(((($('#istatistik').clientWidth || 760) - (rakamAlt.ikili ? 10 : 0)) * (rakamAlt.ikili ? 0.6 : 1)) - 38)), H = 210, ust = 26, alt = 28, sol = 8, adim = (W - sol * 2) / Math.max(L.length, 6), bw = Math.min(46, adim - 8), tepe = Math.max(...L.map(p => p.views), 1);
   const enYuksek = L.reduce((a, p, i) => p.views > L[a].views ? i : a, 0);
   const cubuk = L.map((p, i) => {
     const h = Math.max(2, (p.views / tepe) * (H - ust - alt)), x = sol + i * adim + (adim - bw) / 2, y = H - alt - h, r = Math.min(4, h / 2);
@@ -388,10 +396,15 @@ function hikayeSeridi() {
   const L = DZ && !DZ.hata ? DZ.diziler.filter(d => d.durum === 'aktif') : [];
   if (!L.length) return '';
   return `<div class="kart hs"><div class="gk-ust"><b>Hikâyeler</b><button class="dugme ince" data-s="hikayeler">Hepsini gör</button></div>
-    ${L.map(d => { const top = (d.bolumler || []).reduce((s, b) => s + (bolumIzlenme(b) || 0), 0); return `<div class="hs-satir"><div class="hs-ad"><b>${esc(d.baslik_kisa || d.baslik)}</b>${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}</div>
-      <div class="hs-noktalar">${(d.bolumler || []).map(b => { const s = bolumDurum(b, d), v = bolumIzlenme(b); return `<button class="hs-n d-${s}" data-bolum="${esc(d.id)}|${esc(b.n)}" title="Bölüm ${esc(b.n)} · ${esc(DURUM[s].ad)}"><i>${s === 'onay' ? '' : ikon(DURUM[s].ikon, 11)}</i><span>${v != null ? esc(sayi(v)) : esc(b.n)}</span></button>`; }).join('')}</div>
-      <div class="hs-top">${top ? `${esc(sayi(top))}<small>izlenme</small>` : '<small>—</small>'}</div></div>`; }).join('')}</div>`;
+    ${L.map(d => { const top = hikayeToplam(d); return `<div class="hs-satir"><div class="hs-ad"><b>${esc(d.baslik_kisa || d.baslik)}</b>${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}</div>
+      <div class="hs-noktalar">${(d.bolumler || []).map(b => { const s = bolumDurum(b, d), v = bolumIzlenme(b); return `<button class="hs-n d-${s}" data-bolum="${esc(d.id)}|${esc(b.n)}" title="Bölüm ${esc(b.n)} · ${esc(DURUM[s].ad)}"><i>${s === 'onay' ? '' : ikon(DURUM[s].ikon, 11)}</i><span>${v != null ? esc(sayi(v)) : 'B' + esc(b.n)}</span>${degisimYaz(d, b)}</button>`; }).join('')}</div>
+      <div class="hs-top">${top != null ? esc(sayi(top)) : '—'}<small>hikâye izlenmesi</small></div></div>`; }).join('')}</div>`;
 }
+// a story's total = the sum of its posted episodes' views (null when none has a number yet)
+const hikayeToplam = d => { const v = (d.bolumler || []).map(bolumIzlenme).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) : null; };
+// change against the previous episode, only when both have a number
+const bolumDegisim = (d, b) => { const o = (d.bolumler || []).find(x => x.n === b.n - 1), a = o ? bolumIzlenme(o) : null, c = bolumIzlenme(b); return a == null || c == null || !a ? null : Math.round((c - a) / a * 100); };
+const degisimYaz = (d, b) => { const p = bolumDegisim(d, b); return p == null ? '' : `<span class="degisim ${p >= 0 ? 'artis' : 'dusus'}" title="Bölüm ${b.n - 1}'e göre">B${esc(b.n)}: %${p >= 0 ? '+' : '-'}${Math.abs(p)}</span>`; };
 const bolumIzlenme = b => { const g = igGonderiler().find(x => (b.media_id && x.id === b.media_id) || (b.link && x.link === b.link)); return g && g.views != null ? g.views : b.metrik && b.metrik.views != null ? b.metrik.views : null; };
 
 // ---------------- One modal for a video: player, caption, the few big actions that apply
@@ -464,6 +477,7 @@ function hkBolum(d, b) {
     <button class="hk-nokta" data-bolum="${esc(d.id)}|${esc(b.n)}" title="Videoyu ve ayrıntıyı aç">${s === 'onay' ? '<i class="nabiz-nokta"></i>' : ikon(DURUM[s].ikon, 15)}</button>
     <b>Bölüm ${esc(b.n)}</b><span class="hk-d">${esc(DURUM[s].ad)}</span>
     <span class="hk-v">${v != null ? `${ikon('goz', 13)}${esc(sayi(v))}` : b.bekleme === 'butce' ? 'bütçe bekliyor' : '&nbsp;'}</span>
+    ${degisimYaz(d, b)}
     ${karar ? `<span class="hk-karar${b.karar === 'kes' ? ' kes' : ''}" title="${esc(b.karar_neden || '')}">${esc(karar)}</span>` : ''}
     <span class="hk-islem">${onayBekler ? `<button class="dugme ince sari" data-onayla="${esc(b.kuyruk_id)}" data-makine="${dzM()}">Onayla</button>` : ''}${iz.devam ? `<button class="dugme ince" data-dkarar="devam" ${dk}>Devam ettir</button>` : ''}${iz.kes ? `<button class="dugme ince tehlike" data-dkarar="kes" ${dk}>Kes</button>` : ''}${iz.tekrar ? `<button class="dugme ince" data-dtekrar="1" ${dk}>Tekrar dene</button>` : ''}</span></div>`;
 }
@@ -481,11 +495,11 @@ function dizilerCiz() {
       + (s.reddedilen || DZ.reddedilen_toplam ? `<div class="ince-yazi">Uygun bulunmayan hikâye: bu çalışmada ${esc(s.reddedilen || 0)} · toplam ${esc(DZ.reddedilen_toplam || 0)} (bir daha denenmez)</div>` : '') + '</div>' : '');
   $('#dz-son').open = acik;
   $('#dz-liste').innerHTML = DZ.diziler.length ? DZ.diziler.map(d => {
-    const url = guvenli(d.kaynak && d.kaynak.url), top = (d.bolumler || []).reduce((a, b) => a + (bolumIzlenme(b) || 0), 0);
+    const url = guvenli(d.kaynak && d.kaynak.url), top = hikayeToplam(d);
     return `<article class="kart hk hk-${esc(d.durum)}"><div class="hk-ust"><div class="hk-ad">
         <div class="hk-cipler">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}<span class="hk-durum hk-durum-${esc(d.durum)}">${esc(DIZI_DURUM[d.durum] || d.durum)}</span></div>
         <h3>${esc(d.baslik_kisa || d.baslik)}</h3><small>${d.baslik && d.baslik !== d.baslik_kisa ? esc(d.baslik) + ' · ' : ''}${d.anlatici ? 'Ses: ' + esc(d.anlatici.ad || d.anlatici.ses) : ''}</small></div>
-      <div class="hk-sag">${top ? `<span class="hk-top">${esc(sayi(top))}<small>izlenme</small></span>` : ''}${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Kaynak</a>` : ''}</div></div>
+      <div class="hk-sag"><span class="hk-top">${top != null ? esc(sayi(top)) : '—'}<small>hikâye izlenmesi</small></span>${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Kaynak</a>` : ''}</div></div>
       <div class="hk-bolumler" style="--n:${(d.bolumler || []).length}">${(d.bolumler || []).map(b => hkBolum(d, b)).join('')}</div></article>`;
   }).join('') : '<div class="liste-bos">Henüz hikâye yok. Zamanlayıcı çalışınca ilk hikâyeler burada görünür.</div>';
   dzAyarCiz();
