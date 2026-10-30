@@ -25,6 +25,7 @@ Her kareyi şu hatalar için kontrol et:
 - uydurma yazı: karede okunan her yazıyı (bildirim, balon, levha, pankart, not, etiket) metinle karşılaştır. Metinde geçmeyen slogan, mesaj, isim ya da cümle varsa sorun olarak yaz ve yazıyı aynen alıntıla. Metindeki kelimeler, kişi adları ve grubun adı serbesttir.
 - yarı saydam katman: sahnenin üstünde yarı saydam bildirim, kart ya da perde var; ya da iki sahne üst üste karışmış görünüyor
 - ekranı soldan sağa kesen ince çizgi (nesneye ait olmayan, karenin bir kenarından öbürüne giden ince yatay ya da dikey çizgi)
+- havada asılı nesne: tutan eli ya da altında bir yüzeyi olmayan valiz, bardak, telefon gibi bir şey boşlukta süzülüyor (bulut, kuş, düşünce balonu, bildirim ve mesaj balonu hariç)
 
 Yalnız gerçekten gördüğün sorunları yaz. Her sorun için hangi saniyede olduğunu ve nasıl düzeltileceğini söyle. Kusursuz değil ama izlenebilir bir sahne için "tamam" de; yalnız izleyicinin fark edeceği hatalar "yuksek" ya da "orta" olur.
 

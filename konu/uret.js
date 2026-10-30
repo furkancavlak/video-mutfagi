@@ -179,6 +179,63 @@ function kodCikar(metin) {
   const bloklar = [...String(metin).matchAll(/```(?:js|javascript)?[ \t]*\r?\n([\s\S]*?)```/g)].map(m => m[1]).filter(k => /module\.exports\s*=/.test(k));
   return bloklar.length ? bloklar.sort((a, b) => b.length - a.length)[0].trim() + '\n' : null;
 }
+// ---- formul scene stage, chunked: konu.json llm.sahne_parca (chunks, default 4), llm.paralel (calls at once, default 3),
+// llm.sahne_tur (rounds, default 2), llm.model_denetim (still reviewer model, default model_metin)
+const sahneAyari = llm => ({
+  parcalar: Math.max(1, Math.min(8, Math.round(+((llm || {}).sahne_parca ?? 4)) || 1)),
+  paralel: Math.max(1, Math.round(+((llm || {}).paralel ?? 3)) || 1),
+  turlar: Math.max(1, Math.round(+((llm || {}).sahne_tur ?? 2)) || 1),
+});
+// consecutive lines -> n chunks of near-equal duration; chunk k is drawn from `bas` to `son` (the next chunk's bas, the
+// closing card or the end): [{k, satirlar: [i..], bas, son}]
+function parcala(Z, n) {
+  const S = Z.satirlar, N = Math.max(1, Math.min(n, S.length));
+  const sonT = Z.kapanis != null ? Z.kapanis : Z.toplam, t0 = S[0].bas, top = S[S.length - 1].son - t0;
+  const gruplar = [];
+  S.forEach((s, i) => {
+    const acilacak = N - gruplar.length, g = gruplar[gruplar.length - 1];
+    // a new chunk starts when this line passes the next k/N time mark, or when every line left must open one
+    if (!g || (acilacak > 0 && (S.length - i <= acilacak || s.bas - t0 >= top * gruplar.length / N))) gruplar.push([i]);
+    else g.push(i);
+  });
+  return gruplar.map((satirlar, k) => ({ k, satirlar, bas: k ? S[satirlar[0]].bas : 0, son: k < gruplar.length - 1 ? S[gruplar[k + 1][0]].bas : sonT }));
+}
+function parcaIstemi(P, p, satirMetni) {
+  if (P.length === 1) return '';
+  const ilk = p.satirlar[0], son = p.satirlar[p.satirlar.length - 1], f = x => x.toFixed(2);
+  return `## Bu dosya videonun yalnız bir parçası (parça ${p.k + 1}/${P.length})\n\n` +
+    `Video ${P.length} parçaya bölündü; her parçayı ayrı bir yönetmen aynı anda çiziyor, dosyalar sonra sırayla çalıştırılıp birleştirilir. ` +
+    `Sen yalnız **${ilk === son ? `${ilk}. satırı` : `${ilk}-${son}. satırları`}** çiz. İlk sahnen tam ${f(p.bas)} sn'de başlar, son sahnen tam ${f(p.son)} sn'de biter (sert kesme). ` +
+    `M.kesmeler'i yalnız bu aralığın sınırlarıyla çağır (ilki ${f(p.bas)}, sonuncusu ${f(p.son)}). Bütün id'lere \`p${p.k + 1}-\` öneki koy. Başka satırların sahnesini çizme; anlatıcı ve renkler öbür parçalarla aynı kalsın.\n\n` +
+    (p.k ? `Önceki parçanın son satırı (geçiş için bil, çizme): ${satirMetni(P[p.k - 1].satirlar[P[p.k - 1].satirlar.length - 1], false)}\n` : 'Bu ilk parça: video bununla açılır.\n') +
+    (p.k < P.length - 1 ? `Sonraki parçanın ilk satırı (çizme): ${satirMetni(P[p.k + 1].satirlar[0], false)}\n` : 'Bu son parça: sahnen kapanış kartının başladığı ana kadar sürer.\n');
+}
+// chunk files run one after another on the same M (each sets its own cuts); the css of all of them is kept
+function birlestir(kodlar) {
+  const parca = (k, i) => `// ---- parça ${i + 1}\nparcalar.push((function () {\n  const module = { exports: null };\n${k.trim()}\n  return module.exports;\n})());`;
+  return `// sahneler.js merged from ${kodlar.length} chunks written in parallel (konu/uret.js formul); each draws its own lines\nconst parcalar = [];\n${kodlar.map(parca).join('\n')}\n` +
+    `module.exports = function (g) {\n  const css = [];\n  for (const p of parcalar) { const r = p(g); if (r && r.css) css.push(String(r.css).replace(/^\\.sh\\{position:absolute;inset:0\\}\\n?/, '')); }\n  return g.M.bitir(css.join('\\n'));\n};\n`;
+}
+// heavy review issues -> per chunk (by their second); an issue without a second goes to every chunk
+function sorunDagit(sorunlar, P) {
+  const out = P.map(() => []);
+  for (const x of sorunlar) {
+    const t = x && x.saniye != null && !isNaN(+x.saniye) ? +x.saniye : null;
+    const i = t == null ? -1 : P.findIndex((p, k) => t >= p.bas && (t < p.son || k === P.length - 1));
+    if (i < 0) out.forEach(l => l.push(x)); else out[i].push(x);
+  }
+  return out;
+}
+// run async jobs with at most n at once
+async function paralel(isler, n) {
+  const kuyruk = isler.slice(), calisan = [];
+  const bir = async () => { while (kuyruk.length) await kuyruk.shift()(); };
+  for (let i = 0; i < Math.max(1, n); i++) calisan.push(bir());
+  await Promise.all(calisan);
+}
+// the channel's hard scene rules (gorsel_dil.kurallar), put at the top of the scene prompt
+const kesinKurallar = gd => (Array.isArray((gd || {}).kurallar) && gd.kurallar.length) ? gd.kurallar.map(k => '- ' + k).join('\n') : '- (kanalın ek kuralı yok)';
+
 // the leading // comment block of a file is its manual
 const basYorum = f => { const out = []; for (const l of fs.readFileSync(f, 'utf8').split('\n')) { if (!l.startsWith('//')) break; out.push(l.replace(/^\/\/ ?/, '')); } return out.join('\n'); };
 
@@ -193,7 +250,7 @@ function isHesabi(ctx) {
 }
 
 // ---- the run
-async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir, not = null, hazir = null, kok = O.KOK, sesKontrol } = {}) {
+async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli = true, neZaman = null, yaz = console.log, calistir, not = null, hazir = null, kok = O.KOK, sesKontrol, sonAdim = null } = {}) {
   if (hazir && !/^[\w.-]+$/.test(hazir.ad || '')) O.hata(`hazir.ad geçersiz: "${hazir.ad}" (harf, rakam, - _ . olmalı)`);
   const fikir = hazir ? { id: hazir.ad, baslik: hazir.baslik || hazir.ad } : H.fikirBul(H.havuzOku(ctx), fikirId);
   if (!hazir && fikir.durum === 'reddedildi') O.hata('Bu fikir reddedilmiş. Önce seç: node konu/radar.js sec ' + ctx.kanal + ' ' + fikir.id);
@@ -220,7 +277,9 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
   const D = O.okuJson(durumF, { fikir: hazir ? null : fikir.id, ...(hazir ? { hazir: hazir.ad } : {}), kanal: ctx.kanal, katman, baslangic: O.simdi().toISOString(), adimlar: {} });
   if (otomatik) D.otomatik = true;      // only runs started by automation are resumed by the scheduler
   const bitti = a => !!D.adimlar[a];
-  const isaretle = (a, ek = {}) => { D.adimlar[a] = { zaman: O.simdi().toISOString(), ...ek }; if (D.bekleyen && D.bekleyen.adim === a) delete D.bekleyen; O.yazJson(durumF, D); };
+  // each stage's mark carries its duration (seconds since the previous mark of this run)
+  let sonIsaret = Date.now();
+  const isaretle = (a, ek = {}) => { D.adimlar[a] = { zaman: O.simdi().toISOString(), sure_sn: Math.round((Date.now() - sonIsaret) / 1000), ...ek }; sonIsaret = Date.now(); if (D.bekleyen && D.bekleyen.adim === a) delete D.bekleyen; O.yazJson(durumF, D); };
   const izinli = (adim, miktar) => onay === true || (!!onay && typeof onay === 'object' && onay[adim] != null && miktar <= onay[adim]);
   const bekle = (adim, ek, mesaj) => { D.bekleyen = { adim, ...ek, zaman: O.simdi().toISOString() }; O.yazJson(durumF, D); return new Dur('onay', mesaj); };
   const devam = hazir ? `node dizi/calistir.js ${ctx.kanal}` : `node konu/radar.js uret ${ctx.kanal} ${fikir.id} --onay`;
@@ -304,53 +363,80 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       const Z = O.okuJson(path.join(dir, 'ses', 'zaman.json'));
       const gd = ctx.kimlik.gorsel_dil || {}, kf = path.join(ctx.dir, (gd.karakter || {}).dosya || 'karakter.js');
       const { _aciklama, karakter: _k, ...gdMetin } = gd;
-      const satirlar = video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(2)}-${Z.satirlar[i].son.toFixed(2)} sn]: ${s.metin}\n   kelimeler: ${Z.kelimeler.filter(k => k.satir === i).map(k => `${k.w}@${k.a.toFixed(2)}`).join(' ')}`).join('\n');
+      const satirMetni = (i, kelime = true) => `${i} [${Z.satirlar[i].bas.toFixed(2)}-${Z.satirlar[i].son.toFixed(2)} sn]: ${video.satirlar[i].metin}${kelime ? `\n   kelimeler: ${Z.kelimeler.filter(k => k.satir === i).map(k => `${k.w}@${k.a.toFixed(2)}`).join(' ')}` : ''}`;
       const kareDir = path.join(dir, 'cikti', 'kareler-ucretsiz'), sf = path.join(dir, 'sahneler.js');
       // two stills per line: just after the cut and near the end, where the line's action has landed
       const saniyeler = Z.satirlar.flatMap(s => [s.bas + (s.son - s.bas) * .3, s.bas + (s.son - s.bas) * .85]).map(x => +x.toFixed(2));
-      let kod = null, sorunlar = [], puan = null, en = null;     // en: the best attempt that ran
-      for (let tur = 0; tur < 3; tur++) {
-        const duzeltme = tur ? `## Önceki denemenin sorunları (düzelt, geri kalanını bozma)\n\n${sorunlar.join('\n')}${kod ? `\n\nÖnceki dosya:\n\n\`\`\`js\n${kod}\`\`\`` : ''}` : '';
-        yaz(tur ? `Sahne düzeltiliyor (tur ${tur + 1})…` : 'Sahne çiziliyor (formül: bu videoya özel çizim)…');
-        const cevap = await sor(LLM.istem('sahne-yaz', {
-          formul: md('dersler/FORMUL.md'), renkler: ctx.kimlik.renkler || {}, gorsel_dil: gdMetin,
-          karakter: fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.',
-          motor: basYorum(path.join(O.KOK, 'uretim', 'motor.js')), satirlar, sure: Z.toplam.toFixed(1), marka: (Z.sting[0] || 0).toFixed(2),
-          ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'), duzeltme,
-        }), { is: 'sahne-yaz', json: false, efor: llm.efor_sahne || 'high', zamanAsimiMs: sahneZamanAsimi(llm) });   // fast / cheap models can think themselves out of an answer: lower it per channel
-        const yeni = kodCikar(cevap);
-        if (!yeni) { sorunlar = ['- Cevapta module.exports içeren bir \`\`\`js kod bloğu yok. Dosyanın tamamını tek blokta döndür.']; continue; }
-        kod = yeni;
+      const { parcalar: parcaSayisi, turlar: TUR, paralel: es } = sahneAyari(llm);
+      const P = parcala(Z, parcaSayisi);
+      const ortak = {
+        formul: md('dersler/FORMUL.md'), renkler: ctx.kimlik.renkler || {}, gorsel_dil: gdMetin, kurallar: kesinKurallar(gd),
+        karakter: fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.',
+        motor: basYorum(path.join(O.KOK, 'uretim', 'motor.js')), sure: Z.toplam.toFixed(1), marka: (Z.sting[0] || 0).toFixed(2),
+        ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'),
+      };
+      const satirListesi = p => video.satirlar.map((_, i) => satirMetni(i, P.length === 1 || p.satirlar.includes(i))).join('\n');
+      const sureler = [];
+      let kodlar = P.map(() => null), sorunlar = P.map(() => []), puan = null, en = null;     // en: the best attempt that ran
+      for (let tur = 0; tur < TUR; tur++) {
+        const yazilacak = P.filter(p => !kodlar[p.k] || sorunlar[p.k].length);
+        yaz(tur ? `Sahne düzeltiliyor (tur ${tur + 1}, ${yazilacak.length}/${P.length} parça)…` : `Sahne çiziliyor (formül: bu videoya özel çizim${P.length > 1 ? `, ${P.length} parça, aynı anda ${Math.min(es, P.length)}` : ''})…`);
+        const t0 = Date.now();
+        await paralel(yazilacak.map(p => async () => {
+          const s = sorunlar[p.k];
+          const duzeltme = s.length ? `## Önceki denemenin sorunları (düzelt, geri kalanını bozma)\n\n${s.join('\n')}${kodlar[p.k] ? `\n\nÖnceki dosya:\n\n\`\`\`js\n${kodlar[p.k]}\`\`\`` : ''}` : '';
+          const cevap = await sor(LLM.istem('sahne-yaz', { ...ortak, satirlar: satirListesi(p), parca: parcaIstemi(P, p, satirMetni), duzeltme }),
+            { is: 'sahne-yaz', json: false, efor: llm.efor_sahne || 'high', zamanAsimiMs: sahneZamanAsimi(llm) });   // fast / cheap models can think themselves out of an answer: lower it per channel
+          const yeni = kodCikar(cevap);
+          if (yeni) { kodlar[p.k] = yeni; sorunlar[p.k] = []; }
+          else sorunlar[p.k] = ['- Cevapta module.exports içeren bir ```js kod bloğu yok. Dosyanın tamamını tek blokta döndür.'];
+        }), es);
+        const olcum = { tur: tur + 1, parca: yazilacak.length, yaz_sn: Math.round((Date.now() - t0) / 1000) };
+        sureler.push(olcum);
+        if (kodlar.some(k => !k)) continue;
+        const kod = P.length === 1 ? kodlar[0] : birlestir(kodlar);
         fs.writeFileSync(sf, kod);
+        if (P.length > 1) kodlar.forEach((k, i) => fs.writeFileSync(path.join(dir, `sahneler-parca-${i + 1}.js`), k));
         fs.mkdirSync(kareDir, { recursive: true });
         for (const f of fs.readdirSync(kareDir)) if (/^(frame-|contact-sheet)/.test(f)) fs.unlinkSync(path.join(kareDir, f));   // our own old stills
-        const r = node('uretim/kurgu.js', [dir, '--kare', saniyeler.join(',')], { yakala: true });
-        if (!r.ok) { sorunlar = ['- Dosya çalışmadı ya da kare alınamadı: ' + r.cikti.split('\n').filter(Boolean).slice(-4).join(' | ')]; continue; }
+        const t1 = Date.now(), r = node('uretim/kurgu.js', [dir, '--kare', saniyeler.join(',')], { yakala: true });
+        olcum.kare_sn = Math.round((Date.now() - t1) / 1000);
+        if (!r.ok) {
+          // a merged file that does not run cannot be blamed on one chunk: every chunk gets the error
+          const hata = '- Dosya çalışmadı ya da kare alınamadı: ' + r.cikti.split('\n').filter(Boolean).slice(-4).join(' | ');
+          sorunlar = P.map(() => [hata]);
+          continue;
+        }
         const sayfalar = fs.readdirSync(kareDir).filter(f => /^contact-sheet.*\.jpg$/.test(f)).sort().map(f => path.join(kareDir, f));
         yaz(`Sahne kareleri kontrol ediliyor (${saniyeler.length} kare)…`);
+        const t2 = Date.now();
         let d;
         try {
           d = await sor(LLM.istem('sahne-denetim', {
             sayfalar: sayfalar.map(f => path.resolve(f)).join(', '), gorsel_dil: gdMetin,
             satirlar: video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(1)}-${Z.satirlar[i].son.toFixed(1)} sn]: ${s.metin}`).join('\n'),
-          }), { is: 'sahne-denetim', resimler: sayfalar, efor: llm.efor_sahne === 'low' ? 'low' : 'medium' });
+          }), { is: 'sahne-denetim', resimler: sayfalar, model: llm.model_denetim || llm.model_metin, efor: llm.efor_sahne === 'low' ? 'low' : 'medium' });
         } catch (e) {
           // a text-only model cannot look at the stills: keep the attempt that ran, unreviewed, and say so
           if (!/image|resim|vision|görsel/i.test(e.message)) throw e;
           yaz('  Bu model resim göremiyor: sahne kontrolsüz kullanılıyor.');
-          return { ok: true, tur: tur + 1, puan: null, kalan: ['- Sahne kontrol edilmedi: seçilen model resim göremiyor. Paylaşmadan önce videoyu baştan sona izle.'] };
+          return { ok: true, tur: tur + 1, puan: null, kalan: ['- Sahne kontrol edilmedi: seçilen model resim göremiyor. Paylaşmadan önce videoyu baştan sona izle.'], sureler };
         }
+        Object.assign(olcum, { denetim_sn: Math.round((Date.now() - t2) / 1000), puan: d.puan });
         puan = d.puan;
         const agir = (d.sorunlar || []).filter(x => x.agirlik !== 'dusuk');
-        const kalan = agir.map(x => `- ${x.saniye != null ? x.saniye + ' sn: ' : ''}${x.sorun} → ${x.duzeltme || ''}`);
+        const satir = x => `- ${x.saniye != null ? x.saniye + ' sn: ' : ''}${x.sorun} → ${x.duzeltme || ''}`;
+        const kalan = agir.map(satir);
+        olcum.agir = agir.length;
         if (!en || (+d.puan || 0) > en.puan || ((+d.puan || 0) === en.puan && agir.length < en.sorunlar.length)) en = { kod, puan: +d.puan || 0, sorunlar: kalan, tur: tur + 1 };
         yaz(`  puan ${d.puan ?? '?'}/10, ağır sorun ${agir.length}`);
-        if (!agir.length) return { ok: true, tur: tur + 1, puan, kalan: [] };
-        sorunlar = kalan;
+        if (!agir.length) return { ok: true, tur: tur + 1, puan, kalan: [], sureler };
+        // only the chunks whose time window holds a heavy issue are written again
+        sorunlar = sorunDagit(agir, P).map(l => l.map(satir));
       }
       // no attempt passed clean: the best one that ran is used and its remaining notes go to the run record
-      if (en) { fs.writeFileSync(sf, en.kod); return { ok: true, tur: en.tur, puan: en.puan, kalan: en.sorunlar }; }
-      return { ok: false, sorunlar, puan };
+      if (en) { fs.writeFileSync(sf, en.kod); return { ok: true, tur: en.tur, puan: en.puan, kalan: en.sorunlar, sureler }; }
+      return { ok: false, sorunlar: sorunlar.flat(), puan, sureler };
     }
 
     // 4. paid-tier recipe
@@ -425,10 +511,12 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     // attempt even ran, the run stops for a human.
     if (katman === 'formul' && !bitti('sahne')) {
       const r = await formulSahne();
-      if (!r.ok) throw new Dur('insan', 'Sahne kodu üç denemede de çalışmadı (kare alınamadı):\n' + r.sorunlar.join('\n') + `\nSon deneme: ${rel(path.join(dir, 'sahneler.js'))}. Düzelt ya da sil, sonra aynı komutla devam et.`);
+      if (!r.ok) throw new Dur('insan', `Sahne kodu ${sahneAyari(llm).turlar} denemede de çalışmadı` + ' (kare alınamadı):\n' + r.sorunlar.join('\n') + `\nSon deneme: ${rel(path.join(dir, 'sahneler.js'))}. Düzelt ya da sil, sonra aynı komutla devam et.`);
       if (r.kalan.length) yaz(`Sahne en iyi denemeyle (tur ${r.tur}, puan ${r.puan}/10) kullanılıyor; kontrolün kalan notları (paylaşmadan önce bak):\n` + r.kalan.map(x => '  ' + x).join('\n'));
-      isaretle('sahne', { tur: r.tur, puan: r.puan, kalan: r.kalan });
+      isaretle('sahne', { tur: r.tur, puan: r.puan, kalan: r.kalan, turlar: r.sureler });
     }
+    // stills-only runs (timing the scene stage on an existing voice) stop here: no render, no queue job
+    if (sonAdim === 'sahne') return { durum: 'sahne-bitti', dir };
 
     if (katman !== 'ucretli' && katman !== 'sablon' && katman !== 'formul') throw new Dur('insan', 'Ücretsiz katman seçili: sahneler.js (kodla animasyon) otomatik yazılmıyor, çünkü kare kare bakıp düzeltmeden güvenilir çıkmıyor. Ajan ya da insan sahneler.js yazmalı (uretim/TARIF.md 5a). Ses hazır.');
 
@@ -548,4 +636,4 @@ function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap =
   return f;
 }
 
-module.exports = { uret, isHesabi, kodCikar, sahneZamanAsimi, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, isHesabi, kodCikar, sahneZamanAsimi, sahneAyari, parcala, parcaIstemi, birlestir, sorunDagit, paralel, kesinKurallar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
