@@ -1,0 +1,4 @@
+[
+  {"kind":"Listing","data":{"children":[{"kind":"t3","data":{"id":"abc123","title":"TIFU by testing a parser","selftext":"first line of a synthetic post.\n\nsecond paragraph &amp; more.","score":4321,"num_comments":210,"subreddit":"tifu","permalink":"/r/tifu/comments/abc123/tifu_by_testing_a_parser/"}}]}},
+  {"kind":"Listing","data":{"children":[]}}
+]

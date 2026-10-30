@@ -22,6 +22,23 @@ function rssAyristir(xml, adet) {
   });
 }
 
+// Full post via <post-url>.json (listing shape [{data:{children:[{data:post}]}}, comments]).
+async function varsayilanGetir(url, { headers = {} } = {}) {
+  const r = await getir(url, { kaynak: 'reddit', aralikMs: 2000, basliklar: headers });
+  if (r.durum !== 200) throw new Error(`HTTP ${r.durum}`);
+  return r.metin;
+}
+function postAyristir(json) {
+  const d = (((JSON.parse(json) || [])[0] || {}).data || {}).children;
+  const p = d && d[0] && d[0].data;
+  if (!p || !p.id) throw new Error('reddit yanıtında gönderi yok');
+  return { id: p.id, baslik: p.title || '', metin: p.selftext || '', skor: p.score || 0, yorum: p.num_comments || 0, subreddit: p.subreddit || '' };
+}
+async function postGetir(url, { getir: g = varsayilanGetir } = {}) {
+  const temiz = String(url).split(/[?#]/)[0].replace(/\/+$/, '');
+  return postAyristir(await g(temiz + '.json?raw_json=1', { headers: { Accept: 'application/json' } }));
+}
+
 async function apiTopla(ayar, subs) {
   const f = path.join(AYAR_DIR, 'reddit.json');
   if (!fs.existsSync(f)) throw new KaynakHatasi('reddit', `Reddit API seçili ama ${f} yok. konu/BENIOKU.md → "Reddit API" adımlarını izle ya da yontem: "rss" kullan.`);
@@ -52,4 +69,4 @@ async function topla(ayar = {}) {
   return { ogeler: rssAyristir(r.metin, adet), notlar: [] };
 }
 
-module.exports = { topla, rssAyristir };
+module.exports = { topla, rssAyristir, postAyristir, postGetir, varsayilanGetir };
