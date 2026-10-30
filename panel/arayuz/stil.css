@@ -166,7 +166,7 @@ h1{font:800 40px/1.05 var(--display);letter-spacing:-.035em}
 
 /* dialog */
 dialog{border:0;border-radius:18px;padding:0;width:min(720px,94vw);max-height:90vh;background:var(--card);color:var(--ink);box-shadow:0 30px 80px -20px var(--golge);border:1px solid var(--line)}
-dialog::backdrop{background:var(--backdrop)}
+dialog::backdrop{background:var(--backdrop);backdrop-filter:blur(10px) saturate(.8);-webkit-backdrop-filter:blur(10px) saturate(.8)}
 #pencere-ic{padding:20px;display:flex;flex-direction:column;gap:12px}
 .p-ust{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .p-ust h2{font:700 21px var(--display);letter-spacing:-.02em}
