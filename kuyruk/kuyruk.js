@@ -2,7 +2,7 @@
 // Posting queue. Instagram's API has no "publish at" option, so we keep the videos ourselves and a scheduler
 // (Windows Task Scheduler, cron, or a server) runs `calistir` every 5 minutes; whatever is due gets posted.
 //
-//   node kuyruk/kuyruk.js ekle <video.mp4> --aciklama "..." [--zaman "2026-10-27 19:00"] [--onay-gerekli]
+//   node kuyruk/kuyruk.js ekle <video.mp4> --aciklama "..." [--zaman "2026-10-27 19:00"] [--onay-gerekli] [--hesap <ad>]
 //   node kuyruk/kuyruk.js liste                   what is waiting, when it goes, what needs approval
 //   node kuyruk/kuyruk.js onayla <id> | iptal <id>
 //   node kuyruk/kuyruk.js calistir [--kuru|--hazirla]  scheduler entry: posts at most one due video, then exits
@@ -49,27 +49,38 @@ function zamanCoz(s) {
   return d.toISOString();
 }
 
-// next free posting slot: the configured hours, at most `gunluk_en_fazla` per day, never in the past
-function sonrakiSlot(a, dolu) {
-  const sayac = {}; for (const t of dolu) sayac[gun(t)] = (sayac[gun(t)] || 0) + 1;
-  const simdi = Date.now();
+// per-account settings: a.hesaplar[hesap] overrides the global hours/limit; default account is oxygbio
+const HESAP0 = 'oxygbio';
+const hesapAd = h => h || HESAP0;
+function hesapAyar(a, hesap) {
+  const o = (a.hesaplar || {})[hesapAd(hesap)] || {};
+  return { paylasim_saatleri: o.paylasim_saatleri || a.paylasim_saatleri, gunluk_en_fazla: o.gunluk_en_fazla ?? a.gunluk_en_fazla };
+}
+// how many of this account's jobs (posted or planned; `t` = paylasildi or ne_zaman) fall on local day `g` (YYYY-MM-DD)
+const gunlukSayi = (isl, g, hesap) => isl.filter(j => hesapAd(j.hesap) === hesapAd(hesap) && gun(j.paylasildi || j.ne_zaman) === g).length;
+
+// next free posting slot: the account's hours, at most its daily limit per day, never in the past.
+// dolu: ISO strings (oxygbio) or { t, hesap }; only the account's own entries count. simdi is injectable for tests.
+function sonrakiSlot(a, dolu, hesap, simdi = Date.now()) {
+  const h = hesapAyar(a, hesap), kendi = dolu.map(x => typeof x === 'string' ? { t: x } : x).filter(x => hesapAd(x.hesap) === hesapAd(hesap)).map(x => x.t);
+  const sayac = {}; for (const t of kendi) sayac[gun(t)] = (sayac[gun(t)] || 0) + 1;
   for (let g = 0; g < 60; g++) {
-    for (const s of a.paylasim_saatleri) {
-      const [h, m] = s.split(':').map(Number), d = new Date(); d.setDate(d.getDate() + g); d.setHours(h, m, 0, 0);
+    for (const s of h.paylasim_saatleri) {
+      const [hh, m] = s.split(':').map(Number), d = new Date(simdi); d.setDate(d.getDate() + g); d.setHours(hh, m, 0, 0);
       if (d.getTime() <= simdi + 5 * 60e3) continue;
-      if ((sayac[gun(d)] || 0) >= a.gunluk_en_fazla) continue;
-      if (dolu.some(t => Math.abs(new Date(t) - d) < 30 * 60e3)) continue;
+      if ((sayac[gun(d)] || 0) >= h.gunluk_en_fazla) continue;
+      if (kendi.some(t => Math.abs(new Date(t) - d) < 30 * 60e3)) continue;
       return d.toISOString();
     }
   }
-  fail('60 gün içinde boş paylaşım saati bulunamadı. ayarlar/kuyruk.json → paylasim_saatleri / gunluk_en_fazla');
+  fail('60 gün içinde boş paylaşım saati bulunamadı (' + hesapAd(hesap) + '). ayarlar/kuyruk.json → paylasim_saatleri / gunluk_en_fazla (hesaplar.<ad> altında da olabilir)');
 }
 // jobs dropped without a time (e.g. by the topic radar) get the next free slot the first time the queue sees them
 function saatAta(a) {
-  const hepsi = isler(), paylasilan = isler(D.paylasilan).map(j => j.paylasildi).filter(Boolean);
-  const dolu = [...paylasilan, ...hepsi.filter(j => j.ne_zaman).map(j => j.ne_zaman)];
+  const hepsi = isler(), paylasilan = isler(D.paylasilan).filter(j => j.paylasildi).map(j => ({ t: j.paylasildi, hesap: j.hesap }));
+  const dolu = [...paylasilan, ...hepsi.filter(j => j.ne_zaman).map(j => ({ t: j.ne_zaman, hesap: j.hesap }))];
   for (const j of hepsi.filter(j => !j.ne_zaman)) {
-    const t = sonrakiSlot(a, dolu); dolu.push(t);
+    const t = sonrakiSlot(a, dolu, j.hesap); dolu.push({ t, hesap: j.hesap });
     const { id, f, ...veri } = j; yazJ(f, { ...veri, ne_zaman: t });
   }
 }
@@ -81,7 +92,7 @@ function ekle() {
   const ad = path.basename(mp4, '.mp4').replace(/[^a-zA-Z0-9-]/g, '-').slice(0, 40);
   const now = new Date(), damga = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
   const f = path.join(D.bekleyen, `${damga}-${ad}.json`);
-  yazJ(f, { video: null, mp4: path.relative(KOK, path.resolve(mp4)), aciklama, ne_zaman: arg('--zaman') ? zamanCoz(arg('--zaman')) : null, kaynak: 'elle', onay_gerekli: process.argv.includes('--onay-gerekli') });
+  yazJ(f, { video: null, mp4: path.relative(KOK, path.resolve(mp4)), aciklama, ne_zaman: arg('--zaman') ? zamanCoz(arg('--zaman')) : null, ...(arg('--hesap') ? { hesap: arg('--hesap') } : {}), kaynak: 'elle', onay_gerekli: process.argv.includes('--onay-gerekli') });
   saatAta(a);
   const j = okuJ(f);
   console.log(`Kuyruğa eklendi: ${path.basename(f, '.json')}\nPaylaşım zamanı: ${tarih(j.ne_zaman)}${j.onay_gerekli ? '  (önce onay: node kuyruk/kuyruk.js onayla ' + path.basename(f, '.json') + ')' : ''}`);
@@ -127,13 +138,13 @@ async function paylas(j, a, kuru, hazirla) {
     if (!y.klasor || !y.adres) throw new Error('ayarlar/kuyruk.json → yayin.klasor ve yayin.adres gerekli');
     const ad = 'vm-' + crypto.randomBytes(8).toString('hex') + '.mp4', hedef = path.join(y.klasor, ad);
     fs.copyFileSync(mp4, hedef);
-    try { return await P.gonder(mp4, j.aciklama, kuru, hazirla, y.adres.replace(/\/?$/, '/') + ad); }
+    try { return await P.gonder(mp4, j.aciklama, kuru, hazirla, y.adres.replace(/\/?$/, '/') + ad, j.hesap); }
     finally { fs.rmSync(hedef, { force: true }); }
   }
   const mb = fs.statSync(mp4).size / 1048576, sinir = y.tunel_en_fazla_mb ?? 6;
   let dosya = mp4;
   if (mb > sinir) { log(`video ${mb.toFixed(1)} MB, ev internetinde Instagram yetişemeyebilir: ${sinir} MB'a küçültülüyor`); dosya = kucult(mp4, sinir); }
-  try { return await P.gonder(dosya, j.aciklama, kuru, hazirla, null); }
+  try { return await P.gonder(dosya, j.aciklama, kuru, hazirla, null, j.hesap); }
   finally { if (dosya !== mp4) fs.rmSync(dosya, { force: true }); }
 }
 
@@ -145,12 +156,13 @@ async function calistir() {
   const yaz = ek => yazJ(DURUM, { ...durum, son_calisma: new Date().toISOString(), makine: os.hostname(), ...ek });
   try {
     saatAta(a);
-    const bugun = isler(D.paylasilan).filter(j => j.paylasildi && gun(j.paylasildi) === gun(Date.now())).length;
+    const posted = isler(D.paylasilan).filter(j => j.paylasildi), bugunG = gun(Date.now());
     const sirada = isler().filter(j => !j.onay_gerekli && new Date(j.ne_zaman) <= Date.now() && !(j.sonraki_deneme && new Date(j.sonraki_deneme) > Date.now()))
       .sort((x, y) => new Date(x.ne_zaman) - new Date(y.ne_zaman));
     if (!sirada.length) { yaz({ son_sonuc: 'sırada video yok' }); console.log('Zamanı gelen video yok.'); return; }
-    if (bugun >= a.gunluk_en_fazla) { yaz({ son_sonuc: `bugünkü sınır doldu (${bugun})` }); log(`Bugün ${bugun} video paylaşıldı, sınır ${a.gunluk_en_fazla}. Sıradaki yarın.`); return; }
-    const j = sirada[0];
+    // first due job whose account still has room today (a full account must not block the other)
+    const j = sirada.find(x => gunlukSayi(posted, bugunG, x.hesap) < hesapAyar(a, x.hesap).gunluk_en_fazla);
+    if (!j) { const x = sirada[0], n = gunlukSayi(posted, bugunG, x.hesap); yaz({ son_sonuc: `bugünkü sınır doldu (${n})` }); log(`Bugün ${n} video paylaşıldı (${hesapAd(x.hesap)}), sınır ${hesapAyar(a, x.hesap).gunluk_en_fazla}. Sıradaki yarın.`); return; }
     const gecikme = (Date.now() - new Date(j.ne_zaman)) / 3600e3;
     if (gecikme > (a.gecikme_uyari_saat ?? 2)) log(`UYARI: ${j.id} ${gecikme.toFixed(1)} saat gecikti (bilgisayar kapalı ya da uykudaydı). Şimdi paylaşılıyor.`);
     log(`${kuru ? 'KURU (Instagram\'a gitmez): ' : hazirla ? 'HAZIRLA (Instagram işler, YAYINLANMAZ): ' : 'GERÇEK PAYLAŞIM: '}${j.id}`);
@@ -178,7 +190,7 @@ async function sonuclar() {
   console.log('Paylaşım'.padEnd(22) + 'İzlenme  Erişim  Beğeni  Yorum  Paylaşım  Kayıt');
   for (const j of p.slice(0, 30)) {
     try {
-      const s = await P.sonuc(j.media_id), { id, f, ...veri } = j;
+      const s = await P.sonuc(j.media_id, j.hesap), { id, f, ...veri } = j;
       yazJ(f, { ...veri, sonuc: s, sonuc_zamani: new Date().toISOString() });
       fs.appendFileSync(path.join(KOK, 'kayit', 'sonuclar.jsonl'), JSON.stringify({ zaman: new Date().toISOString(), id, link: j.link, ...s }) + '\n');
       console.log(tarih(j.paylasildi).padEnd(22) + [s.views, s.reach, s.likes, s.comments, s.shares, s.saved].map(v => String(v ?? '-').padStart(7)).join(' ') + '  ' + j.link);
@@ -237,14 +249,18 @@ function durumGoster() {
   if (gec.length) uyari.push(`${gec.length} video zamanını kaçırdı: ${gec.map(j => j.id).join(', ')}`);
   if (onay.length) uyari.push(`Onay bekleyen: ${onay.map(j => j.id).join(', ')}  →  izle, sonra: node kuyruk/kuyruk.js onayla <id>`);
   const h = isler(D.hatali); if (h.length) uyari.push(`${h.length} video hatalı (kuyruk/hatali/)`);
-  const ig = path.join(os.homedir(), '.video-mutfagi', 'instagram.json');
-  if (fs.existsSync(ig)) { const t = okuJ(ig), bas = new Date(t.yenilendi || t.kaydedildi), kalan = 60 - (Date.now() - bas) / 864e5; if (kalan < 10) uyari.push(`Instagram anahtarının süresi ~${Math.max(0, Math.round(kalan))} gün içinde doluyor: node instagram/paylas.js yenile`); }
-  else uyari.push('Instagram bağlı değil (instagram/REHBER.md).');
+  const dir = path.join(os.homedir(), '.video-mutfagi'), dosyalar = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => /^instagram(-[A-Za-z0-9_.]+)?.json$/.test(f)) : [];
+  if (!dosyalar.length) uyari.push('Instagram bağlı değil (instagram/REHBER.md).');
+  for (const f of dosyalar) {
+    const hs = f === 'instagram.json' ? HESAP0 : f.slice(10, -5), t = okuJ(path.join(dir, f)), bas = new Date(t.yenilendi || t.kaydedildi), kalan = 60 - (Date.now() - bas) / 864e5;
+    if (kalan < 10) uyari.push(`Instagram anahtarının (@${t.username || hs}) süresi ~${Math.max(0, Math.round(kalan))} gün içinde doluyor: node instagram/paylas.js yenile${hs === HESAP0 ? '' : ' --hesap ' + hs}`);
+  }
   console.log(uyari.length ? '\nDİKKAT:\n' + uyari.map(u => '  • ' + u).join('\n') : '\nHer şey yolunda.');
 }
 
+module.exports = { sonrakiSlot, gunlukSayi };
 const k = process.argv[2];
-(async () => {
+if (require.main === module) (async () => {
   if (k === 'ekle') ekle();
   else if (k === 'liste') liste();
   else if (k === 'onayla') { const f = bul(process.argv[3] || ''), j = okuJ(f); yazJ(f, { ...j, onay_gerekli: false, onaylandi: new Date().toISOString() }); console.log(`Onaylandı, ${tarih(j.ne_zaman)} saatinde paylaşılacak.`); }

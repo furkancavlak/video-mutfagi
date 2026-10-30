@@ -4,6 +4,7 @@
 //   node instagram/paylas.js kaydet <token-dosyasi>     save + verify a token (file is read, never printed)
 //   node instagram/paylas.js kontrol                    show which account is connected
 //   node instagram/paylas.js yenile                     refresh the long-lived token (60 days)
+//   (kaydet|kontrol|yenile|gonder accept --hesap <ad>: token in instagram-<ad>.json; default oxygbio = instagram.json)
 //   node instagram/paylas.js gonder <video.mp4> [--aciklama "..."] [--kuru] [--hazirla]
 //     --kuru     only checks the tunnel; nothing is sent to Instagram
 //     --hazirla  Instagram downloads and processes the video, but it is NOT published
@@ -16,13 +17,14 @@ const { spawn } = require('child_process');
 
 const API = 'https://graph.instagram.com/' + (process.env.IG_API_VERSION || 'v23.0');
 const AYAR_DIR = path.join(os.homedir(), '.video-mutfagi');
-const AYAR = path.join(AYAR_DIR, 'instagram.json');
+// one token file per account: oxygbio (default) keeps the original name, others get instagram-<hesap>.json
+const ayarYolu = hesap => path.join(AYAR_DIR, !hesap || hesap === 'oxygbio' ? 'instagram.json' : `instagram-${hesap}.json`);
 const KAYIT = path.join(__dirname, '..', 'kayit', 'paylasimlar.jsonl');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const fail = msg => { console.error('HATA: ' + msg); process.exit(1); };
-const readAyar = () => { try { return JSON.parse(fs.readFileSync(AYAR, 'utf8')) } catch (e) { return null } };
-const writeAyar = a => { fs.mkdirSync(AYAR_DIR, { recursive: true }); fs.writeFileSync(AYAR, JSON.stringify(a, null, 2)); };
+const readAyar = hesap => { try { return JSON.parse(fs.readFileSync(ayarYolu(hesap), 'utf8')) } catch (e) { return null } };
+const writeAyar = (a, hesap) => { fs.mkdirSync(AYAR_DIR, { recursive: true }); fs.writeFileSync(ayarYolu(hesap), JSON.stringify(a, null, 2)); };
 
 async function graph(method, p, params = {}) {
   const url = new URL(API + p);
@@ -95,10 +97,10 @@ async function waitReachable(url) {
 }
 
 // adres: the video already sits at a public https address (e.g. on a server) -> no local server, no tunnel
-async function gonder(file, aciklama, kuru, hazirla, adres) {
+async function gonder(file, aciklama, kuru, hazirla, adres, hesap) {
   if (!adres && !fs.existsSync(file)) throw new Error('video yok: ' + file);
-  const ayar = readAyar();
-  if (!kuru && !ayar) throw new Error('önce token kaydet: node instagram/paylas.js kaydet <dosya>');
+  const ayar = readAyar(hesap);
+  if (!kuru && !ayar) throw new Error('önce token kaydet: node instagram/paylas.js kaydet <dosya>' + (hesap ? ' --hesap ' + hesap : ''));
   const s = adres ? { hits: [], srv: { close() {} } } : await serve(file);
   let tn;
   try {
@@ -144,8 +146,8 @@ async function gonder(file, aciklama, kuru, hazirla, adres) {
 }
 
 // Reel results. Instagram fills these in over the first days; reading them is free and changes nothing.
-async function sonuc(mediaId) {
-  const ayar = readAyar(); if (!ayar) throw new Error('kayıtlı token yok');
+async function sonuc(mediaId, hesap) {
+  const ayar = readAyar(hesap); if (!ayar) throw new Error('kayıtlı token yok');
   const metrik = 'views,reach,likes,comments,shares,saved,total_interactions';
   const j = await graph('GET', `/${mediaId}/insights`, { metric: metrik, access_token: ayar.token });
   const out = {};
@@ -153,32 +155,35 @@ async function sonuc(mediaId) {
   return out;
 }
 
-module.exports = { gonder, sonuc, graph, readAyar, me };
+module.exports = { gonder, sonuc, graph, readAyar, me, ayarYolu };
 if (require.main !== module) return;
 
 (async () => {
-  const [cmd, a1, ...rest] = process.argv.slice(2);
+  const argv = process.argv.slice(2), hi = argv.indexOf('--hesap');
+  const hesap = hi >= 0 ? argv[hi + 1] : null;
+  if (hi >= 0) { if (!hesap || hesap.startsWith('--')) fail('--hesap için bir ad ver'); argv.splice(hi, 2); }
+  const [cmd, a1, ...rest] = argv;
   if (cmd === 'kaydet') {
     if (!a1 || !fs.existsSync(a1)) fail('token dosyası yok');
     const token = fs.readFileSync(a1, 'utf8').trim();
     const m = await me(token);
-    writeAyar({ token, user_id: m.user_id, username: m.username, kaydedildi: new Date().toISOString() });
-    console.log(`Bağlandı: @${m.username} (${m.account_type}, ${m.media_count} gönderi). Token ${AYAR} içinde.`);
+    writeAyar({ token, user_id: m.user_id, username: m.username, kaydedildi: new Date().toISOString() }, hesap);
+    console.log(`Bağlandı: @${m.username} (${m.account_type}, ${m.media_count} gönderi). Token ${ayarYolu(hesap)} içinde.`);
   } else if (cmd === 'kontrol') {
-    const a = readAyar(); if (!a) fail('kayıtlı token yok');
+    const a = readAyar(hesap); if (!a) fail('kayıtlı token yok');
     const m = await me(a.token);
     console.log(`Bağlı hesap: @${m.username} (${m.account_type}, ${m.media_count} gönderi)`);
   } else if (cmd === 'yenile') {
-    const a = readAyar(); if (!a) fail('kayıtlı token yok');
+    const a = readAyar(hesap); if (!a) fail('kayıtlı token yok');
     const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(a.token)}`).then(r => r.json());
     if (!r.access_token) fail('yenilenemedi: ' + JSON.stringify(r.error || r));
-    writeAyar(Object.assign(a, { token: r.access_token, yenilendi: new Date().toISOString() }));
+    writeAyar(Object.assign(a, { token: r.access_token, yenilendi: new Date().toISOString() }), hesap);
     console.log(`Token yenilendi, ${Math.round(r.expires_in / 86400)} gün geçerli.`);
   } else if (cmd === 'gonder') {
     const i = rest.indexOf('--aciklama');
     const j = rest.indexOf('--adres');
-    await gonder(a1, i >= 0 ? rest[i + 1] : '', rest.includes('--kuru'), rest.includes('--hazirla'), j >= 0 ? rest[j + 1] : null);
+    await gonder(a1, i >= 0 ? rest[i + 1] : '', rest.includes('--kuru'), rest.includes('--hazirla'), j >= 0 ? rest[j + 1] : null, hesap);
   } else {
-    console.log('Kullanım: kaydet <token-dosyasi> | kontrol | yenile | gonder <video.mp4> [--aciklama "..."] [--kuru] [--hazirla] [--adres https://...]');
+    console.log('Kullanım: kaydet <token-dosyasi> | kontrol | yenile | gonder <video.mp4> [--aciklama "..."] [--kuru] [--hazirla] [--adres https://...]  (hepsine: --hesap <ad>)');
   }
 })().catch(e => fail(e.message));
