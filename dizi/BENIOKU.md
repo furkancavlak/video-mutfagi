@@ -35,3 +35,10 @@ Test: `node --test "dizi/test/*.test.js"`
 - `node dizi/havuz.js doldur <kanal>` (zamanlayıcı her pazartesi 04:00 İstanbul): temaları tarayıp `kayit/dizi/<kanal>/havuz.json`'u ~1 aylık stoğa (`dizi.havuz.hedef`, 60) doldurur. Her hikâye `hikayeMi` kontrolünden geçer (2-3 cümlelik özetle); geçmeyen `elendi` olarak kalır. Kullanılmış/reddedilmiş/havuzdaki id yeniden eklenmez. 403/429'da durur, istekler arası `kaynak.aralik_ms`.
 - `calistir` yeni diziyi önce havuzdan alır (tema sırası + favori); havuz boşsa "havuz azaldı" notuyla canlı aramaya düşer.
 - Panel: `GET /api/dizi/havuz?kanal=` (tema başına stok, sıradaki hikâyeler), `POST /api/dizi/havuz/ele {kanal, id, neden}` (kilitli). Arayüzü ayrı iş.
+
+## Metin onayı (hikâye düzeyinde)
+
+- Yeni dizi bölündüğünde (sadakat geçmiş) `metin_onay: 'bekliyor'` alır; Furkan bütün bölüm metinlerini onaylayana kadar hiçbir bölümü seslendirilmez/üretilmez. Ayar: `konu.json → dizi.metin_onayi` (varsayılan true; false = eski davranış).
+- Bekleyen dizi aktif dizi sınırına sayılmaz; aynı anda en fazla 2 hikâye metin onayı bekler, daha fazlası açılmaz.
+- Panel: `POST /api/dizi/metin {kanal, id, karar: 'onayla'|'reddet', metinler?: {n: metin}}` (kilitli). Düzeltilen metinde yalnız özet kuralı yeniden denetlenir (tek cümle, en fazla 15 kelime). `reddet`: dizi `kesildi` ("metin reddedildi"), hikâye `reddedilen.json`'a. Liste API'si `metin_onay`'ı ve bekleyen dizilerin metinlerini verir. Sunucu: `--dizi-metin`.
+- Bu özellikten önceki diziler (alan yok) `onaylandi` sayılır; `calistir` ilk koşuda alanı açıkça yazar.

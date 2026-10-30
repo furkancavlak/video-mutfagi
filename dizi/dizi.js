@@ -69,6 +69,56 @@ function tekrarDene(d, n) {
   return b;
 }
 
+// ---- story-level text approval (Furkan 31.10): a new series waits with metin_onay 'bekliyor' until its episode texts are
+// approved; nothing of it is voiced before. A series from before this feature (no field) counts as approved.
+const metinOnay = d => (d && d.metin_onay) || 'onaylandi';
+// the recap rule a human edit is checked against: episode 2+ opens with one "Önceki bölümde…" sentence of at most 15 words
+function ozetHatasi(metin, n) {
+  const m = String(metin || '').trim();
+  if (!m) return `Bölüm ${n} boş`;
+  if (m.length > 4000) return `Bölüm ${n} çok uzun`;
+  if (n === 1) return null;
+  const temiz = s => s.replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();
+  const ilk = temiz(m.split(/\n\s*\n/)[0]);
+  if (!/^önceki bölüm/.test(ilk.toLocaleLowerCase('tr'))) return `Bölüm ${n} "Önceki bölümde…" cümlesiyle açılmalı`;
+  if (!/\n\s*\n/.test(m)) return `Bölüm ${n}: özetten sonra boş satır bırak`;
+  const { cumleler } = require('./uret-bolum');
+  const c = cumleler(ilk).length, k = ilk.split(/\s+/).filter(Boolean).length;
+  return c > 1 || k > 15 ? `Bölüm ${n}: özet tek cümle ve en fazla 15 kelime olmalı (${c} cümle, ${k} kelime)` : null;
+}
+// karar 'onayla' (optionally with edited texts {n: text}) or 'reddet'; the caller holds the lock and records a rejection
+function metinKarar(d, karar, metinler, simdi = new Date()) {
+  if (!['onayla', 'reddet'].includes(karar)) throw new Error('karar onayla ya da reddet olmalı');
+  if (metinOnay(d) !== 'bekliyor') throw new Error('Bu hikâyenin metni onay beklemiyor');
+  const zaman = new Date(simdi).toISOString();
+  if (karar === 'reddet') {
+    Object.assign(d, { metin_onay: 'reddedildi', metin_onay_zaman: zaman, durum: 'kesildi', karar_neden: 'metin reddedildi' });
+    for (const b of d.bolumler || []) if (b.durum === 'metin') b.durum = 'atlandi';
+    return d;
+  }
+  const yeni = {};
+  if (metinler != null) {
+    if (typeof metinler !== 'object' || Array.isArray(metinler)) throw new Error('metinler {bölüm: metin} olmalı');
+    for (const [k, v] of Object.entries(metinler)) {
+      const n = Number(k), b = bul(d, n);
+      if (!Number.isInteger(n) || !b) throw new Error(`bölüm ${k} yok`);
+      if (typeof v !== 'string') throw new Error(`bölüm ${n} metni yazı olmalı`);
+      const e = ozetHatasi(v, n);
+      if (e) throw new Error(e);
+      yeni[n] = v.replace(/\r\n/g, '\n').trim();
+    }
+  }
+  for (const [n, v] of Object.entries(yeni)) { const b = bul(d, +n); if (b.metin !== v) { b.metin = v; b.elle_duzeltildi = true; } }
+  Object.assign(d, { metin_onay: 'onaylandi', metin_onay_zaman: zaman });
+  return d;
+}
+// migration: series created before the feature get an explicit 'onaylandi' (returns how many were set)
+function metinOnayGoc(veri) {
+  let n = 0;
+  for (const d of (veri && veri.diziler) || []) if (d && !d.metin_onay) { d.metin_onay = 'onaylandi'; n++; }
+  return n;
+}
+
 function kararVer(dizi, n, tumDiziler, ayar, simdi) {
   const b = bul(dizi, n);
   if (!b) throw new Error(`bölüm ${n} yok`);
@@ -130,4 +180,4 @@ function kilitAl(kok, kanal) {
   return { mesaj: 'kilit: kilit dosyası alınamadı' };
 }
 
-module.exports = { yukle, kaydet, kararVer, elleKarar, kilitAl, kararHata, tekrarHata, kararUygula, tekrarDene };
+module.exports = { yukle, kaydet, kararVer, elleKarar, kilitAl, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi };

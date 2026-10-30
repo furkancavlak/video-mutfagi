@@ -6,7 +6,7 @@
 //   node uretim/kurgu.js <video-klasoru> --kare 3,12.5   stills at those seconds only
 //   node uretim/kurgu.js <video-klasoru> --render        full video -> cikti/<ad>-ucretsiz.mp4
 //
-// sahneler.js exports ({ C, T, at, f, r2, rnd, W, H, M, karakter }) => ({ html, tl: [gsap lines], css }); it runs sandboxed
+// sahneler.js exports ({ C, T, at, f, r2, rnd, W, H, M, karakter, kutuphane }) => ({ html, tl: [gsap lines], css }); it runs sandboxed
 // (no require). M = uretim/motor.js, karakter = kanal/<ad>/karakter.js (or null). Rules: dersler/FORMUL.md
 // where T = { Z, L, LE, cue, ifade, END } (see uretim/cekirdek.js). Write it with dersler/KURGU-DILI.md open.
 const fs = require('fs'), path = require('path');
@@ -27,7 +27,9 @@ else {
   const M = require('./motor')({ T, at: K.at, f: K.f1 });
   const kf = path.join(kimlikDir, ((kimlik.gorsel_dil || {}).karakter || {}).dosya || 'karakter.js');
   const karakter = fs.existsSync(kf) ? K.guvenliYukle(kf)({ C, f: K.f1 }) : null;
-  S = K.guvenliYukle(sahneFile)({ C, T, at: K.at, f: K.f1, r2, rnd, W: K.W, H: K.H, M, karakter });
+  // approved recurring characters of the channel / this story (uretim/kutuphane.js, kit folder karakterler/)
+  const kutuphane = require('./kutuphane').yukle(kimlikDir, video.dizi || null, { C, f: K.f1, karakter });
+  S = K.guvenliYukle(sahneFile)({ C, T, at: K.at, f: K.f1, r2, rnd, W: K.W, H: K.H, M, karakter, kutuphane });
 }
 // caption look and closing card follow the channel (kimlik.json → gorsel.altyazi, marka.kapanis)
 const cap = K.altyazi(T, video, C, kimlik), mk = K.marka(T, kimlik, C, { video, kimlikDir });

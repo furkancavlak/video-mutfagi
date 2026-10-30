@@ -30,6 +30,12 @@ Görsel dilde `kurallar` varsa her madde kesindir: birini çiğneyen sahne kontr
 
 {{karakter}}
 
+## Karakter kütüphanesi (onaylı, tekrar eden kişiler: YENİDEN ÇİZME, KULLAN)
+
+Aşağıdaki kişiler daha önce çizilip onaylandı. Hikâyede geçiyorlarsa onları kendin çizme; verilen çağrıyla yerleştir (`kutuphane.<id>({...})` bir SVG `<g>` döndürür, `M.yer` ile konumlanabilir). Böylece aynı kişi her bölümde aynı görünür.
+
+{{kutuphane}}
+
 ## Motor (uretim/motor.js, sana `M` olarak gelir)
 
 {{motor}}
@@ -63,7 +69,7 @@ Aşağıdaki dosya başka bir hikâyenin videosudur. Ondan şunları öğren: do
 - `<defs>` içindeki id'lere sahne öneki koy (`s3-golge`); aynı id iki sahnede olursa ilki kazanır. `M.tl.push` içinde `repeat:-1`, `setTimeout`, `async` yok; tekrar sayısını hesapla.
 - Rastgelelik gerekiyorsa yalnız `r2(a, b)` kullan (sabit tohumlu; `Math.random` kullanma).
 - `require`, `process`, dosya, ağ yok: dosya korumalı kutuda çalışır.
-- Dosya `module.exports = function ({ C, T, at, f, r2, rnd, W, H, M, karakter }) { ... return M.bitir(); };` biçimindedir.
+- Dosya `module.exports = function ({ C, T, at, f, r2, rnd, W, H, M, karakter, kutuphane }) { ... return M.bitir(); };` biçimindedir.
 
 {{duzeltme}}
 

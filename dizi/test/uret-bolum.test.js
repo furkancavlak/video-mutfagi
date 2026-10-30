@@ -93,7 +93,7 @@ test('episode states: finished jobs wait for approval or the slot, Bolum.video e
   assert.strictEqual(u.o.onayGerekli, true);
   assert.strictEqual(u.o.kok, kok);
   assert.strictEqual(u.o.hazir.ad, 'eksi-42-b1');
-  assert.deepStrictEqual(u.o.hazir.video_ek, { bolum: 1, toplam_bolum: 3, etiket: 'DENEME HİKÂYE · BÖLÜM 1' });
+  assert.deepStrictEqual(u.o.hazir.video_ek, { dizi: 'eksi-42', bolum: 1, toplam_bolum: 3, etiket: 'DENEME HİKÂYE · BÖLÜM 1' });
   d = dizi(); await uretBolum(ctx, d, 3, { onayGerekli: false, kok, uret: (u = sahte('uretildi')), yaz: sessiz });
   assert.strictEqual(d.bolumler[2].durum, 'sirada');
   assert.match(u.o.hazir.aciklama_instagram, /Bölüm 3 · Final\./);
@@ -110,7 +110,7 @@ test('a 5-episode and a 2-episode series: total, label and description follow th
   const f = async (cx, id, o) => { f.o = o; return { durum: 'uretildi', dir: path.join(kok, 'videolar', `${cx.kanal}-${o.hazir.ad}`) }; };
   const d = dizi({ bolumler: [1, 2, 3, 4, 5].map(n => ({ n, metin: P.slice(0, 2).join('\n\n'), durum: 'metin' })) });
   await uretBolum(ctx, d, 4, { kok, uret: f, yaz: sessiz });
-  assert.deepStrictEqual(f.o.hazir.video_ek, { bolum: 4, toplam_bolum: 5, etiket: 'DENEME HİKÂYE · BÖLÜM 4' });
+  assert.deepStrictEqual(f.o.hazir.video_ek, { dizi: 'eksi-42', bolum: 4, toplam_bolum: 5, etiket: 'DENEME HİKÂYE · BÖLÜM 4' });
   assert.match(f.o.hazir.aciklama_instagram, /Bölüm 4 · Devamı yarın\./);
   await uretBolum(ctx, d, 5, { kok, uret: f, yaz: sessiz });
   assert.match(f.o.hazir.aciklama_instagram, /Bölüm 5 · Final\./);

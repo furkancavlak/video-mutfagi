@@ -225,3 +225,27 @@ test('a 5-episode series: Kes on ep 3 skips 4-5, Kes on ep 5 finishes, Devam pas
   kararUygula(d, 5, 'kes', 'son'); assert.strictEqual(d.durum, 'bitti');
   assert.match(kararHata(s(), 6, 'kes'), /bölüm 6 yok/);
 });
+
+// ---- story-level text approval (Furkan 31.10)
+test('metinKarar: onayla with edits (recap rule re-checked), reddet cuts the series; only a waiting series', () => {
+  const { metinKarar, metinOnay, metinOnayGoc, ozetHatasi } = require('../dizi');
+  const s = () => ({ id: 'm', durum: 'aktif', metin_onay: 'bekliyor', bolumler: [{ n: 1, metin: 'Bir.', durum: 'metin' }, { n: 2, metin: 'Önceki bölümde kapı çaldı.\n\nSonra.', durum: 'metin' }] });
+  let d = s();
+  metinKarar(d, 'onayla', { 2: 'Önceki bölümde kapı yine çaldı.\n\nSonra sustu.' });
+  assert.deepStrictEqual([d.metin_onay, d.bolumler[1].metin, d.bolumler[1].elle_duzeltildi, d.bolumler[0].elle_duzeltildi], ['onaylandi', 'Önceki bölümde kapı yine çaldı.\n\nSonra sustu.', true, undefined]);
+  assert.throws(() => metinKarar(d, 'onayla'), /onay beklemiyor/);
+  d = s();
+  assert.throws(() => metinKarar(d, 'onayla', { 2: 'Önceki bölümde kapı çaldı. Sonra sustu.\n\nx' }), /tek cümle/);
+  assert.throws(() => metinKarar(d, 'onayla', { 2: 'Kapı çaldı.\n\nx' }), /Önceki bölümde/);
+  assert.throws(() => metinKarar(d, 'onayla', { 3: 'x' }), /bölüm 3 yok/);
+  assert.throws(() => metinKarar(d, 'onayla', { 1: '' }), /boş/);
+  assert.throws(() => metinKarar(d, 'bekle'), /onayla ya da reddet/);
+  assert.strictEqual(d.metin_onay, 'bekliyor', 'a refused edit changes nothing');
+  metinKarar(d, 'reddet');
+  assert.deepStrictEqual([d.metin_onay, d.durum, d.karar_neden, d.bolumler.map(b => b.durum)], ['reddedildi', 'kesildi', 'metin reddedildi', ['atlandi', 'atlandi']]);
+  assert.strictEqual(metinOnay({}), 'onaylandi', 'no field = from before the feature');
+  const v = { diziler: [{ id: 'a' }, { id: 'b', metin_onay: 'bekliyor' }] };
+  assert.strictEqual(metinOnayGoc(v), 1); assert.deepStrictEqual(v.diziler.map(x => x.metin_onay), ['onaylandi', 'bekliyor']);
+  assert.strictEqual(ozetHatasi('İlk bölüm metni.', 1), null);
+  assert.match(ozetHatasi('Önceki bölümde ' + 'kelime '.repeat(15) + '.\n\nx', 2), /en fazla 15 kelime/);
+});

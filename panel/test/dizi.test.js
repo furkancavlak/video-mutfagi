@@ -194,3 +194,28 @@ test('havuz: stock per theme and next stories; Ele strikes a pooled story, bad i
     assert.deepEqual(oku('kayit/dizi/kanal_a/havuz.json').hikayeler[0].durum, 'elendi');
   } finally { yaz('kanal/kanal_a/konu.json', KONU); }
 });
+
+// story-level text approval: POST /api/dizi/metin (validated, under the lock); the list carries texts of waiting series
+test('metin onayı: list shows waiting texts; onayla with an edit, recap rule enforced; reddet cuts and records', async () => {
+  const bekleyen = (id) => ({ id, kanal: 'kanal_a', baslik: 'Bekleyen', baslik_kisa: 'Bek', durum: 'aktif', metin_onay: 'bekliyor', konu: 'aşk', kaynak: { tur: 'eksi', url: 'https://eksisozluk.com/entry/5' },
+    bolumler: [b(1, 'metin', { metin: 'İlk bölüm.' }), b(2, 'metin', { metin: 'Önceki bölümde bir şey oldu.\n\nSonra.' })] });
+  const v = taban(); v.diziler.push(bekleyen('m1'), bekleyen('m2')); yaz(DZ, v);
+  try {
+    const l = await istek('GET', '/api/diziler?kanal=kanal_a');
+    const m1 = l.j.diziler.find(d => d.id === 'm1'), d1 = l.j.diziler.find(d => d.id === 'd1');
+    assert.deepStrictEqual([m1.metin_onay, m1.bolumler[1].metin], ['bekliyor', 'Önceki bölümde bir şey oldu.\n\nSonra.']);
+    assert.strictEqual(d1.metin_onay, 'onaylandi'); assert.ok(!('metin' in d1.bolumler[0]), 'texts only for waiting series');
+    const g = o => istek('POST', '/api/dizi/metin', { kanal: 'kanal_a', id: 'm1', karar: 'onayla', ...o });
+    for (const [o, re] of [[{ karar: 'bekle' }, /onayla ya da reddet/], [{ id: '../x' }, /dizi yok/], [{ id: 'yok' }, /dizi yok/], [{ metinler: { 7: 'x' } }, /bölüm numarası/],
+      [{ metinler: { 2: 'Kapı çaldı.\n\nx' } }, /Önceki bölümde/], [{ metinler: { 2: 'Önceki bölümde a oldu. b oldu.\n\nx' } }, /tek cümle/], [{ id: 'd1' }, /onay beklemiyor/]]) {
+      const r = await g(o); assert.equal(r.kod, 400, JSON.stringify(o)); assert.match(r.j.hata, re, JSON.stringify(o));
+    }
+    assert.equal(diziOku('m1').metin_onay, 'bekliyor');
+    const ok = await g({ metinler: { 1: 'İlk bölüm, düzeltildi.' } });
+    assert.equal(ok.kod, 200); assert.equal(ok.j.metin_onay, 'onaylandi');
+    assert.deepStrictEqual([diziOku('m1').metin_onay, diziOku('m1').bolumler[0].metin], ['onaylandi', 'İlk bölüm, düzeltildi.']);
+    assert.equal((await istek('POST', '/api/dizi/metin', { kanal: 'kanal_a', id: 'm2', karar: 'reddet' })).kod, 200);
+    assert.deepStrictEqual([diziOku('m2').durum, diziOku('m2').karar_neden], ['kesildi', 'metin reddedildi']);
+    assert.ok(oku('kayit/dizi/kanal_a/reddedilen.json').reddedilen.some(x => x.id === 'm2' && x.neden === 'metin reddedildi'));
+  } finally { sifirla(); }
+});

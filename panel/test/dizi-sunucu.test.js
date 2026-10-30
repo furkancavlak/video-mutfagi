@@ -186,3 +186,10 @@ test('sunucu-video: the cache keeps at most 5 files and deletes only its own old
   for (const y of yollar.slice(1)) assert.ok(kalan.includes(P.onizlemeAd(y)), y);
   assert.ok(fs.existsSync(path.join(ONIZ, 'baska.txt')) && fs.existsSync(path.join(ONIZ, 'elle.mp4')), 'other files are never touched');
 });
+
+test('--dizi-metin: bad input is rejected before writing; a series not waiting is refused', () => {
+  let r = cli('--dizi-metin', JSON.stringify({ kanal: 'kanal_a', id: 'd1', karar: 'sil' }));
+  assert.equal(r.status, 1); assert.match(r.stderr, /^HATA: karar onayla ya da reddet/m);
+  r = cli('--dizi-metin', JSON.stringify({ kanal: 'kanal_a', id: 'd1', karar: 'onayla' }));
+  assert.equal(r.status, 1); assert.match(r.stderr, /^HATA: Bu hikâyenin metni onay beklemiyor/m);
+});

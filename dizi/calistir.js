@@ -1,10 +1,12 @@
 // Hourly series scheduler run: sync posted episodes from the queue, measure, decide continue/cut, fill the day, ask for due episodes.
 //   node dizi/calistir.js <kanal> [--kuru]      (--kuru = plan only: no writes, no production, no network)
 const fs = require('fs'), path = require('path');
-const { yukle, kaydet, kararVer, kilitAl } = require('./dizi');
+const { yukle, kaydet, kararVer, kilitAl, metinOnay, metinOnayGoc } = require('./dizi');
 const ortak = require('../konu/ortak');
 
-const MAX_AKTIF = 3, ESKALASYON_SAAT = 72;
+// MAX_BEKLEYEN_METIN: new series waiting for Furkan's text approval do not count as active, but no more than this many
+// are opened while waiting (the queue must not flood)
+const MAX_AKTIF = 3, ESKALASYON_SAAT = 72, MAX_BEKLEYEN_METIN = 2;
 const bul = (d, n) => (d.bolumler || []).find(b => b.n === n);
 const saatFark = (simdi, t) => (new Date(simdi).getTime() - new Date(t).getTime()) / 3600e3;
 const gunIst = t => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date(t));   // YYYY-MM-DD
@@ -80,7 +82,9 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
       ortak.yazJson(f, red);
       if (sonuc) sonuc.reddedilen = (sonuc.reddedilen || 0) + 1;
     };
-    const yeni = (h, r, konu) => ({ id: h.id, kanal: ctx.kanal, kaynak: { tur: h.tur, url: h.url, puan: h.puan }, ...r.dizi, ...(konu ? { konu } : {}), olusturma: new Date(simdi).toISOString() });
+    // with text approval on (konu.json → dizi.metin_onayi, default true) the new series waits for Furkan before any voice
+    const metinOnayi = (((ctx.ayar || {}).dizi || {}).metin_onayi) !== false;
+    const yeni = (h, r, konu) => ({ id: h.id, kanal: ctx.kanal, kaynak: { tur: h.tur, url: h.url, puan: h.puan }, ...r.dizi, ...(konu ? { konu } : {}), ...(metinOnayi ? { metin_onay: 'bekliyor' } : {}), olusturma: new Date(simdi).toISOString() });
     const temalar = tema.konular(ctx), sira = tema.temaSirasi(temalar, diziler, simdi);
 
     // 1. the weekly pool
@@ -131,7 +135,8 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
 const eksikModul = e => { if (e && e.code === 'MODULE_NOT_FOUND') { const m = String(e.message).match(/dizi\/[\w-]+/); return `${m ? m[0] : 'modül'} henüz yok`; } throw e; };
 
 // ---- state helpers
-const bekleyenUretim = d => d.durum === 'aktif' && !(d.bolumler || []).some(b => b.durum === 'kontrol_et');
+// a series whose text is not approved yet is never produced
+const bekleyenUretim = d => d.durum === 'aktif' && metinOnay(d) === 'onaylandi' && !(d.bolumler || []).some(b => b.durum === 'kontrol_et');
 // episode n is due when it is still text (or production stalled before a video existed) and its predecessor was measured as devam
 function uretilecekler(diziler) {
   const out = [];
@@ -189,6 +194,10 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     if (kuru) veri = JSON.parse(JSON.stringify(veri));
     const diziler = veri.diziler, kuyruk = kuyrukOku(kok);
     const kaydetSon = () => { if (!kuru) kaydet(kok, ctx.kanal, veri); };
+
+    // 0. series from before the text approval feature count as approved (written explicitly once)
+    const goc = metinOnayGoc(veri);
+    if (goc) notlar.push(`${goc} eski dizi metin onaylı sayıldı (metin_onay: onaylandi)`);
 
     // 1. sync; a series whose last episode is already measured (older data) is finished
     senkronla(diziler, kuyruk, notlar);
@@ -257,18 +266,24 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     }
     const onayDonemi = ayar.onay_donemi !== false;   // a missing onay_donemi means approval is on
     const hedef = onayDonemi ? ayar.onay_gunluk : ayar.gunluk_hedef;
-    let sayi = sayilan.size, aktif = diziler.filter(d => d.durum === 'aktif').length;
-    const eksik = Math.max(0, Math.min((hedef || 0) - sayi, MAX_AKTIF - aktif));
+    const metinBekliyor = d => d.durum === 'aktif' && metinOnay(d) === 'bekliyor';
+    let sayi = sayilan.size, aktif = diziler.filter(d => d.durum === 'aktif' && !metinBekliyor(d)).length, bekleyenMetin = diziler.filter(metinBekliyor).length;
+    const metinYeri = () => ayar.metin_onayi === false || bekleyenMetin < MAX_BEKLEYEN_METIN;
+    const eksik = metinYeri() ? Math.max(0, Math.min((hedef || 0) - sayi, MAX_AKTIF - aktif)) : 0;
+    if (!metinYeri() && (hedef || 0) > sayi) notlar.push(`${bekleyenMetin} hikâye metin onayı bekliyor: yeni hikâye açılmadı`);
     if (kuru) { sonuc.yeniler = eksik; if (eksik) notlar.push(`yeni dizi planlanan: ${eksik}`); }
     else if (eksik) {
       try { yeniDizi = yeniDizi || yeniDiziYap(); }
       catch (e) { notlar.push(eksikModul(e)); yeniDizi = null; }
-      while (yeniDizi && sayi < (hedef || 0) && aktif < MAX_AKTIF) {
+      while (yeniDizi && sayi < (hedef || 0) && aktif < MAX_AKTIF && metinYeri()) {
         let d;
         try { d = await yeniDizi(ctx, { simdi, diziler, kok, sonuc }); } catch (e) { notlar.push(`yeni dizi hatası: ${e.message}`); break; }
         if (!d) { notlar.push('yeni dizi için uygun hikâye bulunamadı'); break; }
         if (d.id && !diziler.some(x => x.id === d.id)) diziler.push(d);
-        sayi++; aktif++; sonuc.yeniler++;
+        // a series waiting for its text approval fills no slot today; at most MAX_BEKLEYEN_METIN of them wait at once
+        if (metinOnay(d) === 'bekliyor') { bekleyenMetin++; notlar.push(`${d.id}: metin onayı bekliyor`); }
+        else { sayi++; aktif++; }
+        sonuc.yeniler++;
         kaydetSon();
       }
     }

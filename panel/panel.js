@@ -6,7 +6,7 @@
 //   node panel/panel.js [--port 4747] [--acma] [--kok <repo>]
 //   node panel/panel.js --ozet                    print the queue summary as JSON (the panel uses it over SSH)
 //   node panel/panel.js --zaman <is-id> "YYYY-MM-DD HH:MM"
-//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json>
+//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-metin <json>
 //                                                 the Diziler page on a server: print JSON; on error "HATA: ..." and exit 1 (3 = lock busy, HTTP 409)
 //
 // Listens on 127.0.0.1 only; every API call carries a random key made at start (it is in the printed link).
@@ -334,6 +334,37 @@ function bolumMp4(video, isMp4) {
   if (c && fs.existsSync(c)) { const m = fs.readdirSync(c).filter(f => f.endsWith('.mp4')).sort((a, b) => /ucretli/.test(a) - /ucretli/.test(b)); if (m.length) return goreli(path.join(c, m[0])); }
   const j = dene(isMp4); return j && fs.existsSync(j) ? goreli(j) : null;
 }
+// story-level text approval: onayla (with optional edited texts {n: text}, recap rule re-checked) or reddet (series cut,
+// story recorded in reddedilen.json). Under the series lock, like the other manual decisions.
+function diziMetinGovde(b) {
+  if (!['onayla', 'reddet'].includes(b.karar)) throw new Error('karar onayla ya da reddet olmalı');
+  const g = { kanal: kanalAdi(b.kanal), id: diziId(b.id), karar: b.karar };
+  if (b.metinler != null) {
+    if (typeof b.metinler !== 'object' || Array.isArray(b.metinler)) throw new Error('metinler {bölüm: metin} olmalı');
+    g.metinler = {};
+    for (const [k, v] of Object.entries(b.metinler)) { if (!/^[1-5]$/.test(k)) throw new Error(`bölüm numarası 1 ile ${MAX_BOLUM} arasında olmalı`); if (typeof v !== 'string' || v.length > 4000) throw new Error(`bölüm ${k} metni geçersiz`); g.metinler[k] = v; }
+  }
+  return g;
+}
+function diziMetin(b) {
+  const g = diziMetinGovde(b);
+  if (!kanallar().includes(g.kanal)) throw new Error('kanal yok');
+  return kilitli(g.kanal, D => {
+    const veri = D.yukle(KOK, g.kanal), d = (veri.diziler || []).find(x => x.id === g.id);
+    if (!d) throw new Error('böyle bir dizi yok');
+    D.metinKarar(d, g.karar, g.metinler);
+    if (g.karar === 'reddet') {
+      const O = require('../konu/ortak'), f = path.join(KOK, 'kayit', 'dizi', g.kanal, 'reddedilen.json'), red = O.okuJson(f, { reddedilen: [] });
+      if (!Array.isArray(red.reddedilen)) red.reddedilen = [];
+      if (!red.reddedilen.some(x => x.id === d.id)) red.reddedilen.push({ kaynak: (d.kaynak && d.kaynak.tur) || null, id: d.id, neden: 'metin reddedildi', zaman: new Date().toISOString() });
+      O.yazJson(f, red);
+      // a pooled story is marked too, so the pool never offers it again
+      try { const H = require('../dizi/havuz.js'), h = H.yukle(KOK, g.kanal), x = h.hikayeler.find(y => y.id === d.id); if (x) { x.durum = 'elendi'; x.neden = 'metin reddedildi'; H.kaydet(KOK, g.kanal, h); } } catch (e) { }
+    }
+    D.kaydet(KOK, g.kanal, veri);
+    return { ok: true, metin_onay: d.metin_onay };
+  });
+}
 // weekly story pool (dizi/havuz.js): stock per theme + the next stories; "Ele" strikes one before it is used (lock taken there)
 function havuzCevap(kanal) {
   if (!kanallar().includes(kanal)) throw new Error('kanal yok');
@@ -350,9 +381,10 @@ function dizilerCevap(kanal) {
   const konuDizi = (okuJ(path.join(KOK, 'kanal', kanal, 'konu.json'), {}) || {}).dizi, ayar = konuDizi && typeof konuDizi === 'object' && !Array.isArray(konuDizi) ? konuDizi : {};
   const D = DiziDepo();
   const bek = isler('bekleyen');
-  const diziler = (D.yukle(KOK, kanal).diziler || []).map(d => ({ ...d, bolumler: (d.bolumler || []).map(({ metin, ...b }) => {
+  // a series waiting for its text approval carries the episode texts (the panel edits them before approving)
+  const diziler = (D.yukle(KOK, kanal).diziler || []).map(d => ({ ...d, metin_onay: D.metinOnay(d), bolumler: (d.bolumler || []).map(({ metin, ...b }) => {
     const j = b.video ? bek.find(x => x.video === b.video) : null;
-    return { ...b, kelime: String(metin || '').split(/\s+/).filter(Boolean).length, mp4: bolumMp4(b.video, j && j.mp4), kuyruk_id: j ? j.id : null, kuyruk_onay_gerekli: j ? !!j.onay_gerekli : null,
+    return { ...b, ...(D.metinOnay(d) === 'bekliyor' ? { metin } : {}), kelime: String(metin || '').split(/\s+/).filter(Boolean).length, mp4: bolumMp4(b.video, j && j.mp4), kuyruk_id: j ? j.id : null, kuyruk_onay_gerekli: j ? !!j.onay_gerekli : null,
       izin: { devam: !D.kararHata(d, b.n, 'devam'), kes: !D.kararHata(d, b.n, 'kes'), tekrar: !D.tekrarHata(d, b.n) } };   // the same checks the POST routes use
   }) }));
   const red = (okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'reddedilen.json'), {}) || {}).reddedilen;
@@ -485,6 +517,7 @@ async function api(req, u) {
   if (!GET && yol === 'dizi/karar') return sunucu ? sunucuJson('--dizi-karar', diziKararGovde(b)) : diziKarar(b);
   if (!GET && yol === 'dizi/tekrar') return sunucu ? sunucuJson('--dizi-tekrar', diziTekrarGovde(b)) : diziTekrar(b);
   if (!GET && yol === 'dizi/ayar') return sunucu ? sunucuJson('--dizi-ayar', diziAyarGovde(b)) : diziAyarYaz(b);
+  if (!GET && yol === 'dizi/metin') return sunucu ? sunucuJson('--dizi-metin', diziMetinGovde(b)) : diziMetin(b);
   if (GET && yol === 'dizi/havuz') return sunucu ? sunucuJson('--dizi-havuz', kanalAdi(u.searchParams.get('kanal'))) : havuzCevap(u.searchParams.get('kanal'));
   if (!GET && yol === 'dizi/havuz/ele') return sunucu ? sunucuJson('--dizi-havuz-ele', havuzEleGovde(b)) : havuzEle(b);
   if (!GET && yol === 'is') return isBaslat(b.tur, b);
@@ -557,7 +590,7 @@ if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'
 
 // Diziler on a server: the panel on the home PC calls these over ssh (same functions as the local routes)
 const jsonArg = s => { let j; try { j = JSON.parse(s); } catch { throw new Error('bozuk istek'); } if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('bozuk istek'); return j; };
-for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))]]) {
+for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))]]) {
   if (!process.argv.includes(bayrak)) continue;
   let cikti;
   try { cikti = JSON.stringify(fn(arg(bayrak))); } catch (e) { console.error('HATA: ' + e.message); process.exit(e.kod === 409 ? 3 : 1); }
