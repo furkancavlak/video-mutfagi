@@ -225,20 +225,28 @@ function isListesi() {
   });
 }
 
-// ---------- Instagram: the account's own posts with their numbers (read only, cached 30 min)
+// ---------- Instagram: the account's own posts with their numbers (read only, at most once an hour, even when the refresh button is pressed)
 const igSurer = new Map();
 // hesap: Instagram account (default oxygbio, whose cache keeps its old file name); P: paylas.js, injectable for tests
 async function instagram(yenile, hesap, P) {
   hesap = hesapGuvenli(hesapTemiz(hesap));
   const kendi = hesap && hesap !== HESAP0 ? hesap : null, onbellek = kendi ? path.join(KAYIT, `panel-instagram-${kendi}.json`) : ONBELLEK;
   const eski = okuJ(onbellek);
-  if (!yenile && eski && Date.now() - new Date(eski.zaman) < 30 * 60e3) return eski;
+  if (eski && Date.now() - new Date(eski.zaman) < 60 * 60e3) return eski;   // Furkan: one Instagram read per hour, no more
   if (igSurer.has(onbellek)) return igSurer.get(onbellek);
   const is = (async () => {
     P = P || igPaylas(); const a = P && P.readAyar(kendi || undefined);
     if (!a) return { zaman: new Date().toISOString(), bagli: false, gonderiler: [] };
     const me = await P.me(a.token).catch(() => null);
-    const m = await P.graph('GET', '/me/media', { fields: 'id,caption,media_type,permalink,timestamp', limit: 30, access_token: a.token });
+    let m;
+    try { m = await P.graph('GET', '/me/media', { fields: 'id,caption,media_type,permalink,timestamp', limit: 30, access_token: a.token }); }
+    catch (e) {
+      // a failed read also counts as this hour's read: keep the old numbers, do not retry on every page refresh
+      const j = { ...(eski || { gonderiler: [] }), zaman: new Date().toISOString(), bagli: false, hata: String(e.message || e).slice(0, 200) };
+      fs.mkdirSync(KAYIT, { recursive: true });
+      fs.writeFileSync(onbellek, JSON.stringify(j, null, 1));
+      return j;
+    }
     const gonderiler = [];
     for (const g of m.data || []) {
       if (g.media_type !== 'VIDEO') continue;
@@ -254,12 +262,12 @@ async function instagram(yenile, hesap, P) {
   return is;
 }
 
-// follower count for the calendar's numbers (read only, cached 30 min in memory); null when the API does not give it
+// follower count for the calendar's numbers (read only, cached 60 min in memory); null when the API does not give it
 const takipciOnbellek = new Map();
 async function takipci(hesap, P) {
   hesap = hesapGuvenli(hesapTemiz(hesap));
   const kendi = hesap && hesap !== HESAP0 ? hesap : null, ad = kendi || HESAP0, e = takipciOnbellek.get(ad);
-  if (e && Date.now() - e.t < 30 * 60e3) return e.j;
+  if (e && Date.now() - e.t < 60 * 60e3) return e.j;
   P = P || igPaylas(); const a = P && P.readAyar(kendi || undefined);
   if (!a) return { bagli: false, takipci: null };
   const m = await P.graph('GET', '/me', { fields: 'followers_count', access_token: a.token }).catch(() => null);
