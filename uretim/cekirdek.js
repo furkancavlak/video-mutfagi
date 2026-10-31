@@ -146,8 +146,12 @@ function kapanisYukle(kimlik, kimlikDir) {
 const ciddiTon = ton => ['hüzünlü', 'ürkütücü', 'ciddi'].includes(ton);
 // the kit's tts settings for this tone (kimlik.json → tts.ton_ayarlari[ton] over tts.voice_settings)
 const tonSesAyari = (tts, ton) => ({ ...((tts || {}).voice_settings || {}), ...((((tts || {}).ton_ayarlari) || {})[ton] || {}) });
+// the names a last episode's closing card thanks (video.json → tesekkur: commenters' usernames), cleaned and unique
+const tesekkurListesi = video => [...new Set((Array.isArray(video.tesekkur) ? video.tesekkur : []).map(x => String(x || '').trim().replace(/^@+/, '')).filter(x => /^[\w.]{1,30}$/.test(x)))];
 // the closing bed: marka.kapanis_muzigi for komik, marka.kapanis_muzigi_ciddi (or nothing) for a serious tone
 const kapanisMuzigi = (marka, ton) => (ciddiTon(ton) ? (marka || {}).kapanis_muzigi_ciddi : (marka || {}).kapanis_muzigi) || null;
+// the thanks outro's own bed (marka.tesekkur_muzigi / _ciddi), looped to the card's length; falls back to the closing bed
+const tesekkurMuzigi = (marka, ton) => (ciddiTon(ton) ? (marka || {}).tesekkur_muzigi_ciddi : (marka || {}).tesekkur_muzigi) || null;
 
 // The card's sound effects ({sfx: [[name, time, volume]]}) as mix inputs: kanal/<kanal>/muzik/<name>.wav. A name that is
 // not a plain word or has no file is skipped, a non-numeric volume plays at 1 (the card still plays, just without that sound).
@@ -206,9 +210,9 @@ function markaKapanis(T, kimlik, C, { video = {}, kimlikDir } = {}) {
   const sonraki = bolum && (!toplam || bolum < toplam) ? bolum + 1 : null;
   const hesap = m.hesap || kimlik.hesap;
   // zaman.json from mix.js carries the card start; an older one without it gets the card at the very end
-  const ton = video.ton || 'komik';
-  const bas = Z.kapanis != null ? Z.kapanis : T.END - kart({ C, at, bas: 0, sonraki, hesap, ton }).sure;
-  const k = kart({ C, at, bas, sonraki, hesap, ton });
+  const ton = video.ton || 'komik', tesekkur = sonraki ? [] : tesekkurListesi(video);
+  const bas = Z.kapanis != null ? Z.kapanis : T.END - kart({ C, at, bas: 0, sonraki, hesap, ton, tesekkur }).sure;
+  const k = kart({ C, at, bas, sonraki, hesap, ton, tesekkur });
   if (video.etiket) {
     // the episode marker always shows: a long title gets a smaller font, and only the title part is cut with "…"
     const { ad, ek, px } = etiketParcala(video.etiket, bolum);
@@ -284,4 +288,4 @@ function renderEt(hfDir, mixWav, outMp4, kodlama = KODLAMA) {
   console.log(`\nHAZIR: ${outMp4} (${(fs.statSync(outMp4).size / 1048576).toFixed(1)} MB)`);
 }
 
-module.exports = { ciddiTon, tonSesAyari, kapanisMuzigi, etiketParcala, KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, kapanisSesleri, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };
+module.exports = { ciddiTon, tonSesAyari, kapanisMuzigi, tesekkurMuzigi, tesekkurListesi, etiketParcala, KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, kapanisSesleri, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };

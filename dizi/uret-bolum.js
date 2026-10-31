@@ -59,6 +59,8 @@ function hazirYap(dizi, n) {
     anlaticilar: { anlatici: dizi.anlatici.ses },
     video_ek: { dizi: dizi.id, ton, bolum: n, toplam_bolum: dizi.bolumler.length, etiket: `${String(dizi.baslik_kisa || dizi.baslik).toLocaleUpperCase('tr')} · BÖLÜM ${n}` },
     aciklama_instagram: aciklamaYaz(metin, n, dizi.bolumler.length, ton, dizi.konu),
+    // the last episode's closing card thanks the story's commenters by name (dizi.tesekkur, filled in the panel)
+    ...(n === dizi.bolumler.length && Array.isArray(dizi.tesekkur) && dizi.tesekkur.length ? { tesekkur: dizi.tesekkur } : {}),
   };
 }
 
@@ -69,7 +71,8 @@ async function uretBolum(ctx, dizi, n, { onayGerekli = true, calistir, kok = O.K
   uret = uret || require('../konu/uret').uret;
   const b = (dizi.bolumler || []).find(x => x.n === n);
   if (!b) throw new Error(`bölüm ${n} yok`);
-  const hazir = hazirYap(dizi, n);      // before any state change: a bad episode leaves it as it was
+  const hazir = hazirYap(dizi, n);
+  if (hazir.tesekkur) { hazir.video_ek.tesekkur = hazir.tesekkur; delete hazir.tesekkur; }      // before any state change: a bad episode leaves it as it was
   // the story's cast and their looks (clothes, hair, colours) are the series' own: made once, unlike other stories' people
   await G.ata(ctx, dizi, diziler, { calistir });
   if (G.anlatici(dizi)) Object.assign(hazir.video_ek, { karakter_gorunum: G.anlatici(dizi), kisi_gorunumleri: G.haritasi(dizi), kisiler: dizi.kisiler });

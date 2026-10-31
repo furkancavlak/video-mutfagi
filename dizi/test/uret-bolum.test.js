@@ -306,3 +306,10 @@ test('ton.js: playful tags found and removed, soft ones kept; tags per tone and 
   assert.strictEqual(T.etiketler('komik', 'aşk'), '#hikaye #yaşanmışhikaye #anı #komik');
   assert.deepStrictEqual([T.ciddiMi('komik'), T.ciddiMi('hüzünlü'), T.ciddiMi(undefined)], [false, true, false]);
 });
+
+test('hazirYap: only the last episode carries the thanks list', () => {
+  const { hazirYap } = require('../uret-bolum');
+  const d = { id: 's', baslik: 'S', ton: 'komik', anlatici: { ses: 'x' }, tesekkur: ['ali', 'ayse'], bolumler: [{ n: 1, metin: 'Bir.' }, { n: 2, metin: 'Önceki bölümde bir.\n\nİki.' }] };
+  assert.strictEqual(hazirYap(d, 1).tesekkur, undefined);
+  assert.deepStrictEqual(hazirYap(d, 2).tesekkur, ['ali', 'ayse']);
+});
