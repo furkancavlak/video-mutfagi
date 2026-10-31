@@ -94,3 +94,18 @@ test('kuyrukOzet: a series channel without hesaplar.<hesap> shows its konu.json 
   const o = P.kuyrukOzet('kanal_d');
   assert.deepEqual(o.saatler, ['12:00', '17:00']); assert.equal(o.gunluk, 2);
 });
+
+// Furkan 31.10: the panel reads the hourly snapshots (instagram/istatistik.js) and never calls Instagram when one exists
+test('instagram / takipci / istatistik come from the snapshots without any Instagram call', async () => {
+  const z = new Date(Date.now() - 20 * 60e3).toISOString(), t = new Date(Date.now() - 30 * 3600e3).toISOString();
+  yaz('kayit/istatistik/snap_hesap/' + z.slice(0, 7) + '.jsonl', JSON.stringify({ zaman: z, hesap: 'snap_hesap', kullanici: 'snap', takipci: 321, medya: [{ id: 'm1', t, baslik: 'Bölüm 1', link: 'L', tur: 'reel', views: 900, likes: 9, yorumlar: ['a'] }, { id: 'm2', t, baslik: 'foto', tur: 'image' }] }) + '\n');
+  const yasak = { readAyar: () => { throw new Error('Instagram must not be read'); } };
+  const a = await P.instagram(true, 'snap_hesap', yasak);
+  assert.deepStrictEqual([a.bagli, a.hesap, a.kaynak, a.gonderiler.length, a.gonderiler[0].views, a.gonderiler[0].zaman, 'yorumlar' in a.gonderiler[0]], [true, 'snap', 'anlik', 1, 900, t, false]);
+  assert.deepStrictEqual(await P.takipci('snap_hesap', yasak), { bagli: true, takipci: 321, zaman: z, kaynak: 'anlik' });
+  const o = P.istatistikCevap({ hesap: 'snap_hesap', gun: 7 });
+  assert.deepStrictEqual([o.hesap, o.gun, o.takipci, o.videolar.map(v => v.id)], ['snap_hesap', 7, 321, ['m1']]);
+  assert.ok(o.kpi && o.kpi.donem && o.kpi.onceki && Array.isArray(o.gunluk) && o.gunluk.length === 7);
+  assert.strictEqual(P.istatistikCevap({ hesap: 'snap_hesap', gun: 3 }).gun, 28, 'unknown period -> 28');
+  assert.throws(() => P.istatistikCevap({ hesap: '../x' }), /hesap/);
+});

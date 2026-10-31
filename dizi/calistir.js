@@ -26,20 +26,27 @@ function kuyrukOku(kok) {
 // ---- default collaborators (all injectable)
 // factory so tests can pass a fake paylas module: returns {metrik, yorum_devam, not?}; yorum_devam = comments containing a keyword (tr-lowercase).
 // A failed comments fetch never blocks the measurement: yorum_devam is 0 and `not` says why.
-const sonucAlYap = P => async (mediaId, hesap, kelimeler) => {
+// Furkan 31.10, one Instagram read per hour: the hourly snapshot (instagram/istatistik.js) is used when it holds this media
+// and is younger than 2 h (numbers and recent comments); only without one is Instagram asked directly.
+const devamSay = (yorumlar, kelimeler) => { const kl = kelimeler.map(k => String(k).toLocaleLowerCase('tr')); return yorumlar.filter(t => { t = String(t || '').toLocaleLowerCase('tr'); return kl.some(k => t.includes(k)); }).length; };
+const sonucAlYap = (P, I, kok) => async (mediaId, hesap, kelimeler) => {
+  const an = I ? I.medyaSon(kok || ortak.KOK, hesap || 'oxygbio', mediaId, 2 * 3600e3) : null;
+  if (an) {
+    const metrik = {}; for (const k of ['views', 'reach', 'likes', 'comments', 'shares', 'saved', 'total_interactions']) metrik[k] = an[k] ?? null;
+    return { metrik, yorum_devam: Array.isArray(an.yorumlar) && kelimeler && kelimeler.length ? devamSay(an.yorumlar, kelimeler) : 0, kaynak: 'anlik' };
+  }
   const metrik = await P.sonuc(mediaId, hesap);
   let yorum_devam = 0, not;
   const a = P.readAyar(hesap);
   if (a && kelimeler && kelimeler.length) {
     try {
       const j = await P.graph('GET', `/${mediaId}/comments`, { fields: 'text', access_token: a.token });
-      const kl = kelimeler.map(k => String(k).toLocaleLowerCase('tr'));
-      yorum_devam = (j.data || []).filter(c => { const t = String(c.text || '').toLocaleLowerCase('tr'); return kl.some(k => t.includes(k)); }).length;
+      yorum_devam = devamSay((j.data || []).map(c => c.text), kelimeler);
     } catch (e) { not = `yorumlar okunamadı, devam yorumu 0 sayıldı: ${e.message}`; }
   }
   return { metrik, yorum_devam, ...(not ? { not } : {}) };
 };
-const varsayilanSonucAl = (...a) => sonucAlYap(require('../instagram/paylas'))(...a);
+const varsayilanSonucAl = (...a) => sonucAlYap(require('../instagram/paylas'), require('../instagram/istatistik'))(...a);
 // Ekşi favourites and Reddit scores are not one scale: rank inside each source, then take them in turns (Ekşi first).
 function sirayaKoy(ogeler) {
   const gruplar = {};
