@@ -821,3 +821,15 @@ dialog.on-pencere:not(.on-m) .gp{max-height:calc(100vh - 48px)}
 .hd-b>span:last-child{display:inline-flex;align-items:center;gap:4px}
 .tsk-alt .dz-hata:empty{display:none}
 .tsk-not{margin-right:auto;font-size:12.5px;color:var(--ink-3)}
+
+/* planned episodes: dashed ghost cards */
+.d-planli{--dr:var(--ink-3);--ds:transparent;--dt:var(--ink-3)}
+.hk-k.hk-planli{background:transparent;border:1.5px dashed var(--line-2);opacity:.78}
+.hk-k.hk-planli:hover{opacity:1;border-color:var(--ink-3)}
+.hk-planli .hk-k-saat{color:var(--ink-2)}
+.hk-planli .hk-k-ad{color:var(--ink-2)}
+.hk-planli .hk-k-durum{color:var(--ink-3);font-weight:600;align-items:flex-start}
+.hk-planli .hk-k-durum .ik{flex:none;margin-top:2px}
+.sat.sat-planli{grid-template-columns:minmax(0,1fr);border:1.5px dashed var(--line-2);opacity:.75}
+.sat.sat-planli .sat-durum{color:var(--ink-3)}
+.gp-kart.gp-planli{grid-template-columns:minmax(0,1fr);background:transparent;border:1.5px dashed var(--line-2)}

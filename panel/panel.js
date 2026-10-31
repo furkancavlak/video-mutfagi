@@ -427,6 +427,32 @@ function havuzEle(b) {
   if (!kanallar().includes(g.kanal)) throw new Error('kanal yok');
   return require('../dizi/havuz.js').ele(KOK, g.kanal, g.id, g.neden || 'elle elendi');
 }
+// Planned episodes for the calendar: per active, text-approved series, its first episode with no video and no queue job,
+// placed by the series' own hour (dizi.js hedefSlot / olcumZamani). After a posted episode: its slot and decision time;
+// after one still waiting (onay-bekliyor / sirada): the next series hour after that one's slot, no decision yet.
+// A first episode (nothing before it), a cut, finished or text-waiting series get none. bek: queue jobs (bekleyen).
+function planliBolumler(diziler, ayar, bek, simdi = Date.now()) {
+  const D = DiziDepo(); if (typeof D.hedefSlot !== 'function' || typeof D.olcumZamani !== 'function') return [];
+  ayar = ayar || {}; const out = [];
+  for (const d of diziler || []) {
+    if (!d || d.durum !== 'aktif' || D.metinOnay(d) === 'bekliyor' || D.metinOnay(d) === 'reddedildi') continue;
+    const B = [...(d.bolumler || [])].sort((a, b) => a.n - b.n);
+    const isVar = b => !!b.video || (bek || []).some(j => b.video && j.video === b.video);
+    const i = B.findIndex(b => !isVar(b) && (b.durum === 'metin' || b.durum === 'uretimde'));
+    if (i < 1) continue;
+    const b = B[i], once = B[i - 1], saat = d.saat ? [d.saat] : ayar.saatler;
+    let slot, karar = null;
+    if (once.paylasildi && (once.durum === 'yayinda' || once.durum === 'olculdu')) { slot = D.hedefSlot(once, ayar, d); karar = D.olcumZamani(once, ayar, d); }
+    else if (once.durum === 'onay-bekliyor' || once.durum === 'sirada') {
+      const j = (bek || []).find(x => once.video && x.video === once.video), t0 = j && j.ne_zaman ? Date.parse(j.ne_zaman) : simdi;
+      slot = D.sonrakiSlotSaati(Math.max(t0, simdi) + 60e3, saat);
+    } else continue;
+    if (!Number.isFinite(slot)) continue;
+    out.push({ planli: true, dizi_id: d.id, baslik: d.baslik_kisa || d.baslik, n: b.n, toplam: B.length, ton: d.ton || null, konu: d.konu || null,
+      slot: new Date(slot).toISOString(), karar: Number.isFinite(karar) ? new Date(karar).toISOString() : null });
+  }
+  return out;
+}
 function dizilerCevap(kanal) {
   if (!kanallar().includes(kanal)) throw new Error('kanal yok');
   const konuDizi = (okuJ(path.join(KOK, 'kanal', kanal, 'konu.json'), {}) || {}).dizi, ayar = konuDizi && typeof konuDizi === 'object' && !Array.isArray(konuDizi) ? konuDizi : {};
@@ -442,7 +468,8 @@ function dizilerCevap(kanal) {
   const red = (okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'reddedilen.json'), {}) || {}).reddedilen;
   // stories the sensitivity check stopped twice: kept for Furkan to look at (only their safe fields)
   const furkan_baksin = (Array.isArray(red) ? red : []).filter(x => x && (x.furkan_baksin || x.neden === 'hassasiyet')).map(x => ({ id: x.id, url: x.url || null, neden: x.neden, ayrinti: x.ayrinti || null, zaman: x.zaman || null }));
-  return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null), reddedilen_toplam: Array.isArray(red) ? red.length : 0, furkan_baksin };
+  const planli = planliBolumler(D.yukle(KOK, kanal).diziler || [], ayar, bek);
+  return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null), reddedilen_toplam: Array.isArray(red) ? red.length : 0, furkan_baksin, planli };
 }
 // route -> server hop goes through this object so tests can stub the ssh / scp call
 const kanca = { sunucuda: (...a) => sunucuda(...a), scp: (args, sure) => spawnSync('scp', args, { encoding: 'utf8', timeout: sure }) };
@@ -655,7 +682,7 @@ const sunucuYap = () => http.createServer(async (req, res) => {
   } catch (e) { gonder(res, e.kod || 400, { hata: e.message }); }
 });
 
-module.exports = { kanca, kuyrukOzet, instagram, takipci, istatistikCevap, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
+module.exports = { kanca, planliBolumler, kuyrukOzet, instagram, takipci, istatistikCevap, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
 if (require.main !== module) return;
 
   // ozellik: lets the home panel know which flags this copy has (an older one would not answer them)
