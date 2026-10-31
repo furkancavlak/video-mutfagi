@@ -287,17 +287,35 @@ function satir(e, genis) {
       ${genis && e.ep ? `<span class="sat-hikaye">Hikâye: ${ht != null ? esc(sayi(ht)) + ' izlenme' : '—'}</span>` : ''}</span></button>`;
 }
 
-// ---------------- Calendar: a week grid (Mon-Sun columns), 4 weeks from Monday of last week; ‹ › move one week.
-// Every day cell has the same height: at most 3 rows, then "+N daha" opens the whole day.
-const HAFTA = 4, GUN_EN_FAZLA = 3, GUN_ADI = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+// ---------------- Calendar. Default: this week, Monday to Sunday, 7 tall columns of rich cards (‹ › move one week).
+// "Ay" keeps the compact 4-week grid (Monday of last week; at most 3 rows a day, then "+N daha").
+const HAFTA = 4, GUN_EN_FAZLA = 3, HAFTA_EN_FAZLA = 4, GUN_ADI = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 let durumFiltre = 'hepsi', konuFiltre = null;
-function aralik() { const bas = haftaBas(Date.now()); bas.setDate(bas.getDate() - 7 + 7 * ayKaydir); const son = new Date(bas); son.setDate(bas.getDate() + 7 * HAFTA - 1); return [bas, son]; }
+let tkGorunum = (() => { try { return localStorage.getItem('vm-takvim') === 'ay' ? 'ay' : 'hafta'; } catch { return 'hafta'; } })();
+function aralik() {
+  const bas = haftaBas(Date.now());
+  if (tkGorunum === 'hafta') { bas.setDate(bas.getDate() + 7 * ayKaydir); const son = new Date(bas); son.setDate(bas.getDate() + 6); return [bas, son]; }
+  bas.setDate(bas.getDate() - 7 + 7 * ayKaydir); const son = new Date(bas); son.setDate(bas.getDate() + 7 * HAFTA - 1); return [bas, son];
+}
 const goster = e => (durumFiltre === 'hepsi' || e.durum === durumFiltre) && (!konuFiltre || e.konu === konuFiltre);
+// the week view's card: a 9:16 cover, time, story, episode, theme, coloured status, views
+function haftaKart(e) {
+  const i = OL.indexOf(e), zaman = e.t ? saat(e.t) : e.durum === 'hazirlaniyor' ? 'bugün' : 'saat yok';
+  return `<button class="hk-k d-${e.durum}" data-olay="${i}">
+    <span class="hk-k-kapak"${e.konu ? ` style="--k:${konuRenk(e.konu)}"` : ''}>${kapakVar(e.kapak) ? `<img src="${kapakUrl(e.kapak)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<span class="hk-k-yer">${esc(e.baslik)}</span>${e.mp4 || e.link ? `<span class="gkk-oynat">${ikon('oynat', 13)}</span>` : ''}</span>
+    <span class="hk-k-ic"><b class="hk-k-saat">${esc(zaman)}</b>
+      <span class="hk-k-ad">${esc(e.baslik)}</span>
+      <span class="hk-k-alt">${e.bolum ? `<span>${esc(e.bolum)}</span>` : ''}${e.konu ? `<span class="konu-cip" style="--k:${konuRenk(e.konu)}">${esc(e.konu)}</span>` : ''}</span>
+      <span class="hk-k-durum">${e.durum === 'onay' ? '<i class="nabiz-nokta"></i>' : '<i class="nokta-d"></i>'}${esc(DURUM_SATIR[e.durum])}</span>
+      ${e.views != null ? `<span class="hk-k-izl">${ikon('goz', 13)}${esc(sayi(e.views))} izlenme</span>` : ''}
+      ${e.durum === 'hazirlaniyor' && e.asama ? asamaCubuk(e.asama) : ''}</span></button>`;
+}
 function takvimCiz() {
   OL = olaylar();
   const src = takvimKaynak();
   $('#kaynak-not').innerHTML = !O.sunucu ? '' : src === null ? `<span class="kn">${ikon('donen', 13)}Sunucudan bilgi geliyor…</span>`
     : src === 'yerel' ? `<span class="kn kotu">${ikon('uyari', 13)}Sunucuya ulaşılamadı: bu bilgisayardaki kayıtlar gösteriliyor.</span>` : `<span class="kn">${ikon('tik', 13)}Bilgiler sunucudan</span>`;
+  $$('#tk-gorunum button').forEach(b => b.classList.toggle('on', b.dataset.tkGorunum === tkGorunum));
   const [bas, son] = aralik(), ici = OL.filter(e => { const d = olayGunu(e); return d >= bas && d <= son; });
   const ay = d => d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }).toLocaleUpperCase('tr');
   $('#tk-aralik').textContent = `${ay(bas)} – ${ay(son)}`;
@@ -312,17 +330,38 @@ function takvimCiz() {
   if (konuFiltre && !konular.includes(konuFiltre)) konuFiltre = null;
   $('#konu-filtre').innerHTML = konular.length ? `<button data-konu-f="" class="${!konuFiltre ? 'on' : ''}">Tümü</button>` + konular.map(k => `<button data-konu-f="${esc(k)}" class="${k === konuFiltre ? 'on' : ''}"><i class="nokta-k" style="--k:${konuRenk(k)}"></i>${esc(konuAd(k))}</button>`).join('') : '';
   const bugun = gunBas(Date.now()), buHafta = +haftaBas(bugun);
-  let h = GUN_ADI.map(g => `<div class="gun-ad">${g}</div>`).join('');
-  for (let d = new Date(bas); d <= son; d.setDate(d.getDate() + 1)) {
-    const o = ici.filter(e => ayniGun(olayGunu(e), d)), g = o.filter(goster), bu = ayniGun(d, bugun), gecmis = d < bugun;
-    const fazla = g.length - GUN_EN_FAZLA;
-    h += `<div class="gun-h${bu ? ' bugun' : ''}${gecmis ? ' gecmis' : ''}${+haftaBas(d) === buHafta ? ' bu-hafta' : ''}${o.length ? '' : ' bos'}" data-gun="${+d}" title="Günün ayrıntısı">
-      <div class="gh-ust"><b>${d.getDate()}</b> ${esc(d.toLocaleDateString('tr-TR', { month: 'short' }))} <span class="gh-gun">${esc(d.toLocaleDateString('tr-TR', { weekday: 'short' }))}</span>${bu ? '<em>Bugün</em>' : ''}${!gecmis ? `<button class="gh-arti" data-planla="${+d}" title="Bu güne video planla" aria-label="Bu güne video planla">${ikon('arti', 14)}</button>` : ''}</div>
-      ${g.slice(0, fazla > 0 ? GUN_EN_FAZLA - 1 : GUN_EN_FAZLA).map(e => satir(e)).join('')}
-      ${fazla > 0 ? `<button class="gh-daha" data-gun="${+d}">+${fazla + 1} daha</button>` : ''}
-      ${!g.length ? `<div class="gh-yok">${o.length ? '—' : gecmis ? 'Video yok' : ''}</div>` : ''}</div>`;
+  const gunler = []; for (let d = new Date(bas); d <= son; d.setDate(d.getDate() + 1)) gunler.push(new Date(d));
+  const gunOlay = d => { const o = ici.filter(e => ayniGun(olayGunu(e), d)); return { o, g: o.filter(goster) }; };
+  const arti = d => d >= bugun ? `<button class="gh-arti" data-planla="${+d}" title="Bu güne video planla" aria-label="Bu güne video planla">${ikon('arti', 14)}</button>` : '';
+  $('#takvim').className = 'hafta-izgara' + (tkGorunum === 'hafta' ? ' hafta-gor' : '');
+  if (tkGorunum === 'hafta') {
+    // 7 tall columns; on a phone the same week as a list, today first and open
+    let h = '';
+    for (const d of gunler) {
+      const { o, g } = gunOlay(d), bu = ayniGun(d, bugun), gecmis = d < bugun, fazla = g.length - HAFTA_EN_FAZLA;
+      h += `<div class="gun-h hg${bu ? ' bugun' : ''}${gecmis ? ' gecmis' : ''}${o.length ? '' : ' bos'}" data-gun="${+d}">
+        <div class="hg-ust" title="Günün ayrıntısı"><span class="hg-gun">${esc(GUN_ADI[(d.getDay() + 6) % 7])}</span><b>${d.getDate()}</b><span class="hg-ay">${esc(d.toLocaleDateString('tr-TR', { month: 'short' }))}</span>${bu ? '<em>BUGÜN</em>' : ''}${arti(d)}</div>
+        ${g.slice(0, fazla > 0 ? HAFTA_EN_FAZLA - 1 : HAFTA_EN_FAZLA).map(haftaKart).join('')}
+        ${fazla > 0 ? `<button class="gh-daha" data-gun="${+d}">+${fazla + 1} daha</button>` : ''}
+        ${!g.length ? `<div class="gh-yok">${o.length ? '—' : gecmis ? 'Video yok' : 'Boş gün'}</div>` : ''}</div>`;
+    }
+    const sira = [...gunler].sort((a, b) => (ayniGun(b, bugun) - ayniGun(a, bugun)) || ((a < bugun) - (b < bugun)) || (a - b));
+    h += `<div class="tel-hafta">${sira.map(d => { const { o, g } = gunOlay(d), bu = ayniGun(d, bugun), gecmis = d < bugun;
+      return `<details class="tel-gun${bu ? ' bugun' : ''}${gecmis ? ' gecmis' : ''}"${bu ? ' open' : ''}><summary><span class="hg-gun">${esc(GUN_ADI[(d.getDay() + 6) % 7])}</span><b>${d.getDate()} ${esc(d.toLocaleDateString('tr-TR', { month: 'short' }))}</b>${bu ? '<em>BUGÜN</em>' : ''}<span class="tel-say">${o.length ? `${o.length} video` : 'boş'}</span><span class="tel-noktalar">${g.slice(0, 6).map(e => `<i class="nokta-d d-${e.durum}"></i>`).join('')}</span></summary>
+        <div class="tel-ic">${g.length ? g.map(haftaKart).join('') : `<div class="gh-yok">${o.length ? '—' : 'Video yok'}</div>`}${!gecmis ? `<button class="dugme ince" data-planla="${+d}">${ikon('arti', 14)}Video planla</button>` : ''}<button class="dugme ince" data-gun="${+d}">Günün ayrıntısı</button></div></details>`; }).join('')}</div>`;
+    $('#takvim').innerHTML = h;
+  } else {
+    let h = GUN_ADI.map(g => `<div class="gun-ad">${g}</div>`).join('');
+    for (const d of gunler) {
+      const { o, g } = gunOlay(d), bu = ayniGun(d, bugun), gecmis = d < bugun, fazla = g.length - GUN_EN_FAZLA;
+      h += `<div class="gun-h${bu ? ' bugun' : ''}${gecmis ? ' gecmis' : ''}${+haftaBas(d) === buHafta ? ' bu-hafta' : ''}${o.length ? '' : ' bos'}" data-gun="${+d}" title="Günün ayrıntısı">
+        <div class="gh-ust"><b>${d.getDate()}</b> ${esc(d.toLocaleDateString('tr-TR', { month: 'short' }))} <span class="gh-gun">${esc(d.toLocaleDateString('tr-TR', { weekday: 'short' }))}</span>${bu ? '<em>Bugün</em>' : ''}${arti(d)}</div>
+        ${g.slice(0, fazla > 0 ? GUN_EN_FAZLA - 1 : GUN_EN_FAZLA).map(e => satir(e)).join('')}
+        ${fazla > 0 ? `<button class="gh-daha" data-gun="${+d}">+${fazla + 1} daha</button>` : ''}
+        ${!g.length ? `<div class="gh-yok">${o.length ? '—' : gecmis ? 'Video yok' : ''}</div>` : ''}</div>`;
+    }
+    $('#takvim').innerHTML = h;
   }
-  $('#takvim').innerHTML = h;
   onayBarCiz();
   acikPencereyiTazele();
   onaylarCiz();
@@ -1146,6 +1185,7 @@ document.addEventListener('click', e => {
   else if (d.istGun) { istGun = +d.istGun; ISV = null; istatistikSayfaCiz(); istatistikYukle(); }
   else if (d.istGrafik) { istGrafik = d.istGrafik; istatistikSayfaCiz(); }
   else if (d.istSira) { istSira = { k: d.istSira, yon: istSira.k === d.istSira ? -istSira.yon : (d.istSira === 'baslik' ? 1 : -1) }; istatistikSayfaCiz(); }
+  else if (d.tkGorunum) { if (d.tkGorunum !== tkGorunum) { tkGorunum = d.tkGorunum; ayKaydir = 0; try { localStorage.setItem('vm-takvim', tkGorunum); } catch {} takvimCiz(); } }
   else if (d.durumF) { durumFiltre = d.durumF; takvimCiz(); }
   else if (d.konuF !== undefined) { konuFiltre = d.konuF || null; takvimCiz(); }
   else if (d.planla) yeniGoster(d.planla);
