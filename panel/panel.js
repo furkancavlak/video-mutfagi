@@ -6,7 +6,7 @@
 //   node panel/panel.js [--port 4747] [--acma] [--kok <repo>]
 //   node panel/panel.js --ozet                    print the queue summary as JSON (the panel uses it over SSH)
 //   node panel/panel.js --zaman <is-id> "YYYY-MM-DD HH:MM"
-//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-metin <json> | --istatistik <json>
+//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-metin <json> | --istatistik <json> | --instagram <json> | --takipci <json>
 //                                                 the Diziler page on a server: print JSON; on error "HATA: ..." and exit 1 (3 = lock busy, HTTP 409)
 //
 // Listens on 127.0.0.1 only; every API call carries a random key made at start (it is in the printed link).
@@ -359,6 +359,7 @@ function bolumMp4(video, isMp4) {
 }
 // ---------- İstatistikler: aggregates of the hourly snapshots (never Instagram), joined with the queue's posted jobs, the
 // series of every channel posting to this account and the video lengths (videolar/<ad>/ses/zaman.json → toplam)
+const hesapGovde = h => ({ hesap: hesapGuvenli(hesapTemiz(h)) || HESAP0 });   // only a clean account name reaches the shell
 const istatistikGovde = b => { const h = hesapGuvenli(hesapTemiz(b.hesap)) || HESAP0, g = +b.gun; return { hesap: h, gun: [7, 28, 90].includes(g) ? g : 28 }; };
 function istatistikCevap(b) {
   const { hesap, gun } = istatistikGovde(b);
@@ -553,9 +554,10 @@ async function api(req, u) {
   if (GET && yol === 'uretim') return uretimler();
   if (GET && yol === 'rapor') return rapor(u.searchParams.get('p'));
   if (GET && yol === 'isler') return isListesi();
-  if (GET && yol === 'instagram') return instagram(u.searchParams.has('yenile'), u.searchParams.get('hesap'));
+  // in server mode the home PC never reads Instagram: the server's hourly snapshots answer (same as istatistik)
+  if (GET && yol === 'instagram') return sunucu ? sunucuJson('--instagram', hesapGovde(u.searchParams.get('hesap'))) : instagram(u.searchParams.has('yenile'), u.searchParams.get('hesap'));
   if (GET && yol === 'dersler') return okuJ(DERSLER, []);
-  if (GET && yol === 'takipci') return takipci(u.searchParams.get('hesap'));
+  if (GET && yol === 'takipci') return sunucu ? sunucuJson('--takipci', hesapGovde(u.searchParams.get('hesap'))) : takipci(u.searchParams.get('hesap'));
   if (GET && yol === 'istatistik') { const g = istatistikGovde({ hesap: u.searchParams.get('hesap'), gun: u.searchParams.get('gun') }); return sunucu ? sunucuJson('--istatistik', g) : istatistikCevap(g); }
   if (GET && yol === 'asamalar') return asamalar(u.searchParams.get('kanal') || undefined);
   if (GET && yol === 'diziler') return sunucu ? sunucuJson('--diziler', kanalAdi(u.searchParams.get('kanal'))) : dizilerCevap(u.searchParams.get('kanal'));
@@ -627,9 +629,9 @@ const sunucuYap = () => http.createServer(async (req, res) => {
 module.exports = { kanca, kuyrukOzet, instagram, takipci, istatistikCevap, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
 if (require.main !== module) return;
 
-  // ozellik: lets the home panel know this copy has the --dizi* flags
+  // ozellik: lets the home panel know which flags this copy has (an older one would not answer them)
 if (process.argv.includes('--ozet')) {
-  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler'] })); process.exit(0); }
+  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler', 'istatistik', 'instagram'] })); process.exit(0); }
   catch (e) { console.error('HATA: ' + e.message); process.exit(1); }
 }
 if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'); zamanDegistir(process.argv[i + 1], process.argv[i + 2]); console.log('Saat değişti.'); process.exit(0); }
@@ -641,6 +643,12 @@ for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--d
   let cikti;
   try { cikti = JSON.stringify(fn(arg(bayrak))); } catch (e) { console.error('HATA: ' + e.message); process.exit(e.kod === 409 ? 3 : 1); }
   process.stdout.write(cikti, () => process.exit(0));
+  return;
+}
+// the two Instagram readers answer asynchronously (snapshot first; a live read only on a machine without snapshots)
+for (const [bayrak, fn] of [['--instagram', s => instagram(false, hesapGovde(jsonArg(s).hesap).hesap)], ['--takipci', s => takipci(hesapGovde(jsonArg(s).hesap).hesap)]]) {
+  if (!process.argv.includes(bayrak)) continue;
+  Promise.resolve().then(() => fn(arg(bayrak))).then(r => process.stdout.write(JSON.stringify(r), () => process.exit(0)), e => { console.error('HATA: ' + e.message); process.exit(1); });
   return;
 }
 
