@@ -149,7 +149,7 @@ function siraCiz() {
 const DURUM = {
   paylasildi: { ad: 'Paylaşıldı', ikon: 'tik' }, sirada: { ad: 'Sırada', ikon: 'saat' }, onay: { ad: 'Onay bekliyor', ikon: 'dur' },
   sorun: { ad: 'Sorun var', ikon: 'uyari' }, hazirlaniyor: { ad: 'Hazırlanıyor', ikon: 'donen' }, bekliyor: { ad: 'Sırası gelmedi', ikon: 'bos' }, kesildi: { ad: 'Kesildi', ikon: 'makas' },
-  metin: { ad: 'Metin onayı bekliyor', ikon: 'kalem' },
+  metin: { ad: 'Metin onayı bekliyor', ikon: 'kalem' }, planli: { ad: 'Planlı', ikon: 'saat' },
 };
 const IKON = {
   tik: '<path d="M20 6 9 17l-5-5"/>', saat: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', dur: '<rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/>',
@@ -261,6 +261,13 @@ function olaylar() {
     if (['paylasildi', 'sorun'].includes(d) && ep.b.paylasildi) ekle({ tur: 'bolum', makine: dzM(), ep, t: new Date(ep.b.paylasildi), durum: d, not: d === 'sorun' ? 'Paylaşıldı mı belli değil: Instagram hesabına bak.' : '' });
     else if (d === 'hazirlaniyor' && ep.d.durum === 'aktif') ekle({ tur: 'bolum', makine: dzM(), ep, t: null, durum: d, not: 'Video hazırlanıyor. Bitince onayına gelir.' });
   }
+  // planned episodes (not produced yet): ghost cards at the series' hour, decision time when known
+  if (dzGecerli() && Array.isArray(DZ.planli)) for (const p of DZ.planli) {
+    if (gorulen.has(`e:${p.dizi_id}:${p.n}`)) continue;
+    gorulen.add(`e:${p.dizi_id}:${p.n}`);
+    E.push({ tur: 'planli', planli: true, plan: p, makine: dzM(), t: new Date(p.slot), durum: 'planli', baslik: p.baslik, bolum: `Bölüm ${p.n}/${p.toplam}`, kisaBolum: `${p.n}/${p.toplam}`,
+      konu: p.konu || null, views: null, mp4: null, kapak: null, link: null, asama: null, aciklama: '', karar: p.karar ? new Date(p.karar) : null });
+  }
   // only videos tied to a series episode or a queue job: loose production folders (tests) never show
   return E.sort((a, b) => (a.t ? +a.t : Infinity) - (b.t ? +b.t : Infinity));
 }
@@ -273,10 +280,11 @@ const KONU_RENK = { 'aşk': '#F472B6', 'ayrılık': '#60A5FA', 'ihanet': '#F8717
 const KONU_YEDEK = ['#F472B6', '#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#2DD4BF', '#FB923C', '#F87171'];
 const konuRenk = k => { const a = String(k || '').toLocaleLowerCase('tr'); if (KONU_RENK[a]) return KONU_RENK[a]; let h = 0; for (const c of a) h = (h * 31 + c.charCodeAt(0)) >>> 0; return KONU_YEDEK[h % KONU_YEDEK.length]; };
 const konuAd = k => String(k || '').replace(/^./, c => c.toLocaleUpperCase('tr'));
-const DURUM_SATIR = { paylasildi: 'Paylaşıldı', sirada: 'Sırada', onay: 'Onay bekliyor', sorun: 'Sorun var', hazirlaniyor: 'Hazırlanıyor', metin: 'Metin onayı bekliyor' };
+const DURUM_SATIR = { planli: 'Planlı', paylasildi: 'Paylaşıldı', sirada: 'Sırada', onay: 'Onay bekliyor', sorun: 'Sorun var', hazirlaniyor: 'Hazırlanıyor', metin: 'Metin onayı bekliyor' };
 const kucukKapak = e => `<span class="sat-kapak"${e.konu ? ` style="--k:${konuRenk(e.konu)}"` : ''}>${kapakVar(e.kapak) ? `<img src="${kapakUrl(e.kapak)}" alt="" loading="lazy" onerror="this.remove()">` : ''}${ikon(e.mp4 || e.link ? 'oynat' : DURUM[e.durum].ikon, 12)}</span>`;
 // one video = one compact row: small still, time, one-line title, status dot + word
 function satir(e, genis) {
+  if (e.planli) return `<button class="sat sat-planli" data-hikaye-ac="${esc(e.plan.dizi_id)}" title="${esc(planEtiket(e))}"><span class="sat-ic"><span class="sat-ust"><b>${esc(saat(e.t))}</b></span><span class="sat-ad">${esc(e.baslik)} <small>${esc(e.kisaBolum)}</small></span><span class="sat-durum">${esc(e.karar ? `Planlı · karar ${saat(e.karar)}` : 'Planlı')}</span></span></button>`;
   const i = OL.indexOf(e), zaman = e.t ? saat(e.t) : e.durum === 'hazirlaniyor' ? 'bugün' : 'saat yok', ht = e.ep ? hikayeToplam(e.ep.d) : null;
   const ipucu = [e.baslik, e.bolum, DURUM_SATIR[e.durum], e.views != null ? sayi(e.views) + ' izlenme' : '', e.ep ? 'Hikâye: ' + (ht != null ? sayi(ht) + ' izlenme' : '—') : ''].filter(Boolean).join(' · ');
   return `<button class="sat d-${e.durum}${genis ? ' genis' : ''}" data-olay="${i}" title="${esc(ipucu)}">${kucukKapak(e)}
@@ -298,8 +306,15 @@ function aralik() {
   bas.setDate(bas.getDate() - 7 + 7 * ayKaydir); const son = new Date(bas); son.setDate(bas.getDate() + 7 * HAFTA - 1); return [bas, son];
 }
 const goster = e => (durumFiltre === 'hepsi' || e.durum === durumFiltre) && (!konuFiltre || e.konu === konuFiltre);
+const planEtiket = e => `Planlı · ${e.bolum}${e.karar ? ` · karar ${saat(e.karar)}'de` : ' · önceki bölüm bekliyor'}`;
+// a planned episode: a dashed ghost card, no still; it opens the series window
+const planliKart = e => `<button class="hk-k hk-planli" data-hikaye-ac="${esc(e.plan.dizi_id)}" title="${esc(planEtiket(e))}">
+    <span class="hk-k-ic"><b class="hk-k-saat">${esc(saat(e.t))}</b><span class="hk-k-ad">${esc(e.baslik)}</span>
+      <span class="hk-k-alt">${e.konu ? `<span class="konu-cip" style="--k:${konuRenk(e.konu)}">${esc(e.konu)}</span>` : ''}</span>
+      <span class="hk-k-durum">${ikon('saat', 13)}${esc(planEtiket(e))}</span></span></button>`;
 // the week view's card: a 9:16 cover, time, story, episode, theme, coloured status, views
 function haftaKart(e) {
+  if (e.planli) return planliKart(e);
   const i = OL.indexOf(e), zaman = e.t ? saat(e.t) : e.durum === 'hazirlaniyor' ? 'bugün' : 'saat yok';
   return `<button class="hk-k d-${e.durum}" data-olay="${i}">
     <span class="hk-k-kapak"${e.konu ? ` style="--k:${konuRenk(e.konu)}"` : ''}>${kapakVar(e.kapak) ? `<img src="${kapakUrl(e.kapak)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<span class="hk-k-yer">${esc(e.baslik)}</span>${e.mp4 || e.link ? `<span class="gkk-oynat">${ikon('oynat', 13)}</span>` : ''}</span>
@@ -320,9 +335,10 @@ function takvimCiz() {
   const ay = d => d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }).toLocaleUpperCase('tr');
   $('#tk-aralik').textContent = `${ay(bas)} – ${ay(son)}`;
   const say = d => ici.filter(e => e.durum === d).length;
-  $('#tk-sayilar').innerHTML = [[ici.length, 'video'], [say('paylasildi'), 'paylaşıldı'], [say('sirada'), 'sırada'], [say('onay'), 'onay bekliyor'], ...(say('sorun') ? [[say('sorun'), 'sorun var']] : []), ...(say('hazirlaniyor') ? [[say('hazirlaniyor'), 'hazırlanıyor']] : [])]
+  const planSay = ici.filter(e => e.planli).length;
+  $('#tk-sayilar').innerHTML = [[ici.length - planSay, 'video'], ...(planSay ? [[planSay, 'planlı']] : []), [say('paylasildi'), 'paylaşıldı'], [say('sirada'), 'sırada'], [say('onay'), 'onay bekliyor'], ...(say('sorun') ? [[say('sorun'), 'sorun var']] : []), ...(say('hazirlaniyor') ? [[say('hazirlaniyor'), 'hazırlanıyor']] : [])]
     .map(([n, a]) => `<span><b>${n}</b>${a}</span>`).join('');
-  const segler = [['hepsi', 'Tümü', ici.length], ['paylasildi', 'Paylaşıldı', say('paylasildi')], ['sirada', 'Sırada', say('sirada')], ['onay', 'Onay bekliyor', say('onay')], ...(say('sorun') ? [['sorun', 'Sorun var', say('sorun')]] : [])];
+  const segler = [['hepsi', 'Tümü', ici.length - planSay], ['paylasildi', 'Paylaşıldı', say('paylasildi')], ['sirada', 'Sırada', say('sirada')], ['onay', 'Onay bekliyor', say('onay')], ...(say('sorun') ? [['sorun', 'Sorun var', say('sorun')]] : [])];
   if (!segler.some(s => s[0] === durumFiltre)) durumFiltre = 'hepsi';
   $('#durum-filtre').innerHTML = segler.map(([k, a, n]) => `<button data-durum-f="${k}" class="${k === durumFiltre ? 'on' : ''}">${a}<small>${n}</small></button>`).join('');
   // theme chips: only when the channel's stories carry a konu (oxygbio has none)
@@ -391,6 +407,10 @@ function acikPencereyiTazele() {
   }
 }
 function gunKart(e) {
+  if (e.planli) return `<article class="gp-kart gp-planli"><div class="gp-bilgi"><div class="gp-satir1"><b>${esc(saat(e.t))}</b><span class="durum d-planli">${ikon('saat', 13)}Planlı</span></div><h3>${esc(e.baslik)}</h3>
+    <div class="gp-cipler">${e.konu ? `<span class="konu-cip">${esc(e.konu)}</span>` : ''}<span class="gp-bolum">${esc(e.bolum)}</span></div>
+    <div class="ince-yazi">${e.karar ? `Önceki bölümün izlenmesine ${esc(tarih(e.karar))} bakılır; devam kararı çıkarsa bu bölüm hazırlanır.` : 'Önceki bölüm onay ya da sıra bekliyor; o paylaşılınca bu bölümün saati kesinleşir.'}</div>
+    <div class="gp-dugmeler"><button class="dugme" data-hikaye-ac="${esc(e.plan.dizi_id)}">Hikâyeyi aç</button></div></div></article>`;
   const i = OL.indexOf(e), ep = e.ep, iz = ep ? ep.b.izin || {} : {}, bek = e.tur === 'bekleyen', m = e.makine;
   const ig = e.ig || (e.is && e.is.sonuc) || (ep && ep.b.metrik) || null, ht = ep ? hikayeToplam(ep.d) : null;
   const video = e.mp4 ? `<video src="${m === 'sunucu' ? sunucuDosya(e.mp4) : dosya(e.mp4)}" ${kapakVar(e.kapak) ? `poster="${kapakUrl(e.kapak)}"` : ''} controls playsinline preload="none"></video>`
