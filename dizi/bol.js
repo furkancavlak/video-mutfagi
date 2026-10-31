@@ -7,6 +7,7 @@ const fs = require('fs'), path = require('path');
 const LLM = require('../konu/llm');
 const { cumleler } = require('./uret-bolum');
 const TON = require('./ton');
+const KAPAK = require('./kapak');
 
 const MIN_KAYNAK = 250, MIN_SAYI = 2, MAX_SAYI = 5;
 const OZET_KELIME = 25, OZET_CUMLE = 2;              // hard limit for the recap; the prompt asks for 1 sentence, 15 words
@@ -123,8 +124,12 @@ async function bol(ctx, hikaye, { calistir } = {}) {
     }
   }
   const ton = cikti.ton.deger;
+  // the cover's hook title: the shortest usable one of the model's 3 options; none usable -> asked again at the first
+  // produced episode (dizi/kapak.js hazirla). Never a reason to reject the split.
+  const kapakBaslik = KAPAK.baslikSec(cikti.kapak_basliklari, { baslik_kisa: cikti.baslik_kisa, konu: hikaye.konu });
   const dizi = {
     id: hikaye.id, kanal: ctx.kanal, baslik: hikaye.baslik, baslik_kisa: cikti.baslik_kisa,
+    ...(kapakBaslik ? { kapak_baslik: kapakBaslik } : {}),
     kaynak: { tur: hikaye.tur, url: hikaye.url, puan: hikaye.puan, id: hikaye.id },
     durum: 'aktif', olusturma: new Date().toISOString(),
     ton, ton_neden: String(cikti.ton.neden || '').slice(0, 300),

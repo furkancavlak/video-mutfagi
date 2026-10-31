@@ -141,22 +141,30 @@ function kucult(mp4, mb) {
   return out;
 }
 
-async function paylas(j, a, kuru, hazirla) {
-  const P = require('../instagram/paylas.js');
+// j.kapak: the episode cover (jpg relative to the repo, konu/uret.js kapakAdimi) goes as cover_url. klasor mode copies
+// it next to the video under its own random name and removes both in the same finally; tunnel mode serves it through
+// the video's tunnel. A missing cover file only drops the cover. `P` / `log` are injectable for tests.
+async function paylas(j, a, kuru, hazirla, { P = require('../instagram/paylas.js'), yaz: logla = log } = {}) {
   const mp4 = path.resolve(KOK, j.mp4);
   if (!fs.existsSync(mp4)) throw new Error('video dosyası yok: ' + j.mp4);
+  let kapak = j.kapak ? path.resolve(KOK, j.kapak) : null;
+  if (kapak && !fs.existsSync(kapak)) { logla(`kapak dosyası yok (${j.kapak}), video kapaksız paylaşılıyor`); kapak = null; }
+  const notla = r => { if (r && r.kapak_notu) logla('kapak: ' + r.kapak_notu); return r; };
   const y = a.yayin || {};
   if (y.yol === 'klasor') {
     if (!y.klasor || !y.adres) throw new Error('ayarlar/kuyruk.json → yayin.klasor ve yayin.adres gerekli');
-    const ad = 'vm-' + crypto.randomBytes(8).toString('hex') + '.mp4', hedef = path.join(y.klasor, ad);
-    fs.copyFileSync(mp4, hedef);
-    try { return await P.gonder(mp4, j.aciklama, kuru, hazirla, y.adres.replace(/\/?$/, '/') + ad, j.hesap); }
-    finally { fs.rmSync(hedef, { force: true }); }
+    const ad = 'vm-' + crypto.randomBytes(8).toString('hex') + '.mp4', hedef = path.join(y.klasor, ad), kok = y.adres.replace(/\/?$/, '/');
+    const kAd = kapak ? 'vm-' + crypto.randomBytes(8).toString('hex') + '.jpg' : null, kHedef = kAd ? path.join(y.klasor, kAd) : null;
+    try {
+      fs.copyFileSync(mp4, hedef);
+      if (kHedef) fs.copyFileSync(kapak, kHedef);
+      return notla(await P.gonder(mp4, j.aciklama, kuru, hazirla, kok + ad, j.hesap, kHedef ? { kapak: kok + kAd } : {}));
+    } finally { fs.rmSync(hedef, { force: true }); if (kHedef) fs.rmSync(kHedef, { force: true }); }
   }
   const mb = fs.statSync(mp4).size / 1048576, sinir = y.tunel_en_fazla_mb ?? 6;
   let dosya = mp4;
-  if (mb > sinir) { log(`video ${mb.toFixed(1)} MB, ev internetinde Instagram yetişemeyebilir: ${sinir} MB'a küçültülüyor`); dosya = kucult(mp4, sinir); }
-  try { return await P.gonder(dosya, j.aciklama, kuru, hazirla, null, j.hesap); }
+  if (mb > sinir) { logla(`video ${mb.toFixed(1)} MB, ev internetinde Instagram yetişemeyebilir: ${sinir} MB'a küçültülüyor`); dosya = kucult(mp4, sinir); }
+  try { return notla(await P.gonder(dosya, j.aciklama, kuru, hazirla, null, j.hesap, kapak ? { kapak } : {})); }
   finally { if (dosya !== mp4) fs.rmSync(dosya, { force: true }); }
 }
 
@@ -186,7 +194,7 @@ async function calistir() {
     try {
       const r = await paylas(j, a, kuru, hazirla);
       if (kuru || hazirla) { yaz({ son_sonuc: kuru ? 'kuru koşu tamam' : 'hazırla tamam: Instagram kabul etti, yayınlanmadı' }); return; }
-      tasi(j.f, D.paylasilan, { paylasildi: new Date().toISOString(), media_id: r.media_id, link: r.link });
+      tasi(j.f, D.paylasilan, { paylasildi: new Date().toISOString(), media_id: r.media_id, link: r.link, ...(j.kapak ? { kapak_gitti: !!r.kapak } : {}) });
       yaz({ son_sonuc: 'paylaşıldı: ' + r.link, son_paylasim: new Date().toISOString() });
       log('YAYINDA: ' + r.link);
     } catch (e) {
@@ -287,7 +295,7 @@ function durumGoster() {
   console.log(uyari.length ? '\nDİKKAT:\n' + uyari.map(u => '  • ' + u).join('\n') : '\nHer şey yolunda.');
 }
 
-module.exports = { sonrakiSlot, onayZamani, gunlukSayi, hesapAyar, kronSatiri, zamanlayici };
+module.exports = { paylas, sonrakiSlot, onayZamani, gunlukSayi, hesapAyar, kronSatiri, zamanlayici };
 const k = process.argv[2];
 if (require.main === module) (async () => {
   if (k === 'ekle') ekle();

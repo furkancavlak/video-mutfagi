@@ -10,6 +10,7 @@ const O = require('../konu/ortak');
 const TON = require('./ton');
 const G = require('./gorunum');
 const Y = require('./yorumcular');
+const KAPAK = require('./kapak');
 const temiz = s => String(s || '').replace(/\[[^\]]*\]\s*/g, '').replace(/\s+/g, ' ').trim();   // eleven_v3 audio tags out
 // sentences end at a single "." or at "!"/"?"; an ellipsis ("Bir sabah... tanımadığım") is a pause, not an end
 function cumleler(s) {
@@ -89,6 +90,10 @@ async function uretBolum(ctx, dizi, n, { onayGerekli = true, calistir, kok = O.K
   // the story's cast and their looks (clothes, hair, colours) are the series' own: made once, unlike other stories' people
   await G.ata(ctx, dizi, diziler, { calistir });
   if (G.anlatici(dizi)) Object.assign(hazir.video_ek, { karakter_gorunum: G.anlatici(dizi), kisi_gorunumleri: G.haritasi(dizi), kisiler: dizi.kisiler });
+  // the episode cover (kit marka.kapak): the series' colour and hook title, chosen once at its first produced episode.
+  // uretim/kapak.js draws it after the render; nothing here can stop the episode.
+  const kp = await KAPAK.hazirla(ctx, dizi, diziler, { calistir, yaz });
+  if (kp) hazir.video_ek.kapak = kp;
   b.durum = 'uretimde';
   // the scheduler is automation: spending follows konu.json → otomasyon.butce, never an interactive gate
   // timed at the series' own hour: episode 1 takes a free hour, later ones the slot after the previous episode

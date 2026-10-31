@@ -11,6 +11,7 @@
 // where T = { Z, L, LE, cue, ifade, END } (see uretim/cekirdek.js). Write it with dersler/KURGU-DILI.md open.
 const fs = require('fs'), path = require('path');
 const K = require('./cekirdek');
+const KP = require('./kapak');
 
 const { dir, video, kimlik, kimlikDir, ad } = K.videoYukle(process.argv[2]);
 const arg = n => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : null; };
@@ -30,6 +31,8 @@ else {
   const karakter = fs.existsSync(kf) ? K.guvenliYukle(kf)({ C, f: K.f1, gorunum: video.karakter_gorunum || null, kisiGorunumleri: video.kisi_gorunumleri || null }) : null;
   // approved recurring characters of the channel / this story (uretim/kutuphane.js, kit folder karakterler/)
   const kutuphane = require('./kutuphane').yukle(kimlikDir, video.dizi || null, { C, f: K.f1, karakter });
+  // every drawn figure carries an html comment marker so the episode cover finds the scene with the most people
+  KP.kisiIsaretle(karakter); KP.kisiIsaretle(kutuphane, null);
   S = K.guvenliYukle(sahneFile)({ C, T, at: K.at, f: K.f1, r2, rnd, W: K.W, H: K.H, M, karakter, kutuphane });
 }
 // caption look and closing card follow the channel (kimlik.json → gorsel.altyazi, marka.kapanis)
@@ -38,6 +41,8 @@ const cap = K.altyazi(T, video, C, kimlik), mk = K.marka(T, kimlik, C, { video, 
 const cikti = path.join(dir, 'cikti'), hfDir = path.join(cikti, 'hf-ucretsiz');
 K.sayfaYaz(hfDir, { C, END: T.END, css: [S.css || '', cap.css, mk.css].filter(Boolean).join('\n'), baslik: ad + ' ucretsiz', katmanlar: [S.html, mk.html, cap.html], tl: [...S.tl, ...mk.tl, ...cap.tl] });
 for (const v of mk.varliklar || []) fs.copyFileSync(v.kaynak, path.join(hfDir, 'assets', v.ad));   // e.g. the closing card's image
+// the scenes, their figure counts and windows: uretim/kapak.js picks the cover moment from this
+fs.writeFileSync(path.join(hfDir, 'sahne-plan.json'), JSON.stringify({ sahneler: KP.sahnePlani(S.html, S.tl) }, null, 1));
 
 if (process.argv.includes('--render')) K.renderEt(hfDir, path.join(dir, 'ses', 'mix.wav'), path.join(cikti, `${ad}-ucretsiz.mp4`));
 else {

@@ -141,6 +141,15 @@ function kapanisYukle(kimlik, kimlikDir) {
   if (!fs.existsSync(f)) fail(`kapanış kartı yok: ${f} (kimlik.json → marka.kapanis)`);
   return guvenliYukle(f);
 }
+// The channel's episode cover (kimlik.json → marka.kapak.dosya, default kapak.js), sandboxed like the closing card.
+//   kapak({ C, renk, baslik, satirlar, px, etiket, hesap, sahne }) -> { html, css }   (uretim/kapak.js renders it)
+function kapakYukle(kimlik, kimlikDir) {
+  const m = (kimlik.marka || {}).kapak;
+  if (!m) return null;
+  const f = path.join(kimlikDir || '', (typeof m === 'object' && m.dosya) || 'kapak.js');
+  if (!fs.existsSync(f)) fail(`kapak dosyası yok: ${f} (kimlik.json → marka.kapak.dosya)`);
+  return guvenliYukle(f);
+}
 // ---- story tone (video.json ton: komik | hüzünlü | ürkütücü | ciddi; dizi/ton.js). Anything but komik is told with respect:
 // no comic sound, calmer voice settings, a softer closing bed (or none).
 const ciddiTon = ton => ['hüzünlü', 'ürkütücü', 'ciddi'].includes(ton);
@@ -238,8 +247,11 @@ const FONT_CSS = `@font-face{font-family:"AntonTR";src:url(assets/fonts/Anton-la
 @font-face{font-family:"Inter Tight";font-weight:800;src:url(assets/fonts/InterTight-800-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+2000-206F;}
 @font-face{font-family:"Inter Tight";font-weight:800;src:url(assets/fonts/InterTight-800-latin-ext.woff2) format("woff2");unicode-range:U+0100-02FF,U+1E00-1EFF;}`;
 
+// cover mode (uretim/kapak.js): the scene snapshot for an episode cover puts class="kapak" on <body>, which hides the
+// captions, the top episode label and the corner tag, so the cover shows the clean scene
 const temelCss = C => `${FONT_CSS}
 html,body{margin:0;width:${W}px;height:${H}px;overflow:hidden;background:${C.paper}}
+body.kapak #caps,body.kapak .etk,body.kapak .tag{display:none!important}
 .sc{position:absolute;inset:0;overflow:hidden}.sc svg{position:absolute;left:0;top:0}
 .st-logo{position:absolute;left:0;top:830px;width:${W}px;text-align:center;font:400 170px/1 "AntonTR";letter-spacing:.04em;color:${C.ink}}.st-logo span{color:${C.o2}}
 .tag{position:absolute;left:60px;top:150px;font:400 42px/1 "AntonTR";letter-spacing:.06em;color:${C.ink};background:rgba(244,238,223,.85);padding:12px 20px;border-radius:12px}.tag span{color:${C.o2}}
@@ -293,4 +305,4 @@ function renderEt(hfDir, mixWav, outMp4, kodlama = KODLAMA) {
   console.log(`\nHAZIR: ${outMp4} (${(fs.statSync(outMp4).size / 1048576).toFixed(1)} MB)`);
 }
 
-module.exports = { ciddiTon, tonSesAyari, kapanisMuzigi, tesekkurMuzigi, tesekkurListesi, etiketParcala, KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, kapanisSesleri, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };
+module.exports = { ciddiTon, tonSesAyari, kapanisMuzigi, tesekkurMuzigi, tesekkurListesi, etiketParcala, KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, kapakYukle, kapanisSesleri, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };

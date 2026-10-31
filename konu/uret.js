@@ -393,6 +393,8 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       yaz(`Metin hazır ve doğrulandı: ${rel(path.join(dir, 'metin.md'))}`);
     }
     const video = O.okuJson(videoF);
+    // the cover identity can arrive after video.json was written (a resumed episode, a title edited in the panel)
+    if (hazir && hazir.video_ek && hazir.video_ek.kapak && JSON.stringify(video.kapak) !== JSON.stringify(hazir.video_ek.kapak)) { video.kapak = hazir.video_ek.kapak; O.yazJson(videoF, video); }
 
     async function formulSahne() {
       const Z = O.okuJson(path.join(dir, 'ses', 'zaman.json'));
@@ -629,6 +631,9 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       isaretle('render');
     }
 
+    // 12b. episode cover for the grid (kit marka.kapak): drawn after the render; a failure is logged, never a stop
+    const kapak = kapakAdimi({ ctx, video, dir, ad, kok, yaz, adim: D.adimlar.kapak, isaretle });
+
     // 13. frame review (denetim/kare-denetci.md rules). The formul layer already looked at its own frames and fixed them
     // in the scene rounds, so its last scene score stands in for this pass (no second look at the same frames).
     if (katman === 'formul' && !bitti('denetim')) isaretle('denetim', { puan: (D.adimlar.sahne || {}).puan ?? null, kaynak: 'sahne turları' });
@@ -655,7 +660,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
     // yayinDk: the job is timed N minutes after the video is finished (otherwise the queue picks the next free slot)
     // the job names its account (isHesabi, checked at the start; none for the default account)
     const relK = f => path.relative(kok, f).split(path.sep).join('/');
-    const is = kuyrugaYaz({ video: relK(dir), mp4: relK(mp4), aciklama: video.aciklama_instagram || video.baslik, onayGerekli, neZaman: typeof neZaman === 'number' ? new Date(Date.now() + neZaman * 60e3).toISOString() : neZaman, hesap, kaynak: hazir ? 'dizi' : undefined }, kok);
+    const is = kuyrugaYaz({ video: relK(dir), mp4: relK(mp4), aciklama: video.aciklama_instagram || video.baslik, onayGerekli, neZaman: typeof neZaman === 'number' ? new Date(Date.now() + neZaman * 60e3).toISOString() : neZaman, hesap, kaynak: hazir ? 'dizi' : undefined, kapak }, kok);
     isaretle('kuyruk', { is: rel(is) });
     kaydet('uretildi', `video hazır, kuyrukta: ${rel(is)}${onayGerekli ? ' (paylaşım için onay bekliyor)' : ' (onaysız, tam otomatik)'}`);
     yaz(`\nHAZIR: ${rel(mp4)}\nKuyruk işi: ${rel(is)}${onayGerekli ? '\nPaylaşılmadan önce videoyu izle ve onayla.' : ''}`);
@@ -670,6 +675,23 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
   }
 }
 
+// The episode cover: `node uretim/kapak.js <dir>` -> cikti/<ad>-kapak.jpg, only when the kit declares marka.kapak and
+// video.json carries the series' { renk, baslik }. Redrawn when the colour or the title changed. Returns the jpg relative
+// to kok, or null; it never throws (the episode goes out without a cover). `kos` is injectable for tests.
+function kapakAdimi({ ctx, video, dir, ad, kok = O.KOK, yaz = console.log, adim = null, isaretle = () => { }, kos: calistirici = (b, a) => node(b, a, { yakala: true }) }) {
+  try {
+    if (!(((ctx.kimlik || {}).marka || {}).kapak) || !video || !video.kapak) return null;
+    const jpg = path.join(dir, 'cikti', `${ad}-kapak.jpg`), imza = JSON.stringify(video.kapak);
+    if (!fs.existsSync(jpg) || !adim || adim.imza !== imza) {
+      yaz('\nKapak…');
+      const r = calistirici('uretim/kapak.js', [dir]);
+      if (!r || !r.ok || !fs.existsSync(jpg)) { yaz('Kapak üretilemedi, video kapaksız paylaşılacak: ' + String((r && r.cikti) || '').split('\n').filter(Boolean).slice(-3).join(' | ')); return null; }
+      isaretle('kapak', { imza });
+    }
+    return path.relative(kok, jpg).split(path.sep).join('/');
+  } catch (e) { yaz('Kapak üretilemedi, video kapaksız paylaşılacak: ' + e.message); return null; }
+}
+
 // a waiting or posted job for this video folder (a failed or cancelled one does not count: a retry needs a new job)
 function kuyruktaVar(video, kok = O.KOK) {
   if (!video) return null;
@@ -682,14 +704,16 @@ function kuyruktaVar(video, kok = O.KOK) {
 }
 // Posting queue contract: kuyruk/bekleyen/<YYYYMMDD-HHMM>-<video-adi>.json. A rerun of a finished video never adds a
 // second job: the existing waiting or posted one is returned instead.
-function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap = null, kaynak = 'konu-radari' }, kok = O.KOK) {
+function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap = null, kaynak = 'konu-radari', kapak = null }, kok = O.KOK) {
   const var_ = kuyruktaVar(video, kok);
   if (var_) return var_;
   const d = path.join(kok, 'kuyruk', 'bekleyen');
   fs.mkdirSync(d, { recursive: true });
   const f = path.join(d, `${O.damga()}-${path.basename(video)}.json`);
-  O.yazJson(f, { video, mp4, aciklama, ne_zaman: neZaman, ...(hesap ? { hesap } : {}), kaynak, onay_gerekli: !!onayGerekli });
+  // kapak: the episode cover (relative jpg) sent as cover_url, only when the file exists
+  const kapakVar = kapak && fs.existsSync(path.resolve(kok, kapak));
+  O.yazJson(f, { video, mp4, aciklama, ne_zaman: neZaman, ...(hesap ? { hesap } : {}), ...(kapakVar ? { kapak } : {}), kaynak, onay_gerekli: !!onayGerekli });
   return f;
 }
 
-module.exports = { uret, isHesabi, kodCikar, sahneZamanAsimi, anlarMetni, korSorunlari, tonMetni, sahneAyari, parcala, parcaIstemi, birlestir, sorunDagit, paralel, kesinKurallar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, isHesabi, kodCikar, sahneZamanAsimi, anlarMetni, korSorunlari, tonMetni, sahneAyari, parcala, parcaIstemi, birlestir, sorunDagit, paralel, kesinKurallar, sureAyari, kuyrugaYaz, kuyruktaVar, kapakAdimi, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
