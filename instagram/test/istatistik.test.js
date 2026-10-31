@@ -71,7 +71,7 @@ test('anlik: a young reel every 10 min, the account part hourly; an old reel tha
   // views of the old reel: 10/h, then 100/h between S+6h and S+13h, then flat
   const eskiV = t => { const h = (t - S) / SAAT; return Math.round(1000 + 10 * Math.min(h, 6) + (h > 6 ? 100 * (Math.min(h, 13) - 6) : 0)); };
   const P = sahteP({ sayfalar: { ilk: { data: [reel('Y', yeniT), reel('E', eskiT)] } }, deger: (id, m, t) => m === 'views' ? (id === 'E' ? eskiV(t) : Math.round((t - yeniT) / DK)) : 1 });
-  const me = () => P.cagri.filter(c => c.p === '/me').length;
+  const me = () => P.cagri.filter(c => c.p === '/me' && /media_count/.test(c.q.fields)).length;   // the account part's /me (the 10-minute follower read asks followers_count only)
   const r0 = await P.kos(kok, 'h', S);
   assert.strictEqual(r0.gozlenen, 2); assert.strictEqual(me(), 1);
   const r1 = await P.kos(kok, 'h', S + 10 * DK);

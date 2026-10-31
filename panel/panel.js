@@ -6,7 +6,7 @@
 //   node panel/panel.js [--port 4747] [--acma] [--kok <repo>]
 //   node panel/panel.js --ozet                    print the queue summary as JSON (the panel uses it over SSH)
 //   node panel/panel.js --zaman <is-id> "YYYY-MM-DD HH:MM"
-//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-tesekkur <json> | --dizi-metin <json> | --istatistik <json> | --instagram <json> | --takipci <json>
+//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-tesekkur <json> | --dizi-metin <json> | --istatistik <json> | --istatistik-takip <json> | --instagram <json> | --takipci <json>
 //                                                 the Diziler page on a server: print JSON; on error "HATA: ..." and exit 1 (3 = lock busy, HTTP 409)
 //
 // Listens on 127.0.0.1 only; every API call carries a random key made at start (it is in the printed link).
@@ -370,14 +370,40 @@ function bolumMp4(video, isMp4) {
 // series of every channel posting to this account and the video lengths (videolar/<ad>/ses/zaman.json → toplam)
 const hesapGovde = h => ({ hesap: hesapGuvenli(hesapTemiz(h)) || HESAP0 });   // only a clean account name reaches the shell
 const istatistikGovde = b => { const h = hesapGuvenli(hesapTemiz(b.hesap)) || HESAP0, g = +b.gun; return { hesap: h, gun: Number.isInteger(g) && g >= 1 && g <= 365 ? g : 28 }; };
+// a small JSON file read again only when its mtime or size changes (the stats page asks every 60 s)
+const mtimeOnbellek = new Map();
+function okuJOnbellekli(f) {
+  let st; try { st = fs.statSync(f); } catch { mtimeOnbellek.delete(f); return null; }
+  const e = mtimeOnbellek.get(f), imza = st.mtimeMs + ':' + st.size;
+  if (e && e.imza === imza) return e.j;
+  const j = okuJ(f); mtimeOnbellek.set(f, { imza, j }); return j;
+}
+// what a video folder's video.json says about the episode (the identity card when no series record has it)
+function videoKimlik(video) {
+  const v = okuJOnbellekli(path.join(KOK, video, 'video.json'));
+  if (!v || typeof v !== 'object') return null;
+  const ilk = Array.isArray(v.satirlar) && v.satirlar[0] && typeof v.satirlar[0].metin === 'string' ? v.satirlar[0].metin : null, e = v.video_ek || {};
+  return { metin: ilk, ses: (v.anlaticilar && typeof v.anlaticilar.anlatici === 'string' && v.anlaticilar.anlatici) || null, bolum: e.bolum ?? null, toplam_bolum: e.toplam_bolum ?? null, kapak_baslik: typeof e.kapak_baslik === 'string' ? e.kapak_baslik : null };
+}
 function istatistikCevap(b) {
   const { hesap, gun } = istatistikGovde(b);
   const isler2 = ['paylasilan', 'bekleyen'].flatMap(k => isler(k)).filter(j => (isHesap(j) || HESAP0) === hesap);
   const diziler = kanallar().filter(k => (kanalHesapOku(k) || HESAP0) === hesap).flatMap(k => { try { return DiziDepo().yukle(KOK, k).diziler || []; } catch (e) { return []; } });
-  const sure = {};
-  for (const j of isler2) if (j.video && /^videolar\/[\w.-]+$/.test(j.video)) { const z = okuJ(path.join(KOK, j.video, 'ses', 'zaman.json')); if (z && Number.isFinite(+z.toplam)) sure[j.video] = +(+z.toplam).toFixed(1); }
-  return IST().ozet({ kok: KOK, hesap, gun, ek: { isler: isler2, diziler, sure } });
+  const sure = {}, kimlik = {};
+  for (const j of isler2) if (j.video && /^videolar\/[\w.-]+$/.test(j.video)) {
+    const z = okuJOnbellekli(path.join(KOK, j.video, 'ses', 'zaman.json')); if (z && Number.isFinite(+z.toplam)) sure[j.video] = +(+z.toplam).toFixed(1);
+    const k = videoKimlik(j.video); if (k) kimlik[j.video] = k;
+  }
+  return IST().ozet({ kok: KOK, hesap, gun, ek: { isler: isler2, diziler, sure, kimlik } });
 }
+// one reel's real follows (typed in the İstatistikler table): {hesap, media_id, takip: whole number 0..1e7 | null = clear}.
+// Only these rebuilt fields reach the server's shell.
+function takipElleGovde(b) {
+  const hesap = hesapGuvenli(hesapTemiz(b.hesap)) || HESAP0;
+  const t = b.takip === null || b.takip === '' || b.takip === undefined ? null : typeof b.takip === 'string' && /^\d+$/.test(b.takip.trim()) ? +b.takip.trim() : b.takip;
+  return IST().takipElleGecerli({ hesap, media_id: typeof b.media_id === 'string' ? b.media_id : '', takip: t });
+}
+const takipElle = b => IST().takipElleYaz({ kok: KOK, ...takipElleGovde(b) });
 // story-level text approval: onayla (with optional edited texts {n: text}, recap rule re-checked) or reddet (series cut,
 // story recorded in reddedilen.json). Under the series lock, like the other manual decisions.
 function diziMetinGovde(b) {
@@ -619,6 +645,7 @@ async function api(req, u) {
   if (GET && yol === 'dersler') return okuJ(DERSLER, []);
   if (GET && yol === 'takipci') return sunucu ? sunucuJson('--takipci', hesapGovde(u.searchParams.get('hesap'))) : takipci(u.searchParams.get('hesap'));
   if (GET && yol === 'istatistik') { const g = istatistikGovde({ hesap: u.searchParams.get('hesap'), gun: u.searchParams.get('gun') }); return sunucu ? sunucuJson('--istatistik', g) : istatistikCevap(g); }
+  if (!GET && yol === 'istatistik/takip') return sunucu ? sunucuJson('--istatistik-takip', takipElleGovde(b)) : takipElle(b);
   if (GET && yol === 'asamalar') return asamalar(u.searchParams.get('kanal') || undefined);
   if (GET && yol === 'diziler') return sunucu ? sunucuJson('--diziler', kanalAdi(u.searchParams.get('kanal'))) : dizilerCevap(u.searchParams.get('kanal'));
   if (!GET && yol === 'dizi/karar') return sunucu ? sunucuJson('--dizi-karar', diziKararGovde(b)) : diziKarar(b);
@@ -687,19 +714,19 @@ const sunucuYap = () => http.createServer(async (req, res) => {
   } catch (e) { gonder(res, e.kod || 400, { hata: e.message }); }
 });
 
-module.exports = { kanca, planliBolumler, kuyrukOzet, instagram, takipci, istatistikCevap, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
+module.exports = { kanca, planliBolumler, kuyrukOzet, instagram, takipci, istatistikCevap, takipElleGovde, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
 if (require.main !== module) return;
 
   // ozellik: lets the home panel know which flags this copy has (an older one would not answer them)
 if (process.argv.includes('--ozet')) {
-  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler', 'istatistik', 'instagram', 'tesekkur'] })); process.exit(0); }
+  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler', 'istatistik', 'instagram', 'tesekkur', 'istatistik-takip'] })); process.exit(0); }
   catch (e) { console.error('HATA: ' + e.message); process.exit(1); }
 }
 if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'); zamanDegistir(process.argv[i + 1], process.argv[i + 2]); console.log('Saat değişti.'); process.exit(0); }
 
 // Diziler on a server: the panel on the home PC calls these over ssh (same functions as the local routes)
 const jsonArg = s => { let j; try { j = JSON.parse(s); } catch { throw new Error('bozuk istek'); } if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('bozuk istek'); return j; };
-for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-tesekkur', s => diziTesekkur(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--istatistik', s => istatistikCevap(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))], ['--dizi-havuz-one', s => havuzOne(jsonArg(s))]]) {
+for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-tesekkur', s => diziTesekkur(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--istatistik', s => istatistikCevap(jsonArg(s))], ['--istatistik-takip', s => takipElle(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))], ['--dizi-havuz-one', s => havuzOne(jsonArg(s))]]) {
   if (!process.argv.includes(bayrak)) continue;
   let cikti;
   try { cikti = JSON.stringify(fn(arg(bayrak))); } catch (e) { console.error('HATA: ' + e.message); process.exit(e.kod === 409 ? 3 : 1); }

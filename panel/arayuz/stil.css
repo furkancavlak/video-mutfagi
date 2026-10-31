@@ -833,3 +833,31 @@ dialog.on-pencere:not(.on-m) .gp{max-height:calc(100vh - 48px)}
 .sat.sat-planli{grid-template-columns:minmax(0,1fr);border:1.5px dashed var(--line-2);opacity:.75}
 .sat.sat-planli .sat-durum{color:var(--ink-3)}
 .gp-kart.gp-planli{grid-template-columns:minmax(0,1fr);background:transparent;border:1.5px dashed var(--line-2)}
+/* İstatistikler: the Takip column, its strip and the Kitle section */
+.ist-tablo td.ist-takip{cursor:text}
+.ist-tablo td.ist-takip:hover{box-shadow:inset 0 0 0 1px var(--line-2);border-radius:6px}
+.ist-takip-gir{width:92px;padding:4px 6px;border:1px solid var(--line-2);border-radius:7px;background:var(--card);color:var(--ink);font:600 13.5px var(--body);text-align:right}
+.ist-takip-serit{width:100%;display:flex;align-items:center;gap:9px;margin-bottom:10px;padding:10px 14px;border-radius:12px;background:var(--honey-soft);color:var(--ink-2);font-size:14px;text-align:left;border:1px solid transparent}
+.ist-takip-serit b{color:var(--ink)}
+.ist-takip-serit.on{border-color:var(--honey)}
+.ist-kitle-sec{width:max-content;margin-bottom:10px}
+.ist-kitle{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
+.ist-kitle-kart .ist-ic-s span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
+.ist-veri-yok{padding:10px 0}
+.ist-pay{display:flex;height:14px;border-radius:999px;overflow:hidden;gap:2px;background:var(--paper-2)}
+.ist-pay i{display:block;min-width:3px}
+.ist-pay-ad{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--ink-2)}
+.ist-pay-ad span{display:inline-flex;align-items:center;gap:5px}
+.ist-pay-ad span>i{width:9px;height:9px;border-radius:3px;display:inline-block}
+.ist-saatler{display:flex;align-items:flex-end;gap:2px;height:96px}
+.ist-saat{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px;min-width:0}
+.ist-saat i{width:100%;border-radius:3px 3px 1px 1px;background:var(--sky);opacity:.45}
+.ist-saat.paylasim i{background:var(--herb);opacity:1}
+.ist-saat span{font:600 10px var(--body);color:var(--ink-3);height:12px}
+.ist-ciftler{display:flex;align-items:flex-end;gap:3px;height:90px}
+.ist-cift{flex:1;height:100%;min-width:0;display:flex;align-items:flex-end}
+.ist-cift-c{display:flex;align-items:flex-end;gap:1px;width:100%;height:100%}
+.ist-cift-c i{flex:1;border-radius:2px 2px 0 0;min-height:1px}
+.ist-cift-c i.gelen{background:var(--herb)}
+.ist-cift-c i.giden{background:var(--tomato)}
+.ist-acilis{margin:10px 0 4px;padding:8px 12px;border-left:3px solid var(--line-2);color:var(--ink-2);font-style:italic;font-size:14px}
