@@ -195,7 +195,7 @@ function kararVer(dizi, n, tumDiziler, ayar, simdi) {
   return { karar: 'devam', neden: `${ne} ${f(deger)} >= eşik ${f(esik)} (ortalama ${f(ortalama)})` };
 }
 
-// ---- per-channel lock (kayit/dizi/<kanal>/.kilit), shared by the scheduler run and the panel's manual decisions.
+// ---- lock files under kayit/dizi/<kanal>/ (channel .kilit, run .kosu-kilit, series .kilit-<id>).
 // A live pid on this host always holds it, however long the run takes. Stale: a dead pid on this host, or a lock from
 // another host (or without a pid) older than 6 h. A file still being written (unreadable) is held for a minute.
 const pidCanli = pid => { try { process.kill(pid, 0); return true; } catch (x) { return x.code === 'EPERM'; } };
@@ -205,22 +205,38 @@ function kilitTutuluyor(k, mtime) {
   if (Number.isInteger(k.pid) && k.pid > 0 && buMakine) return pidCanli(k.pid);
   return yas < KILIT_SAAT * 3600e3;
 }
-function kilitAl(kok, kanal) {
-  const f = path.join(kok, 'kayit', 'dizi', kanal, '.kilit');
+function kilitDosyaAl(f) {
   fs.mkdirSync(path.dirname(f), { recursive: true });
   for (let i = 0; i < 2; i++) {
     try {
       const fd = fs.openSync(f, 'wx'); fs.writeSync(fd, JSON.stringify({ pid: process.pid, host: os.hostname(), zaman: new Date().toISOString() })); fs.closeSync(fd);
-      return { birak: () => { try { if (JSON.parse(fs.readFileSync(f, 'utf8')).pid === process.pid) fs.unlinkSync(f); } catch (e) { } } };
+      let birakildi = false;   // idempotent: a second call never removes a lock someone else took since
+      return { birak: () => { if (birakildi) return; birakildi = true; try { if (JSON.parse(fs.readFileSync(f, 'utf8')).pid === process.pid) fs.unlinkSync(f); } catch (e) { } } };
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
-      let k = null, mtime = 0;
-      try { mtime = fs.statSync(f).mtimeMs; k = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (x) { }
-      if (kilitTutuluyor(k, mtime)) return { mesaj: k ? `kilit: başka bir dizi işi sürüyor (pid ${k.pid}${k.host ? ' @' + k.host : ''}, ${k.zaman})` : 'kilit: başka bir dizi işi kilidi yazıyor' };
+      const m = kilitMesaj(f);
+      if (m) return { mesaj: m };
       try { fs.unlinkSync(f); } catch (x) { }
     }
   }
   return { mesaj: 'kilit: kilit dosyası alınamadı' };
 }
+// null when the lock file is missing or stale
+function kilitMesaj(f) {
+  let k = null, mtime = 0;
+  try { mtime = fs.statSync(f).mtimeMs; } catch (x) { return null; }
+  try { k = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (x) { }
+  if (!kilitTutuluyor(k, mtime)) return null;
+  return k ? `kilit: başka bir dizi işi sürüyor (pid ${k.pid}${k.host ? ' @' + k.host : ''}, ${k.zaman})` : 'kilit: başka bir dizi işi kilidi yazıyor';
+}
+const kilitYer = (kok, kanal, ad) => path.join(kok, 'kayit', 'dizi', kanal, ad);
+// the channel lock is held only for short read-modify-write sections of diziler.json (never across production or an LLM call)
+const kilitAl = (kok, kanal) => kilitDosyaAl(kilitYer(kok, kanal, '.kilit'));
+// one scheduler run at a time per channel (held for the whole run; the panel never looks at it)
+const kosuKilitAl = (kok, kanal) => kilitDosyaAl(kilitYer(kok, kanal, '.kosu-kilit'));
+// per-series busy marker (.kilit-<id>): held while an episode of that series is produced; panel writes to it are refused
+const diziKilitYer = (kok, kanal, id) => kilitYer(kok, kanal, '.kilit-' + String(id).replace(/[^\w.-]/g, '_'));
+const diziKilitAl = (kok, kanal, id) => kilitDosyaAl(diziKilitYer(kok, kanal, id));
+const diziMesgul = (kok, kanal, id) => !!kilitMesaj(diziKilitYer(kok, kanal, id));
 
-module.exports = { olcumZamani, olcumGecen, sonrakiSlotSaati, hedefSlot, bosSaat, yukle, kaydet, kararVer, elleKarar, kilitAl, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi, tonGoc };
+module.exports = { olcumZamani, olcumGecen, sonrakiSlotSaati, hedefSlot, bosSaat, yukle, kaydet, kararVer, elleKarar, kilitAl, kosuKilitAl, diziKilitAl, diziMesgul, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi, tonGoc };

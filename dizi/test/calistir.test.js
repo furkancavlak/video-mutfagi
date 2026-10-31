@@ -447,3 +447,90 @@ test('shadow planner: reyting.json, plan.json and plan-gecmis.json are written; 
   await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k3, kuru: true });
   assert.ok(!fs.existsSync(path.join(k3, 'kayit', 'dizi', 'k', 'plan.json')));
 });
+
+// ---- series lock: production runs without the channel lock; the panel edits other series meanwhile
+const { diziKilitAl } = require('../dizi');
+let panel = null, panelKok = null;
+const panelYukle = () => {   // the panel reads --kok once, at require: one shared root for these tests
+  if (panel) return panelKok;
+  panelKok = kok(); fs.mkdirSync(path.join(panelKok, 'kanal', 'k'), { recursive: true });
+  fs.writeFileSync(path.join(panelKok, 'kanal', 'k', 'konu.json'), JSON.stringify({ dizi: AYAR }));
+  process.argv.push('--kok', panelKok); panel = require('../../panel/panel.js');
+  return panelKok;
+};
+const onayli = (id, ekstra = {}) => ({ id, kanal: 'k', durum: 'aktif', metin_onay: 'onaylandi', bolumler: [bolum(1), bolum(2)], ...ekstra });
+
+test('production: panel edits to another series made mid-production survive; the busy series refuses them', async () => {
+  const k = panelYukle();
+  kaydet(k, 'k', { diziler: [onayli('a'), onayli('b', { durum: 'bitti' })] });
+  let ortada = null;
+  const uret = async (cx, d, n) => {
+    ortada = yukle(k, 'k').diziler.find(x => x.id === 'a').bolumler[0].durum;
+    assert.ok(!fs.existsSync(path.join(k, 'kayit', 'dizi', 'k', '.kilit')), 'no channel lock during production');
+    assert.deepStrictEqual(panel.diziTesekkur({ kanal: 'k', id: 'b', isimler: 'ali veli' }), { ok: true, tesekkur: ['ali', 'veli'] });
+    assert.throws(() => panel.diziTesekkur({ kanal: 'k', id: 'a', isimler: 'x' }), e => e.kod === 409 && e.message === 'Bu hikâyenin bölümü şu an üretiliyor; birkaç dakika sonra tekrar dene.');
+    await new Promise(r => setTimeout(r, 20));
+    d.renk = '#123456'; d.bolumler[0].video = 'videolar/k-a-b1';
+    return { durum: 'sirada' };
+  };
+  const r = await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, uretBolum: uret, yeniDizi: async () => null, planlayici: () => { } });
+  assert.deepStrictEqual(r.uretilecek, [{ id: 'a', n: 1 }]);
+  assert.strictEqual(ortada, 'uretimde', 'marked uretimde on disk before production');
+  const [a, b] = yukle(k, 'k').diziler;
+  assert.deepStrictEqual(b.tesekkur, ['ali', 'veli'], 'panel edit to the other series kept');
+  assert.strictEqual(a.tesekkur, undefined);
+  assert.strictEqual(a.renk, '#123456'); assert.strictEqual(a.bolumler[0].durum, 'sirada'); assert.strictEqual(a.bolumler[0].video, 'videolar/k-a-b1');
+  for (const f of ['.kilit', '.kilit-a', '.kosu-kilit']) assert.ok(!fs.existsSync(path.join(k, 'kayit', 'dizi', 'k', f)), f + ' released');
+});
+
+test('new series split: the LLM call runs without the channel lock, the series is appended to fresh data', async () => {
+  const k = panelYukle();
+  kaydet(k, 'k', { diziler: [onayli('b', { durum: 'bitti' })] });
+  const yeniDizi = async () => {
+    assert.ok(!fs.existsSync(path.join(k, 'kayit', 'dizi', 'k', '.kilit')));
+    panel.diziTesekkur({ kanal: 'k', id: 'b', isimler: 'ayse' });
+    return { id: 'y', kanal: 'k', durum: 'aktif', metin_onay: 'bekliyor', stok: true, bolumler: [bolum(1), bolum(2)] };
+  };
+  const r = await calistir(ctx({ gunluk_hedef: 1, metin_stok: 1 }), { simdi: SIMDI, kok: k, uretBolum: fakeUret(), yeniDizi, planlayici: () => { } });
+  assert.strictEqual(r.yeniler, 1);
+  const D = yukle(k, 'k').diziler;
+  assert.deepStrictEqual(D.map(d => d.id), ['b', 'y']);
+  assert.deepStrictEqual(D[0].tesekkur, ['ayse']);
+});
+
+test('series lock: a stale one (dead pid, or another host past 6 h) is taken over; a live one skips the series', async () => {
+  const k = kok(), dir = path.join(k, 'kayit', 'dizi', 'k'), f = path.join(dir, '.kilit-a');
+  fs.mkdirSync(dir, { recursive: true });
+  const olu = require('child_process').spawnSync(process.execPath, ['-e', '']).pid;
+  fs.writeFileSync(f, JSON.stringify({ pid: olu, host: os.hostname(), zaman: new Date().toISOString() }));
+  kaydet(k, 'k', { diziler: [onayli('a')] });
+  const uret = fakeUret();
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, uretBolum: uret, yeniDizi: async () => null, planlayici: () => { } });
+  assert.deepStrictEqual(uret.calls, ['a:1']); assert.ok(!fs.existsSync(f));
+  fs.writeFileSync(f, JSON.stringify({ pid: 1, host: 'baska-makine', zaman: new Date(Date.now() - 7 * 3600e3).toISOString() }));
+  const l = diziKilitAl(k, 'k', 'a'); assert.ok(!l.mesaj, 'old foreign lock taken over'); l.birak();
+  fs.writeFileSync(f, JSON.stringify({ pid: process.pid, host: os.hostname(), zaman: new Date().toISOString() }));
+  assert.ok(diziKilitAl(k, 'k', 'a').mesaj, 'a live one holds');
+  kaydet(k, 'k', { diziler: [onayli('a')] });
+  const u2 = fakeUret();
+  const r = await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, uretBolum: u2, yeniDizi: async () => null, planlayici: () => { } });
+  assert.deepStrictEqual(u2.calls, []); assert.ok(r.notlar.some(n => /a bölüm 1: dizi meşgul/.test(n)));
+  assert.strictEqual(yukle(k, 'k').diziler[0].bolumler[0].durum, 'metin');
+  fs.unlinkSync(f);
+});
+
+test('pool split: a story struck in the panel ("Ele") during the split stays struck and opens no series', async () => {
+  const { yeniDiziYap } = require('../calistir');
+  const Hv = require('../havuz');
+  const k = kok(); kaydet(k, 'k', { diziler: [] });
+  Hv.kaydet(k, 'k', { hikayeler: [{ id: 'eksi-1', konu: 'aşk', fav: 9, durum: 'havuzda', metin: 'a' }, { id: 'eksi-2', konu: 'aşk', fav: 1, durum: 'havuzda', metin: 'b' }] });
+  const bol = { bol: async (cx, h) => { if (h.id === 'eksi-1') Hv.ele(k, 'k', 'eksi-1', 'Furkan eledi'); return { ok: true, dizi: { id: h.id, kanal: 'k', durum: 'aktif', bolumler: [bolum(1), bolum(2)] } }; } };
+  const kaynak = { adaylar: async () => ({ ogeler: [], notlar: [] }) };
+  const sonuc = { notlar: [] };
+  const cx = { kanal: 'k', ayar: { dizi: { kaynak: { konular: [{ ad: 'aşk', basliklar: ['/ask--1'] }] } } } };
+  const d = await yeniDiziYap({ kaynak, bol, havuz: Hv })(cx, { simdi: SIMDI, diziler: [], kok: k, sonuc });
+  assert.strictEqual(d.id, 'eksi-2', 'the next pooled story is used instead');
+  const [x1, x2] = Hv.yukle(k, 'k').hikayeler;
+  assert.deepStrictEqual([x1.durum, x1.neden, x2.durum], ['elendi', 'Furkan eledi', 'kullanildi']);
+  assert.ok(sonuc.notlar.some(m => /eksi-1: bölünürken panelden elendi/.test(m)));
+});

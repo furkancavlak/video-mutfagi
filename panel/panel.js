@@ -536,7 +536,7 @@ function diziMetin(b) {
     }
     D.kaydet(KOK, g.kanal, veri);
     return { ok: true, metin_onay: d.metin_onay };
-  });
+  }, g.id);
 }
 // weekly story pool (dizi/havuz.js): stock per theme + the next stories; "Ele" strikes one before it is used (lock taken there)
 function havuzCevap(kanal) {
@@ -644,7 +644,7 @@ function diziTesekkur(b) {
     d.tesekkur = g.isimler;
     D.kaydet(KOK, g.kanal, veri);
     return { ok: true, tesekkur: d.tesekkur };
-  });
+  }, g.id);
 }
 const diziTekrarGovde = b => ({ kanal: kanalAdi(b.kanal), id: diziId(b.id), n: bolumNo(b.n) });
 const diziAyarGovde = b => ({ kanal: kanalAdi(b.kanal), ayar: diziAyarTemiz(b.ayar) });
@@ -667,11 +667,16 @@ function sunucuIsit(k) {
   sunucuOku(sunucuKomut('--istatistik', istatistikGovde({ hesap: h, gun: 7 })), 20e3).catch(bos);
 }
 const DiziDepo = () => require('../dizi/dizi.js');
-// manual decisions run under the scheduler's lock, so a running calistir cannot overwrite them
-function kilitli(kanal, fn) {
+// manual decisions run under the channel lock (calistir holds it only for short writes); a write to one series (id) is
+// refused while that series' episode is being produced (its .kilit-<id>), other series go through
+const MESGUL = 'Bu hikâyenin bölümü şu an üretiliyor; birkaç dakika sonra tekrar dene.';
+function kilitli(kanal, fn, id) {
   const D = DiziDepo(), k = D.kilitAl(KOK, kanal);
   if (k.mesaj) throw Object.assign(new Error('Zamanlayıcı şu an çalışıyor, birkaç dakika sonra tekrar dene'), { kod: 409 });
-  try { return fn(D); } finally { k.birak(); }
+  try {
+    if (id != null && D.diziMesgul(KOK, kanal, id)) throw Object.assign(new Error(MESGUL), { kod: 409 });
+    return fn(D);
+  } finally { k.birak(); }
 }
 function diziBul(D, b) {
   if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
@@ -689,11 +694,11 @@ function diziKarar(b) {
     D.kararUygula(d, b.n, b.karar, String(b.neden || '').replace(/\s+/g, ' ').trim().slice(0, 200) || (b.karar === 'kes' ? 'elle kesildi' : 'elle devam ettirildi'));
     D.kaydet(KOK, b.kanal, veri);
     return { ok: true };
-  });
+  }, b.id);
 }
 function diziTekrar(b) {
   if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
-  return kilitli(b.kanal, D => { const { veri, d } = diziBul(D, b); D.tekrarDene(d, b.n); D.kaydet(KOK, b.kanal, veri); return { ok: true }; });
+  return kilitli(b.kanal, D => { const { veri, d } = diziBul(D, b); D.tekrarDene(d, b.n); D.kaydet(KOK, b.kanal, veri); return { ok: true }; }, b.id);
 }
 // only the given keys change; the rest of konu.json is kept (read, merge, write to a temp file, rename)
 function diziAyarYaz(b) {
@@ -849,7 +854,7 @@ const sunucuYap = () => http.createServer(async (req, res) => {
   } catch (e) { gonder(res, e.kod || 400, { hata: e.message }); }
 });
 
-module.exports = { kanca, sunucuOku, sunucuJson, sunucuIsit, kapakJpgYolu, kapakAlan, kucukAd, KUCUK, SUNUCU_TTL, planliBolumler, kuyrukOzet, instagram, takipci, istatistikCevap, takipElleGovde, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
+module.exports = { diziKarar, diziTesekkur, kanca, sunucuOku, sunucuJson, sunucuIsit, kapakJpgYolu, kapakAlan, kucukAd, KUCUK, SUNUCU_TTL, planliBolumler, kuyrukOzet, instagram, takipci, istatistikCevap, takipElleGovde, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
 if (require.main !== module) return;
 
   // ozellik: lets the home panel know which flags this copy has (an older one would not answer them)
