@@ -382,7 +382,8 @@ function dizilerCevap(kanal) {
   const D = DiziDepo();
   const bek = isler('bekleyen');
   // a series waiting for its text approval carries the episode texts (the panel edits them before approving)
-  const diziler = (D.yukle(KOK, kanal).diziler || []).map(d => ({ ...d, metin_onay: D.metinOnay(d), bolumler: (d.bolumler || []).map(({ metin, ...b }) => {
+  // a series from before the tone label shows the kit's assignment (dizi.ton_atamalari) or komik until the run writes it
+  const diziler = (D.yukle(KOK, kanal).diziler || []).map(d => ({ ...d, ton: d.ton || (ayar.ton_atamalari || {})[d.id] || 'komik', metin_onay: D.metinOnay(d), bolumler: (d.bolumler || []).map(({ metin, ...b }) => {
     const j = b.video ? bek.find(x => x.video === b.video) : null;
     return { ...b, ...(D.metinOnay(d) === 'bekliyor' ? { metin } : {}), kelime: String(metin || '').split(/\s+/).filter(Boolean).length, mp4: bolumMp4(b.video, j && j.mp4), kuyruk_id: j ? j.id : null, kuyruk_onay_gerekli: j ? !!j.onay_gerekli : null,
       izin: { devam: !D.kararHata(d, b.n, 'devam'), kes: !D.kararHata(d, b.n, 'kes'), tekrar: !D.tekrarHata(d, b.n) } };   // the same checks the POST routes use
