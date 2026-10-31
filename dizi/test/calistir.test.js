@@ -421,3 +421,29 @@ test('a story stopped by the sensitivity check is recorded for Furkan (furkan_ba
   assert.deepStrictEqual([red.id, red.neden, red.furkan_baksin, red.url], ['eksi-7', 'hassasiyet', true, 'https://eksisozluk.com/entry/7']);
   assert.ok(sonuc.notlar.some(n => /hassasiyet denetimi iki kez takıldı, Furkan'a bırakıldı/.test(n)));
 });
+
+test('shadow planner: reyting.json, plan.json and plan-gecmis.json are written; production is unchanged', async () => {
+  const k = kok();
+  kaydet(k, 'k', { diziler: [{ id: 'a', kanal: 'k', durum: 'aktif', saat: '12:00', bolumler: [bolum(1, { durum: 'yayinda', video: 'v-a', paylasildi: saatOnce(5), media_id: 'M1' }), bolum(2), bolum(3)] }] });
+  const g = path.join(k, 'kayit', 'istatistik', 'dur'); fs.mkdirSync(g, { recursive: true });
+  fs.writeFileSync(path.join(g, 'gozlem-2026-10.jsonl'), [1, 2, 3, 4].map(h => JSON.stringify({ v: 2, zaman: saatOnce(5 - h), media_id: 'M1', yayin: saatOnce(5), yas_s: h * 3600, metrik: { views: 100 * h } })).join('\n') + '\n');
+  const once = await calistir(ctx({ gunluk_hedef: 0, saatler: ['12:00', '18:00'] }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi: async () => null });
+  const D = path.join(k, 'kayit', 'dizi', 'k'), oku = f => JSON.parse(fs.readFileSync(path.join(D, f), 'utf8'));
+  const plan = oku('plan.json'), ry = oku('reyting.json');
+  assert.strictEqual(plan.golge, true); assert.ok(Array.isArray(plan.slotlar) && plan.slotlar.length === 4);
+  assert.strictEqual(ry.bolumler.M1.dizi, 'a'); assert.strictEqual(ry.gecici, true); assert.ok(ry.diziler.a);
+  assert.ok(fs.existsSync(path.join(D, 'plan-gecmis.json')));
+  assert.ok(!once.notlar.some(n => /planlayıcı/.test(n)), once.notlar.join('; '));
+  assert.strictEqual(yukle(k, 'k').diziler[0].saat, '12:00');
+  // a planner error is a note; kapali writes nothing
+  const r = await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi: async () => null, planlayici: () => { throw new Error('boom'); } });
+  assert.ok(r.notlar.some(n => /planlayıcı \(deneme modu\) hatası: boom/.test(n)));
+  const k2 = kok();
+  kaydet(k2, 'k', { diziler: [] });
+  await calistir(ctx({ gunluk_hedef: 0, planlayici: 'kapali' }), { simdi: SIMDI, kok: k2, sonucAl: async () => ({}), yeniDizi: async () => null });
+  assert.ok(!fs.existsSync(path.join(k2, 'kayit', 'dizi', 'k', 'plan.json')));
+  // dry run never writes
+  const k3 = kok(); kaydet(k3, 'k', { diziler: [] });
+  await calistir(ctx({ gunluk_hedef: 0 }), { simdi: SIMDI, kok: k3, kuru: true });
+  assert.ok(!fs.existsSync(path.join(k3, 'kayit', 'dizi', 'k', 'plan.json')));
+});

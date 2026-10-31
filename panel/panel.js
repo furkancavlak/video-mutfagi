@@ -398,14 +398,19 @@ function mp4SureOku(rel) {
 function istatistikCevap(b) {
   const { hesap, gun } = istatistikGovde(b);
   const isler2 = ['paylasilan', 'bekleyen'].flatMap(k => isler(k)).filter(j => (isHesap(j) || HESAP0) === hesap);
-  const diziler = kanallar().filter(k => (kanalHesapOku(k) || HESAP0) === hesap).flatMap(k => { try { return DiziDepo().yukle(KOK, k).diziler || []; } catch (e) { return []; } });
+  const kk = kanallar().filter(k => (kanalHesapOku(k) || HESAP0) === hesap);
+  const diziler = kk.flatMap(k => { try { return DiziDepo().yukle(KOK, k).diziler || []; } catch (e) { return []; } });
   const sure = {}, kimlik = {};
   for (const j of isler2) if (j.video && /^videolar\/[\w.-]+$/.test(j.video)) {
     const z = okuJOnbellekli(path.join(KOK, j.video, 'ses', 'zaman.json')); if (z && Number.isFinite(+z.toplam)) sure[j.video] = +(+z.toplam).toFixed(1);
     else if (!(j.video in sure)) { const d = mp4SureOku(j.mp4); if (d) sure[j.video] = d; }
     const k = videoKimlik(j.video); if (k) kimlik[j.video] = k;
   }
-  return IST().ozet({ kok: KOK, hesap, gun, ek: { isler: isler2, diziler, sure, kimlik } });
+  const oz = IST().ozet({ kok: KOK, hesap, gun, ek: { isler: isler2, diziler, sure, kimlik } });
+  // the shadow rating of this account's series channels (badges and the speed column); absent files leave it null
+  let reyting = null;
+  for (const k of kk) { const ry = reytingOku(k); if (!ry) continue; reyting = reyting || { gecici: false, diziler: {}, bolumler: {} }; reyting.gecici = reyting.gecici || ry.gecici; Object.assign(reyting.diziler, ry.diziler); Object.assign(reyting.bolumler, ry.bolumler); }
+  return oz && typeof oz === 'object' ? { ...oz, reyting } : oz;
 }
 // one reel's real follows (typed in the İstatistikler table): {hesap, media_id, takip: whole number 0..1e7 | null = clear}.
 // Only these rebuilt fields reach the server's shell.
@@ -495,6 +500,14 @@ function planliBolumler(diziler, ayar, bek, simdi = Date.now()) {
   }
   return out;
 }
+// the shadow planner's files (dizi/calistir.js 2b): the per-series rating and the 48 h plan; null while missing
+function reytingOku(kanal) {
+  const R = okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'reyting.json'), null);
+  if (!R || typeof R !== 'object' || !R.diziler || typeof R.diziler !== 'object') return null;
+  const ds = {}; for (const [id, d] of Object.entries(R.diziler)) if (d && typeof d === 'object') ds[id] = { R: d.R ?? null, mu: d.mu ?? null, sd: d.sd ?? null, trend: !!d.trend, gecici: R.gecici !== false };
+  const bl = {}; for (const [id, b] of Object.entries(R.bolumler || {})) if (b && typeof b === 'object') bl[id] = { pZvel: b.pZvel ?? null, Zvel: b.Zvel ?? null };
+  return { zaman: R.zaman || null, gecici: R.gecici !== false, diziler: ds, bolumler: bl };
+}
 function dizilerCevap(kanal) {
   if (!kanallar().includes(kanal)) throw new Error('kanal yok');
   const konuDizi = (okuJ(path.join(KOK, 'kanal', kanal, 'konu.json'), {}) || {}).dizi, ayar = konuDizi && typeof konuDizi === 'object' && !Array.isArray(konuDizi) ? konuDizi : {};
@@ -511,7 +524,9 @@ function dizilerCevap(kanal) {
   // stories the sensitivity check stopped twice: kept for Furkan to look at (only their safe fields)
   const furkan_baksin = (Array.isArray(red) ? red : []).filter(x => x && (x.furkan_baksin || x.neden === 'hassasiyet')).map(x => ({ id: x.id, url: x.url || null, neden: x.neden, ayrinti: x.ayrinti || null, zaman: x.zaman || null }));
   const planli = planliBolumler(D.yukle(KOK, kanal).diziler || [], ayar, bek);
-  return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null), reddedilen_toplam: Array.isArray(red) ? red.length : 0, furkan_baksin, planli };
+  const ry = reytingOku(kanal), plan = okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'plan.json'), null);
+  return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null), reddedilen_toplam: Array.isArray(red) ? red.length : 0, furkan_baksin, planli,
+    reyting: ry ? ry.diziler : null, reyting_gecici: ry ? ry.gecici : null, reyting_zaman: ry ? ry.zaman : null, plan: plan && typeof plan === 'object' && Array.isArray(plan.slotlar) ? plan : null };
 }
 // route -> server hop goes through this object so tests can stub the ssh / scp call
 const kanca = { mp4Sure: f => execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }), sunucuda: (...a) => sunucuda(...a), scp: (args, sure) => spawnSync('scp', args, { encoding: 'utf8', timeout: sure }) };

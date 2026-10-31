@@ -19,6 +19,15 @@ test('--diziler prints the same JSON the local route gives', () => {
   assert.equal(r.status, 0);
   const j = JSON.parse(r.stdout);
   assert.equal(j.diziler.length, 1); assert.equal(j.diziler[0].id, 'd1'); assert.equal(j.ayar.gunluk_hedef, 3);
+  assert.strictEqual(j.reyting, null); assert.strictEqual(j.plan, null);
+  // the shadow planner's files travel through the same flag
+  yaz('kayit/dizi/kanal_a/reyting.json', { zaman: 'z', gecici: true, diziler: { d1: { mu: 0, sd: 0.2, R: 50, trend: false } }, bolumler: {} });
+  yaz('kayit/dizi/kanal_a/plan.json', { zaman: 'z', golge: true, slotlar: [], kararlar: [] });
+  try {
+    const k = JSON.parse(cli('--diziler', 'kanal_a').stdout);
+    assert.deepStrictEqual(k.reyting, { d1: { R: 50, mu: 0, sd: 0.2, trend: false, gecici: true } });
+    assert.strictEqual(k.plan.golge, true);
+  } finally { for (const f of ['reyting.json', 'plan.json']) fs.rmSync(path.join(KOK, 'kayit/dizi/kanal_a', f), { force: true }); }
 });
 
 test('--diziler with an unknown or hostile channel: HATA: and exit 1', () => {

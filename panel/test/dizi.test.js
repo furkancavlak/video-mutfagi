@@ -230,3 +230,32 @@ test('ton: the list shows each series tone; an old series gets the kit assignmen
     assert.strictEqual(l.j.diziler[2].hassasiyet_notu, 'gerçek bir ölüm');
   } finally { yaz('kanal/kanal_a/konu.json', KONU); sifirla(); }
 });
+
+test('GET /api/diziler: shadow rating and plan from disk, null while the files are missing', async () => {
+  const bos = (await istek('GET', '/api/diziler?kanal=kanal_a')).j;
+  assert.strictEqual(bos.reyting, null); assert.strictEqual(bos.plan, null); assert.strictEqual(bos.reyting_gecici, null);
+  const D = 'kayit/dizi/kanal_a/';
+  yaz(D + 'reyting.json', { zaman: '2026-10-31T10:00:00Z', gecici: true, diziler: { d1: { mu: 0.2, sd: 0.1, R: 97.7, n_bolum: 1, trend: true, tani: {} } }, bolumler: { M1: { dizi: 'd1', pZvel: 0.9, Zvel: 1.3, r: 0.4 } } });
+  const plan = { zaman: '2026-10-31T10:00:00Z', golge: true, gecici: true, slotlar: [{ saat: '2026-10-31T14:00:00Z', atanan: { dizi: 'd1', bolum: 2 }, kilitli: false, neden: 'süreklilik', kuyrukta: null }], kararlar: [{ tur: 'isaret', dizi: 'd2', neden: 'x' }] };
+  yaz(D + 'plan.json', plan);
+  try {
+    const j = (await istek('GET', '/api/diziler?kanal=kanal_a')).j;
+    assert.deepStrictEqual(j.reyting, { d1: { R: 97.7, mu: 0.2, sd: 0.1, trend: true, gecici: true } });
+    assert.strictEqual(j.reyting_gecici, true); assert.strictEqual(j.reyting_zaman, '2026-10-31T10:00:00Z');
+    assert.deepStrictEqual(j.plan, plan);
+    assert.strictEqual(j.diziler.length, 4);                                     // the old fields are untouched
+    // a broken plan file is ignored, not an error
+    yaz(D + 'plan.json', '{bozuk');
+    const k = await istek('GET', '/api/diziler?kanal=kanal_a');
+    assert.strictEqual(k.kod, 200); assert.strictEqual(k.j.plan, null);
+  } finally { for (const f of ['reyting.json', 'plan.json']) fs.rmSync(path.join(KOK, D, f), { force: true }); }
+});
+
+test('istatistikCevap carries the shadow rating of the account\'s series channels (null without files)', () => {
+  assert.strictEqual(P.istatistikCevap({ hesap: 'ornek', gun: 7 }).reyting, null);
+  yaz('kayit/dizi/kanal_a/reyting.json', { zaman: 'z', gecici: false, diziler: { d1: { mu: -0.3, sd: 0.1, R: 0.1, trend: false } }, bolumler: { M1: { dizi: 'd1', pZvel: 0.1, Zvel: -1.3 } } });
+  try {
+    const r = P.istatistikCevap({ hesap: 'ornek', gun: 7 }).reyting;
+    assert.deepStrictEqual(r, { gecici: false, diziler: { d1: { R: 0.1, mu: -0.3, sd: 0.1, trend: false, gecici: false } }, bolumler: { M1: { pZvel: 0.1, Zvel: -1.3 } } });
+  } finally { fs.rmSync(path.join(KOK, 'kayit/dizi/kanal_a/reyting.json'), { force: true }); }
+});

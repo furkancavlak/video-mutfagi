@@ -515,7 +515,7 @@ function icerikler() {
     const s = v.son || {}, et = ['likes', 'comments', 'saved', 'shares'].every(k => s[k] == null) ? null : ['likes', 'comments', 'saved', 'shares'].reduce((a, k) => a + (s[k] || 0), 0);
     return { id: v.id, t: v.yayin ? new Date(v.yayin) : null, baslik: v.dizi ? v.dizi.baslik : v.baslik || 'Video', bolum: v.dizi ? `Bölüm ${v.dizi.n}/${v.dizi.toplam}` : '', konu: v.konu || null, ton: v.ton || null,
       kapak: v.video ? klasor(v.video) : null, link: guvenli(v.link), slot: v.slot || null, views: s.views ?? null, reach: s.reach ?? null, likes: s.likes ?? null, comments: s.comments ?? null, saved: s.saved ?? null, shares: s.shares ?? null, etk: et,
-      s1: v.v1s ?? null, s24: v.v24s ?? null, s48: v.v48s ?? null, oran: v.izlenme_orani != null ? v.izlenme_orani * 100 : null, sure: s.ort_izleme_sn ?? null, uzunluk: v.sure_sn ?? null,
+      s1: v.v1s ?? null, s24: v.v24s ?? null, s48: v.v48s ?? null, hiz: hizDeger(v.id), oran: v.izlenme_orani != null ? v.izlenme_orani * 100 : null, sure: s.ort_izleme_sn ?? null, uzunluk: v.sure_sn ?? null,
       takip: v.takip ?? null, takipElle: !!v.takip_elle, takipTahmini: v.takip_tahmini ?? null, takipSira: v.takip_elle ? v.takip : v.takip_tahmini ?? null, acilis: v.acilis || null,
       egri: (v.egri || []).map(([z, n]) => ({ t: new Date(z), v: n })) };
   });
@@ -526,7 +526,7 @@ function icerikler() {
     return { id: g.id, t: new Date(g.zaman), baslik: ep ? (ep.d.baslik_kisa || ep.d.baslik) : g.baslik || 'Video', bolum: ep ? `Bölüm ${ep.b.n}/${(ep.d.bolumler || []).length}` : '',
       konu: ep ? ep.d.konu || null : null, ton: ep ? ep.d.ton || null : null, kapak: ep ? (AS[bolumKlasor(ep.d, ep.b)] ? bolumKlasor(ep.d, ep.b) : klasor(ep.b.video)) : null, link: guvenli(g.link), slot: null,
       views: g.views ?? null, reach: g.reach ?? null, likes: g.likes ?? null, comments: g.comments ?? null, saved: g.saved ?? null, shares: g.shares ?? null, etk: et,
-      s1: null, s24: null, s48: null, oran: null, sure: null, uzunluk: null, takip: null, takipElle: false, takipTahmini: null, takipSira: null, acilis: null, egri: [] };
+      s1: null, s24: null, s48: null, hiz: hizDeger(g.id), oran: null, sure: null, uzunluk: null, takip: null, takipElle: false, takipTahmini: null, takipSira: null, acilis: null, egri: [] };
   });
 }
 const yuzde = (a, b) => a == null || b == null || !b ? null : Math.round((a - b) / b * 100);
@@ -595,6 +595,19 @@ function kitleBolum() {
 }
 // how long ago, in the page's words: "az önce", "N dk önce", "N sa önce"
 const kacOnce = t => { const dk = Math.floor(Math.max(0, Date.now() - new Date(t)) / 6e4); return dk < 1 ? 'az önce' : dk < 60 ? `${dk} dk önce` : `${Math.floor(dk / 60)} sa önce`; };
+// the shadow planner's rating (dizi/reyting.js): from the snapshot answer, else from the series list
+function reytingKaynak() {
+  if (istVar() && ISV.reyting) return ISV.reyting;
+  return dzGecerli() && DZ.reyting ? { gecici: DZ.reyting_gecici !== false, diziler: DZ.reyting, bolumler: {} } : null;
+}
+function reytingRozet(id) {
+  const K = reytingKaynak(), r = K && K.diziler && K.diziler[id];
+  if (!r || r.R == null) return '';
+  const v = Math.round(r.R), gec = K.gecici || r.gecici;
+  return `<span class="ry-rozet ${v < 30 ? 'kotu' : v > 70 ? 'iyi' : 'orta'}" title="Dizinin kanalın tipik yeni hikâyesini geçme olasılığı (deneme modu)${gec ? '; veri az, geçici' : ''}">Reyting ${esc(v)}${gec ? '<small>geçici</small>' : ''}</span>${r.trend ? '<span class="ry-trend" title="Son bölümü kanaldan hızlı büyüyor ve en iyi olma olasılığı en yüksek">▲ trend</span>' : ''}`;
+}
+const hizDeger = id => { const K = reytingKaynak(), b = K && K.bolumler && K.bolumler[id]; return b && b.pZvel != null ? b.pZvel : null; };
+const hizHucre = p => p == null ? '<span class="gri">—</span>' : p >= 0.8 ? '<span class="ry-hiz artis" title="Son 1-3 saatte kanaldan hızlı büyüyor">▲</span>' : p <= 0.2 ? '<span class="ry-hiz dusus" title="Son 1-3 saatte kanaldan yavaş büyüyor">▼</span>' : '<span class="ry-hiz gri" title="Kanalın olağan hızında">–</span>';
 function istatistikSayfaCiz() {
   const el = $('#s-istatistik'); if (!el) return;
   $$('#ist-donem button').forEach(b => b.classList.toggle('on', +b.dataset.istGun === istGun || (b.dataset.istGun === 'ozel' && ![1, 3, 7, 15, 28, 90].includes(istGun))));
@@ -639,16 +652,16 @@ function istatistikSayfaCiz() {
   const eksik = T.filter(takipEksikMi); if (!eksik.length) istTakipFiltre = false;
   const serit = eksik.length ? `<button class="ist-takip-serit${istTakipFiltre ? ' on' : ''}" data-ist-takip-filtre>${ikon('kalem', 15)}<span>Gerçek takip sayısı girilmemiş <b>${eksik.length}</b> video var (7 günden eski)</span><span class="serit-git">${istTakipFiltre ? 'Filtreyi kaldır' : 'Göster'}</span></button>` : '';
   const S = istSira, sirali = [...(istTakipFiltre ? eksik : bu)].sort((a, b) => { const x = a[S.k], y = b[S.k]; return (x == null) - (y == null) || (x == null ? 0 : (typeof x === 'string' ? x.localeCompare(y, 'tr') : x - y) * S.yon); });
-  const kol = [['baslik', 'Video'], ['t', 'Tarih'], ['views', 'İzlenme'], ['s24', '24 saat'], ['oran', 'Ort. izlenme %'], ['likes', 'Beğeni'], ['comments', 'Yorum'], ['saved', 'Kayıt'], ['shares', 'Paylaşım'], ['takipSira', 'Takip']];
+  const kol = [['baslik', 'Video'], ['t', 'Tarih'], ['views', 'İzlenme'], ['s24', '24 saat'], ['hiz', 'Hız'], ['oran', 'Ort. izlenme %'], ['likes', 'Beğeni'], ['comments', 'Yorum'], ['saved', 'Kayıt'], ['shares', 'Paylaşım'], ['takipSira', 'Takip']];
   const hucre = v => v == null ? '<span class="gri">—</span>' : esc(sayi(Math.round(v)));
   const tablo = sirali.length ? `<div class="ist-tablo-sar"><table class="ist-tablo"><thead><tr>${kol.map(([k2, a]) => `<th data-ist-sira="${k2}" class="${S.k === k2 ? 'on' : ''}${k2 === 'baslik' ? ' sol' : ''}">${a}${S.k === k2 ? (S.yon > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead><tbody>
     ${sirali.map(x => `<tr data-ist-video="${esc(x.id)}"><td class="sol"><span class="ist-v">${kucukKapak({ kapak: x.kapak, konu: x.konu, mp4: null, link: x.link, durum: 'paylasildi' })}<span><b>${esc(x.baslik)}</b>${x.bolum ? `<small>${esc(x.bolum)}</small>` : ''}</span></span></td>
-      <td>${esc(x.t.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }))} <small>${esc(saat(x.t))}</small></td><td><b>${hucre(x.views)}</b></td><td>${hucre(x.s24)}</td><td>${x.oran == null ? '<span class="gri">—</span>' : '%' + esc(Math.round(x.oran))}</td>
+      <td>${esc(x.t.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }))} <small>${esc(saat(x.t))}</small></td><td><b>${hucre(x.views)}</b></td><td>${hucre(x.s24)}</td><td>${hizHucre(x.hiz)}</td><td>${x.oran == null ? '<span class="gri">—</span>' : '%' + esc(Math.round(x.oran))}</td>
       <td>${hucre(x.likes)}</td><td>${hucre(x.comments)}</td><td>${hucre(x.saved)}</td><td>${hucre(x.shares)}</td>${takipHucre(x)}</tr>`).join('')}</tbody></table></div>` : '<div class="liste-bos">Bu dönemde paylaşılan video yok.</div>';
   // series: episode bars with the change between episodes and the decision
   const DL = istVar() ? (ISV.diziler || []).map(d => ({ d, B: (d.bolumler || []).map(b => ({ n: b.n, v: b.views, p: b.dusus != null ? Math.round(b.dusus * 100) : null, karar: b.karar && b.karar !== 'bekle' ? b.karar : null })) }))
     : (dzGecerli() ? DZ.diziler.filter(d => (d.bolumler || []).some(b => bolumIzlenme(b) != null)) : []).map(d => ({ d, B: (d.bolumler || []).map(b => ({ n: b.n, v: bolumIzlenme(b), p: bolumDegisim(d, b), karar: b.karar && b.karar !== 'bekle' ? b.karar : null, neden: b.karar_neden })) }));
-  const hik = DL.length ? DL.map(({ d, B }) => { const tepe = Math.max(1, ...B.map(b => b.v || 0)), top = B.reduce((a, b) => a + (b.v || 0), 0); return `<div class="kart ist-hik"><div class="ist-hik-ust"><b>${esc(d.baslik_kisa || d.baslik)}</b>${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}${d.karar ? `<span class="ist-karar${d.karar === 'kes' ? ' kes' : ''}">${esc({ devam: 'Sürüyor', kes: 'Kesildi', bitti: 'Bitti' }[d.karar] || d.karar)}</span>` : ''}<span class="ist-hik-top">${top ? esc(sayi(top)) : '—'}<small>toplam</small></span></div>
+  const hik = DL.length ? DL.map(({ d, B }) => { const tepe = Math.max(1, ...B.map(b => b.v || 0)), top = B.reduce((a, b) => a + (b.v || 0), 0); return `<div class="kart ist-hik"><div class="ist-hik-ust"><b>${esc(d.baslik_kisa || d.baslik)}</b>${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}${reytingRozet(d.id)}${d.karar ? `<span class="ist-karar${d.karar === 'kes' ? ' kes' : ''}">${esc({ devam: 'Sürüyor', kes: 'Kesildi', bitti: 'Bitti' }[d.karar] || d.karar)}</span>` : ''}<span class="ist-hik-top">${top ? esc(sayi(top)) : '—'}<small>toplam</small></span></div>
     <div class="ist-cubuklar">${B.map(b => `<div class="ist-c" title="${esc(b.neden || '')}"><span class="ist-c-deger">${b.v != null ? esc(sayi(b.v)) : '—'}</span><i style="height:${b.v != null ? Math.max(4, b.v / tepe * 100) : 2}%" class="${b.v == null ? 'bos' : ''}"></i><span class="ist-c-ad">B${esc(b.n)}</span>${b.p != null ? `<span class="degisim ${b.p >= 0 ? 'artis' : 'dusus'}">%${b.p >= 0 ? '+' : '-'}${Math.abs(b.p)}</span>` : '<span class="degisim">&nbsp;</span>'}${b.karar ? `<span class="ist-karar${b.karar === 'kes' ? ' kes' : ''}">${esc(b.karar === 'kes' ? 'Kes' : 'Devam')}</span>` : ''}</div>`).join('')}</div></div>`; }).join('') : '<div class="liste-bos">Henüz izlenme sayısı olan hikâye yok.</div>';
   // insights: only groups with at least 3 videos
   const yeter = L => (L || []).filter(g => g.video >= 3).sort((a, b) => b.ort - a.ort);
@@ -857,6 +870,7 @@ function dizilerCiz() {
     + (s ? `<div class="dz-son-ic">${notlar.length ? `<ul class="dz-notlar">${notlar.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}${(s.kararlar || []).length ? `<div class="ince-yazi">Kararlar: ${s.kararlar.map(k => esc(`${k.id} bölüm ${k.n} → ${k.karar}`)).join(', ')}</div>` : ''}`
       + (s.reddedilen || DZ.reddedilen_toplam ? `<div class="ince-yazi">Uygun bulunmayan hikâye: bu çalışmada ${esc(s.reddedilen || 0)} · toplam ${esc(DZ.reddedilen_toplam || 0)} (bir daha denenmez)</div>` : '') + '</div>' : '');
   $('#dz-son').open = acik;
+  dzPlanCiz();
   $('#dz-liste').innerHTML = DZ.diziler.length ? DZ.diziler.map(d => {
     const url = guvenli(d.kaynak && d.kaynak.url), top = hikayeToplam(d);
     return `<article class="kart hk hk-${esc(d.durum)}"><div class="hk-ust"><div class="hk-ad">
@@ -866,6 +880,25 @@ function dizilerCiz() {
       <div class="hk-bolumler" style="--n:${(d.bolumler || []).length}">${(d.bolumler || []).map(b => hkBolum(d, b)).join('')}</div></article>`;
   }).join('') : '<div class="liste-bos">Henüz hikâye yok. Zamanlayıcı çalışınca ilk hikâyeler burada görünür.</div>';
   dzAyarCiz();
+}
+// the shadow planner's next 48 h (kayit/dizi/<kanal>/plan.json) next to what is really queued; nothing here acts
+const PLAN_TUR = { 'yedege-al': 'yedeğe alırdı', 'geri-cagir': 'geri çağırırdı', 'yeni-baslat': 'yeni hikâye başlatırdı', 'trend-one-al': 'öne alırdı (trend)', 'isaret': 'işaretledi' };
+function dzPlanCiz() {
+  const el = $('#dz-plan'), p = dzGecerli() ? DZ.plan : null;
+  el.hidden = !p; if (!p) { el.innerHTML = ''; return; }
+  const acik = el.open, ad = id => { const d = (DZ.diziler || []).find(x => x.id === id); return d ? d.baslik_kisa || d.baslik || id : id; };
+  const ep = a => a && a.dizi ? `${esc(ad(a.dizi))} <small>B${esc(a.bolum)}</small>` : a ? 'dizi dışı video' : '<span class="gri">boş</span>';
+  // what production has: the queued job, else the episode the series runner plans for that hour
+  const gercek = s => s.kuyrukta ? s.kuyrukta : ((DZ.planli || []).find(x => Math.abs(Date.parse(x.slot) - Date.parse(s.saat)) < 30 * 60e3) || null);
+  const gAd = g => !g ? '<span class="gri">—</span>' : g.dizi_id ? `${esc(ad(g.dizi_id))} <small>B${esc(g.n)} · planlı</small>` : ep(g);
+  const ayni = (a, g) => (!a && !g) || (a && g && (a.dizi || null) === (g.dizi || g.dizi_id || null) && a.bolum === (g.bolum ?? g.n));
+  const satirlar = (p.slotlar || []).map(s => { const g = gercek(s); return `<tr class="${ayni(s.atanan, g) ? '' : 'fark'}"><td>${esc(gunTarih(s.saat))} <b>${esc(saat(s.saat))}</b>${s.kilitli ? ' <small class="gri">kilitli</small>' : ''}</td><td>${ep(s.atanan)}</td><td class="ince-yazi">${esc(s.neden || '')}</td><td>${gAd(g)}</td></tr>`; }).join('');
+  const K = p.kararlar || [];
+  el.innerHTML = `<summary>Algoritma planı <b>(deneme modu)</b> · ${esc(saat(p.zaman))}${p.gecici ? ' · veri az, geçici' : ''} · ${K.length ? K.length + ' karar' : 'karar yok'}</summary>
+    <div class="dz-son-ic"><div class="ince-yazi">Yalnız gösterim: algoritma her slota ne koyardı, yanında gerçekte sırada olan. Farklı satırlar sarı. Üretim bu plana bakmıyor.</div>
+    <div class="ist-tablo-sar"><table class="dz-plan-tablo"><thead><tr><th>Slot</th><th>Algoritma</th><th>Neden</th><th>Gerçekte</th></tr></thead><tbody>${satirlar || '<tr><td colspan="4" class="gri">Önümüzdeki 48 saatte slot yok</td></tr>'}</tbody></table></div>
+    ${K.length ? `<ul class="dz-plan-kararlar">${K.map(k => `<li><b>${esc(ad(k.dizi))}</b>: ${esc(PLAN_TUR[k.tur] || k.tur)}. <span class="ince-yazi">${esc(k.neden || '')}</span></li>`).join('')}</ul>` : ''}</div>`;
+  el.open = acik;
 }
 // plain questions; percent in the form, a ratio in konu.json
 function dzAyarCiz() {
