@@ -4,9 +4,9 @@ const fs = require('fs'), path = require('path');
 const { yukle, kaydet, kararVer, kilitAl, metinOnay, metinOnayGoc, tonGoc } = require('./dizi');
 const ortak = require('../konu/ortak');
 
-// MAX_BEKLEYEN_METIN: new series waiting for Furkan's text approval do not count as active, but no more than this many
+// MAX_BOLME: stories split per run (new series + the split-ahead text stock, konu.json dizi.metin_stok); a run stays short
 // are opened while waiting (the queue must not flood)
-const MAX_AKTIF = 3, ESKALASYON_SAAT = 72, MAX_BEKLEYEN_METIN = 2;
+const MAX_AKTIF = 3, ESKALASYON_SAAT = 72, MAX_BOLME = 2;
 const bul = (d, n) => (d.bolumler || []).find(b => b.n === n);
 const saatFark = (simdi, t) => (new Date(simdi).getTime() - new Date(t).getTime()) / 3600e3;
 const gunIst = t => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date(t));   // YYYY-MM-DD
@@ -94,7 +94,7 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
     };
     // with text approval on (konu.json → dizi.metin_onayi, default true) the new series waits for Furkan before any voice
     const metinOnayi = (((ctx.ayar || {}).dizi || {}).metin_onayi) !== false;
-    const yeni = (h, r, konu) => ({ id: h.id, kanal: ctx.kanal, kaynak: { tur: h.tur, url: h.url, puan: h.puan }, ...r.dizi, ...(konu ? { konu } : {}), ...(metinOnayi ? { metin_onay: 'bekliyor' } : {}), olusturma: new Date(simdi).toISOString() });
+    const yeni = (h, r, konu) => ({ id: h.id, kanal: ctx.kanal, kaynak: { tur: h.tur, url: h.url, puan: h.puan }, ...r.dizi, ...(konu ? { konu } : {}), ...(metinOnayi ? { metin_onay: 'bekliyor', stok: true } : {}), olusturma: new Date(simdi).toISOString() });
     const temalar = tema.konular(ctx), sira = tema.temaSirasi(temalar, diziler, simdi);
 
     // 1. the weekly pool
@@ -145,8 +145,8 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
 const eksikModul = e => { if (e && e.code === 'MODULE_NOT_FOUND') { const m = String(e.message).match(/dizi\/[\w-]+/); return `${m ? m[0] : 'modül'} henüz yok`; } throw e; };
 
 // ---- state helpers
-// a series whose text is not approved yet is never produced
-const bekleyenUretim = d => d.durum === 'aktif' && metinOnay(d) === 'onaylandi' && !(d.bolumler || []).some(b => b.durum === 'kontrol_et');
+// a series whose text is not approved yet, or a stock story not started yet, is never produced
+const bekleyenUretim = d => d.durum === 'aktif' && metinOnay(d) === 'onaylandi' && d.stok !== true && !(d.bolumler || []).some(b => b.durum === 'kontrol_et');
 // episode n is due when it is still text (or production stalled before a video existed) and its predecessor was measured as devam
 function uretilecekler(diziler) {
   const out = [];
@@ -279,25 +279,49 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     }
     const onayDonemi = ayar.onay_donemi !== false;   // a missing onay_donemi means approval is on
     const hedef = onayDonemi ? ayar.onay_gunluk : ayar.gunluk_hedef;
+    // Furkan 31.10, split-ahead stock: stories are split well ahead (stok: true) and wait for his text approval; a new
+    // series for today is the oldest APPROVED one that has not started. Waiting or unstarted ones are never active.
+    const metinOnayi = ayar.metin_onayi !== false, stokHedef = Math.max(0, Math.round(+(ayar.metin_stok ?? 6)) || 0);
     const metinBekliyor = d => d.durum === 'aktif' && metinOnay(d) === 'bekliyor';
-    let sayi = sayilan.size, aktif = diziler.filter(d => d.durum === 'aktif' && !metinBekliyor(d)).length, bekleyenMetin = diziler.filter(metinBekliyor).length;
-    const metinYeri = () => ayar.metin_onayi === false || bekleyenMetin < MAX_BEKLEYEN_METIN;
-    const eksik = metinYeri() ? Math.max(0, Math.min((hedef || 0) - sayi, MAX_AKTIF - aktif)) : 0;
-    if (!metinYeri() && (hedef || 0) > sayi) notlar.push(`${bekleyenMetin} hikâye metin onayı bekliyor: yeni hikâye açılmadı`);
-    if (kuru) { sonuc.yeniler = eksik; if (eksik) notlar.push(`yeni dizi planlanan: ${eksik}`); }
-    else if (eksik) {
-      try { yeniDizi = yeniDizi || yeniDiziYap(); }
-      catch (e) { notlar.push(eksikModul(e)); yeniDizi = null; }
-      while (yeniDizi && sayi < (hedef || 0) && aktif < MAX_AKTIF && metinYeri()) {
-        let d;
-        try { d = await yeniDizi(ctx, { simdi, diziler, kok, sonuc }); } catch (e) { notlar.push(`yeni dizi hatası: ${e.message}`); break; }
-        if (!d) { notlar.push('yeni dizi için uygun hikâye bulunamadı'); break; }
-        if (d.id && !diziler.some(x => x.id === d.id)) diziler.push(d);
-        // a series waiting for its text approval fills no slot today; at most MAX_BEKLEYEN_METIN of them wait at once
-        if (metinOnay(d) === 'bekliyor') { bekleyenMetin++; notlar.push(`${d.id}: metin onayı bekliyor`); }
-        else { sayi++; aktif++; }
-        sonuc.yeniler++;
-        kaydetSon();
+    const onayliStok = d => d.durum === 'aktif' && d.stok === true && metinOnay(d) === 'onaylandi';
+    let sayi = sayilan.size, aktif = diziler.filter(d => d.durum === 'aktif' && !d.stok && !metinBekliyor(d)).length, bolme = 0;
+    const eksik = Math.max(0, Math.min((hedef || 0) - sayi, MAX_AKTIF - aktif));
+    const yeniBol = async () => {
+      try { yeniDizi = yeniDizi || yeniDiziYap(); } catch (e) { notlar.push(eksikModul(e)); yeniDizi = null; return null; }
+      let d;
+      try { d = await yeniDizi(ctx, { simdi, diziler, kok, sonuc }); } catch (e) { notlar.push(`yeni dizi hatası: ${e.message}`); return null; }
+      if (!d) { notlar.push('yeni dizi için uygun hikâye bulunamadı'); return null; }
+      if (d.id && !diziler.some(x => x.id === d.id)) diziler.push(d);
+      bolme++; sonuc.yeniler++; kaydetSon();
+      return d;
+    };
+    if (kuru) {
+      sonuc.yeniler = eksik;
+      if (eksik) notlar.push(`yeni dizi planlanan: ${eksik}`);
+      if (metinOnayi) notlar.push(`metin stoku: ${diziler.filter(metinBekliyor).length}/${stokHedef} onay bekliyor, ${diziler.filter(onayliStok).length} onaylı başlamamış`);
+    } else {
+      // 3a. today's new series: an approved stock story starts; none approved -> one is split now and waits for its text
+      for (let i = 0; i < eksik; i++) {
+        if (metinOnayi) {
+          const d = diziler.filter(onayliStok).sort((a, b) => Date.parse(a.olusturma || 0) - Date.parse(b.olusturma || 0))[0];
+          if (d) { delete d.stok; d.baslama = new Date(simdi).toISOString(); sayi++; aktif++; notlar.push(`${d.id}: onaylı metinden başladı`); kaydetSon(); continue; }
+          if (diziler.filter(metinBekliyor).length >= Math.max(stokHedef, 1)) { notlar.push('onaylı metin yok: yeni hikâye açılmadı (Metin onayı bekleyenlere bak)'); break; }
+          const y = await yeniBol();
+          if (!y) break;
+          if (metinOnay(y) === 'bekliyor') { notlar.push(`${y.id}: onaylı metin yoktu, bölündü; metin onayı bekliyor`); break; }
+          delete y.stok; y.baslama = new Date(simdi).toISOString(); sayi++; aktif++;   // already approved: it starts now
+          continue;
+        }
+        const d = await yeniBol();
+        if (!d) break;
+        sayi++; aktif++;
+      }
+      // 3b. keep metin_stok stories split and waiting for text approval (at most MAX_BOLME splits per run, theme rotation)
+      if (metinOnayi) while (bolme < MAX_BOLME && diziler.filter(metinBekliyor).length < stokHedef) {
+        const d = await yeniBol();
+        if (!d) break;
+        if (metinOnay(d) !== 'bekliyor') d.stok = true;   // stock never starts on its own: 3a starts it when a slot is free
+        notlar.push(`${d.id}: metin stokuna eklendi${d.konu ? ' (' + d.konu + ')' : ''}; metin onayı bekliyor`);
       }
     }
 

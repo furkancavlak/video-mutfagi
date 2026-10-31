@@ -110,9 +110,9 @@ test('repeat run after production does not create more series', async () => {
   const yeniDizi = async () => { n++; return { id: 'y' + n, kanal: 'k', durum: 'aktif', bolumler: [bolum(1), bolum(2), bolum(3)] }; };
   const uret = async (cx, d, i) => ({ durum: 'onay-bekliyor', dir: 'videolar/' + d.id });
   const opt = { simdi: SIMDI, kok: k, uretBolum: uret, yeniDizi };
-  await calistir(ctx({ onay_donemi: true, onay_gunluk: 2 }), opt);
+  await calistir(ctx({ onay_donemi: true, onay_gunluk: 2, metin_onayi: false }), opt);
   assert.strictEqual(n, 2);
-  const r = await calistir(ctx({ onay_donemi: true, onay_gunluk: 2 }), opt);
+  const r = await calistir(ctx({ onay_donemi: true, onay_gunluk: 2, metin_onayi: false }), opt);
   assert.strictEqual(n, 2);
   assert.strictEqual(r.yeniler, 0);
   assert.deepStrictEqual(r.uretilecek, []);
@@ -331,7 +331,7 @@ test('a missing onay_donemi means the approval period is on (onay_gunluk, onayGe
   let n = 0; const opts = [];
   const yeniDizi = async () => { n++; return { id: 'y' + n, kanal: 'k', durum: 'aktif', bolumler: [bolum(1), bolum(2), bolum(3)] }; };
   const uret = async (cx, d, i, o) => { opts.push(o.onayGerekli); return { durum: 'onay-bekliyor' }; };
-  await calistir({ kanal: 'k', kimlik: { hesap: 'dur' }, ayar: { dizi: { ...ayar, gunluk_hedef: 3, onay_gunluk: 1 } } }, { simdi: SIMDI, kok: k, uretBolum: uret, yeniDizi, sonucAl: async () => ({}) });
+  await calistir({ kanal: 'k', kimlik: { hesap: 'dur' }, ayar: { dizi: { ...ayar, gunluk_hedef: 3, onay_gunluk: 1, metin_onayi: false } } }, { simdi: SIMDI, kok: k, uretBolum: uret, yeniDizi, sonucAl: async () => ({}) });
   assert.strictEqual(n, 1);
   assert.deepStrictEqual(opts, [true]);
 });
@@ -354,27 +354,49 @@ test('own episode count: ep 2 of 2 measured finishes the series, ep 3 of 5 measu
   assert.deepStrictEqual(uret.calls, ['bes:4']);
 });
 
-// story-level text approval: a waiting series is never produced, does not use an active slot, and at most 2 wait
-test('text approval: new series wait (not produced, not active), at most 2 waiting; old series migrate to onaylandi', async () => {
+// split-ahead text stock (Furkan 31.10): up to metin_stok stories wait for text approval, at most 2 splits a run; a new
+// series for today is the oldest approved stock story; waiting or unstarted stock is never active and never voiced
+test('text stock: fills to metin_stok, 2 splits a run, approved stock starts by the daily target, rejected frees a slot', async () => {
   const k = kok();
   kaydet(k, 'k', { diziler: [{ id: 'eski', kanal: 'k', durum: 'aktif', bolumler: [bolum(1)] }] });
   let n = 0;
-  const yeniDizi = async () => { n++; return { id: 'y' + n, kanal: 'k', durum: 'aktif', metin_onay: 'bekliyor', bolumler: [bolum(1), bolum(2)] }; };
-  const uret = fakeUret();
-  const r = await calistir(ctx({ gunluk_hedef: 3 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: uret, yeniDizi });
-  assert.strictEqual(n, 2, 'two stories wait for their text, no more');
-  assert.deepStrictEqual(uret.calls, ['eski:1'], 'only the approved (migrated) series is produced');
-  const v = yukle(k, 'k').diziler;
-  assert.deepStrictEqual(v.map(d => [d.id, d.metin_onay]), [['eski', 'onaylandi'], ['y1', 'bekliyor'], ['y2', 'bekliyor']]);
+  const yeniDizi = async () => { n++; return { id: 'y' + n, kanal: 'k', durum: 'aktif', metin_onay: 'bekliyor', stok: true, olusturma: new Date(SIMDI.getTime() + n * 1000).toISOString(), bolumler: [bolum(1), bolum(2)] }; };
+  const kos = async (ek = {}) => { const u = fakeUret(); const r = await calistir(ctx({ gunluk_hedef: 3, ...ek }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: u, yeniDizi }); return { r, u }; };
+  let { r, u } = await kos();
+  assert.strictEqual(n, 2, 'two splits in one run');
+  assert.deepStrictEqual(u.calls, ['eski:1'], 'only the approved (migrated) series is produced');
   assert.ok(r.notlar.some(x => /eski dizi metin onaylı sayıldı/.test(x)));
-  // next run: still two waiting -> nothing new is opened
-  await calistir(ctx({ gunluk_hedef: 3 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi });
-  assert.strictEqual(n, 2);
-  // approved: it is produced next run
-  const v2 = yukle(k, 'k'); v2.diziler[1].metin_onay = 'onaylandi'; kaydet(k, 'k', v2);
-  const u3 = fakeUret();
-  await calistir(ctx({ gunluk_hedef: 3 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: u3, yeniDizi });
-  assert.ok(u3.calls.includes('y1:1'));
+  await kos(); await kos();
+  assert.strictEqual(n, 6, 'the stock reaches metin_stok (default 6)');
+  ({ u } = await kos());
+  assert.strictEqual(n, 6, 'a full stock splits nothing'); assert.deepStrictEqual(u.calls, []);
+  // Furkan approves y2 and y1: the OLDEST approved one starts when today needs a series, the other stays unstarted
+  let v = yukle(k, 'k'); v.diziler.find(d => d.id === 'y2').metin_onay = 'onaylandi'; v.diziler.find(d => d.id === 'y1').metin_onay = 'onaylandi'; kaydet(k, 'k', v);
+  ({ r, u } = await kos({ gunluk_hedef: 2 }));
+  v = yukle(k, 'k');
+  const y1 = v.diziler.find(d => d.id === 'y1'), y2 = v.diziler.find(d => d.id === 'y2');
+  assert.deepStrictEqual([y1.stok, !!y1.baslama, y2.stok], [undefined, true, true]);
+  assert.ok(u.calls.includes('y1:1') && !u.calls.includes('y2:1'), 'started one produced, approved-but-unstarted not');
+  assert.ok(r.notlar.some(x => /y1: onaylı metinden başladı/.test(x)));
+  assert.strictEqual(v.diziler.filter(d => d.durum === 'aktif' && d.metin_onay === 'bekliyor').length, 6, 'the stock was topped up again (4 waiting + 2 new)');
+  // a rejected text frees its slot: the next run splits a replacement
+  v.diziler.find(d => d.id === 'y3').durum = 'kesildi'; kaydet(k, 'k', v);
+  const once = n; await kos({ gunluk_hedef: 0 });
+  assert.strictEqual(n, once + 1);
+});
+
+test('text stock: metin_stok in konu.json, nothing approved -> one split for today waits; approval off = old path', async () => {
+  const k = kok(); kaydet(k, 'k', { diziler: [] });
+  let n = 0;
+  const yeniDizi = async () => { n++; return { id: 'z' + n, kanal: 'k', durum: 'aktif', metin_onay: 'bekliyor', stok: true, bolumler: [bolum(1)] }; };
+  const r = await calistir(ctx({ gunluk_hedef: 1, metin_stok: 1 }), { simdi: SIMDI, kok: k, sonucAl: async () => ({}), uretBolum: fakeUret(), yeniDizi });
+  assert.strictEqual(n, 1, 'stock of 1: the split for today is the stock');
+  assert.ok(r.notlar.some(x => /z1: onaylı metin yoktu, bölündü/.test(x)));
+  const k2 = kok(); kaydet(k2, 'k', { diziler: [] }); let m = 0;
+  const eski = async () => { m++; return { id: 'e' + m, kanal: 'k', durum: 'aktif', bolumler: [bolum(1)] }; };
+  const u = fakeUret();
+  await calistir(ctx({ gunluk_hedef: 1, metin_onayi: false }), { simdi: SIMDI, kok: k2, sonucAl: async () => ({}), uretBolum: u, yeniDizi: eski });
+  assert.deepStrictEqual([m, u.calls], [1, ['e1:1']], 'without text approval: split and produced at once, no stock');
 });
 
 test('yeniDiziYap marks the new series bekliyor unless dizi.metin_onayi is false', async () => {
