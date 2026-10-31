@@ -776,7 +776,7 @@ function dzAyarCiz() {
     <label class="kutu dz-onay"><input type="checkbox" name="onay_donemi" ${a.onay_donemi ? 'checked' : ''}> Her bölümü önce ben onaylayayım (onay dönemi)</label>
     <label>Onay döneminde günde kaç bölüm hazırlansın?<input type="number" name="onay_gunluk" min="1" max="5" step="1" value="${v(a.onay_gunluk)}"></label>
     <label>Hangi saatlerde paylaşılsın? (virgülle: 12:00, 17:00)<input type="text" name="saatler" value="${esc(lst(a.saatler))}"></label>
-    <label>Bir hikâyenin devamı için kaç saat bekleyelim?<input type="number" name="bekle_saat" min="6" max="72" step="1" value="${v(a.bekle_saat)}"></label>
+    <label>Sıradaki bölümün paylaşım saatinden kaç saat önce izlenmeye bakılsın?<input type="number" name="olcum_once_saat" min="1" max="12" step="1" value="${v(a.olcum_once_saat)}"></label>
     <label>Devam için izlenme, öncekilerin ortalamasının en az yüzde kaçı olsun?<input type="number" name="esik_oran" min="10" max="100" step="1" value="${typeof a.esik_oran === 'number' ? Math.round(a.esik_oran * 1000) / 10 : ''}"></label>
     <label>İlk kaç hikâye hiç kesilmesin?<input type="number" name="ilk_dizi_sayisi" min="0" max="50" step="1" value="${v(a.ilk_dizi_sayisi)}"></label>
     <label>Yorumlarda hangi sözler “devamı gelsin” demek? (virgülle)<input type="text" name="yorum_kelimeleri" value="${esc(lst(a.yorum_kelimeleri))}"></label>
@@ -787,7 +787,7 @@ function dzAyarOku() {
   const f = $('#dz-ayar'), g = n => f.elements[n], sayiOku = n => g(n).value.trim() === '' ? undefined : Number(g(n).value.replace(',', '.'));
   const liste = n => g(n).value.split(',').map(x => x.trim()).filter(Boolean);
   const yuzde = sayiOku('esik_oran');
-  const o = { gunluk_hedef: sayiOku('gunluk_hedef'), onay_donemi: g('onay_donemi').checked, onay_gunluk: sayiOku('onay_gunluk'), saatler: liste('saatler'), bekle_saat: sayiOku('bekle_saat'),
+  const o = { gunluk_hedef: sayiOku('gunluk_hedef'), onay_donemi: g('onay_donemi').checked, onay_gunluk: sayiOku('onay_gunluk'), saatler: liste('saatler'), olcum_once_saat: sayiOku('olcum_once_saat'),
     esik_oran: yuzde == null ? undefined : Math.round(yuzde * 10) / 1000, ilk_dizi_sayisi: sayiOku('ilk_dizi_sayisi'), yorum_kelimeleri: liste('yorum_kelimeleri'), yorum_min: sayiOku('yorum_min') };
   for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
   return o;

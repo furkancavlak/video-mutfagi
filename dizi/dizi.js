@@ -128,12 +128,34 @@ function tonGoc(veri, atamalar = {}) {
   return n;
 }
 
+// When an episode is measured (Furkan 31.10: "10'da yayınlanacaksa 2-3 saat önce baksın"): olcum_once_saat hours before
+// the next episode's slot, the slot being the first configured hour (dizi.saatler, local time) at least bolum_arasi_saat
+// (20) after this episode was posted. A channel without olcum_once_saat keeps the old rule: paylasildi + bekle_saat.
+//   olcumZamani(b, ayar) -> ms      olcumGecen(b, ayar, simdi) -> hours since the measurement became due (< 0: not yet)
+function sonrakiSlotSaati(t0, saatler) {
+  const ss = (saatler || []).map(s => String(s).split(':').map(Number)).filter(([h, m]) => h >= 0 && h < 24 && m >= 0 && m < 60).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (!ss.length) return t0;
+  const g = new Date(t0);
+  for (let gun = 0; gun < 4; gun++) for (const [h, m] of ss) {
+    const c = new Date(g.getFullYear(), g.getMonth(), g.getDate() + gun, h, m, 0, 0).getTime();
+    if (c >= t0) return c;
+  }
+  return t0;
+}
+function olcumZamani(b, ayar = {}) {
+  const p = new Date(b.paylasildi).getTime();
+  if (!(ayar.olcum_once_saat > 0)) return p + (ayar.bekle_saat || 0) * 3600e3;
+  const slot = sonrakiSlotSaati(p + (ayar.bolum_arasi_saat ?? 20) * 3600e3, ayar.saatler);
+  return Math.max(p + 6 * 3600e3, slot - ayar.olcum_once_saat * 3600e3);   // never on fewer than 6 hours of data
+}
+const olcumGecen = (b, ayar, simdi) => (new Date(simdi).getTime() - olcumZamani(b, ayar)) / 3600e3;
+
 function kararVer(dizi, n, tumDiziler, ayar, simdi) {
   const b = bul(dizi, n);
   if (!b) throw new Error(`bölüm ${n} yok`);
   if (b.elle) return { karar: b.karar, neden: b.karar_neden };
-  const gecen = (new Date(simdi).getTime() - new Date(b.paylasildi).getTime()) / 3600e3;
-  if (!(gecen >= ayar.bekle_saat)) return { karar: 'bekle', neden: `${ayar.bekle_saat} saat dolmadı (${Math.max(0, Math.floor(gecen))} saat geçti)` };
+  const kalan = -olcumGecen(b, ayar, simdi);
+  if (kalan > 0) return { karar: 'bekle', neden: `ölçüm zamanı gelmedi (${Math.ceil(kalan)} saat var)` };
   const v = views(b);
   if (v === null) return { karar: 'bekle', neden: 'izlenme sayısı henüz yok' };
   let onceki = null;
@@ -189,4 +211,4 @@ function kilitAl(kok, kanal) {
   return { mesaj: 'kilit: kilit dosyası alınamadı' };
 }
 
-module.exports = { yukle, kaydet, kararVer, elleKarar, kilitAl, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi, tonGoc };
+module.exports = { olcumZamani, olcumGecen, sonrakiSlotSaati, yukle, kaydet, kararVer, elleKarar, kilitAl, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi, tonGoc };

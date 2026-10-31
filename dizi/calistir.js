@@ -1,7 +1,7 @@
 // Hourly series scheduler run: sync posted episodes from the queue, measure, decide continue/cut, fill the day, ask for due episodes.
 //   node dizi/calistir.js <kanal> [--kuru]      (--kuru = plan only: no writes, no production, no network)
 const fs = require('fs'), path = require('path');
-const { yukle, kaydet, kararVer, kilitAl, metinOnay, metinOnayGoc, tonGoc } = require('./dizi');
+const { yukle, kaydet, kararVer, kilitAl, metinOnay, metinOnayGoc, tonGoc, olcumGecen } = require('./dizi');
 const ortak = require('../konu/ortak');
 
 // MAX_BOLME: stories split per run (new series + the split-ahead text stock, konu.json dizi.metin_stok); a run stays short
@@ -227,13 +227,14 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       if ((d.bolumler || []).some(b => b.durum === 'kontrol_et')) { notlar.push(`${d.id}: kontrol_et var, dizi atlandı`); continue; }
       for (const b of (d.bolumler || []).slice().sort((x, y) => x.n - y.n)) {
         if (b.durum !== 'yayinda' || !b.paylasildi) continue;
-        const gecen = saatFark(simdi, b.paylasildi);
-        if (!(gecen >= ayar.bekle_saat)) continue;
+        // gecen = hours since the measurement became due (olcum_once_saat before the next slot, or the old bekle_saat)
+        const gecen = olcumGecen(b, ayar, simdi);
+        if (gecen < 0) continue;
         // `elle` only overrides the decision (kararVer), never the measurement: the next episode needs this one's views
         if (kuru) { notlar.push(`ölçülecek: ${d.id} bölüm ${b.n}`); sonuc.olculen++; continue; }
         // a measurement that keeps failing would leave the episode yayinda forever: past the wait + 72 h a human looks at it
         const olcemedi = neden => {
-          if (gecen > ayar.bekle_saat + ESKALASYON_SAAT) { b.durum = 'kontrol_et'; b.karar_neden = `${ESKALASYON_SAAT} saatten uzun süredir ölçülemiyor: ${neden}`; notlar.push(`${d.id} bölüm ${b.n}: ölçülemiyor, kontrol_et (${neden})`); }
+          if (gecen > ESKALASYON_SAAT) { b.durum = 'kontrol_et'; b.karar_neden = `${ESKALASYON_SAAT} saatten uzun süredir ölçülemiyor: ${neden}`; notlar.push(`${d.id} bölüm ${b.n}: ölçülemiyor, kontrol_et (${neden})`); }
           else notlar.push(`${d.id} bölüm ${b.n}: ${neden}`);
         };
         if (!b.media_id) { olcemedi('media_id yok, ölçülemedi'); continue; }
@@ -245,7 +246,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
         const k = kararVer(d, b.n, diziler, ayar, simdi), son = b.n >= d.bolumler.length;
         b.karar = k.karar; b.karar_neden = k.neden;
         if (k.karar === 'bekle') {
-          const asildi = gecen > ayar.bekle_saat + ESKALASYON_SAAT;
+          const asildi = gecen > ESKALASYON_SAAT;
           // nothing waits on the last episode's decision: past the limit it is closed as measured, never kontrol_et
           if (asildi && son) { b.durum = 'olculdu'; d.durum = 'bitti'; b.karar_neden = `son bölüm, karar verilemeden kapandı: ${k.neden}`; notlar.push(`${d.id}: son bölüm ölçüldü (${k.neden}), dizi bitti`); continue; }
           if (asildi) { b.durum = 'kontrol_et'; b.karar_neden = `${ESKALASYON_SAAT} saatten uzun süredir bekliyor: ${k.neden}`; notlar.push(`${d.id} bölüm ${b.n}: bekleme sınırı aşıldı, kontrol_et`); }
