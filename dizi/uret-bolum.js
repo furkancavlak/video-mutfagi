@@ -65,6 +65,16 @@ function hazirYap(dizi, n) {
   };
 }
 
+// times already taken on this account by other waiting or posted jobs (not this series' own job for this episode)
+function doluSaatler(kok, hesap, dizi) {
+  const fs = require('fs'), out = [], ad = h => String(h || '').replace(/^@/, '');
+  for (const k of ['bekleyen', 'paylasilan']) {
+    let l = []; try { l = fs.readdirSync(path.join(kok, 'kuyruk', k)).filter(f => f.endsWith('.json')); } catch (e) { }
+    for (const f of l) { try { const j = JSON.parse(fs.readFileSync(path.join(kok, 'kuyruk', k, f), 'utf8')); if (ad(j.hesap) !== ad(hesap) || String(j.video || '').includes(dizi.id + '-b')) continue; const t = Date.parse(j.paylasildi || j.ne_zaman || ''); if (t) out.push(t); } catch (e) { } }
+  }
+  return out;
+}
+
 // the queue job's `video` (uret.js writes it relative to kok)
 const videoAdi = (kok, dir) => path.isAbsolute(dir) ? path.relative(kok, dir).split(path.sep).join('/') : String(dir).split(path.sep).join('/');
 
@@ -81,7 +91,19 @@ async function uretBolum(ctx, dizi, n, { onayGerekli = true, calistir, kok = O.K
   if (G.anlatici(dizi)) Object.assign(hazir.video_ek, { karakter_gorunum: G.anlatici(dizi), kisi_gorunumleri: G.haritasi(dizi), kisiler: dizi.kisiler });
   b.durum = 'uretimde';
   // the scheduler is automation: spending follows konu.json → otomasyon.butce, never an interactive gate
-  const r = await uret(ctx, null, { hazir, onay: true, otomatik: true, onayGerekli, calistir, kok, yaz });
+  // timed at the series' own hour: episode 1 takes a free hour, later ones the slot after the previous episode
+  const ayar = (ctx.ayar && ctx.ayar.dizi) || {}, D = require('./dizi'), simdi = Date.now();
+  if (!dizi.saat) { const s = D.bosSaat(diziler, ayar, dizi); if (s) dizi.saat = s; }
+  const once = (dizi.bolumler || []).find(x => x.n === n - 1);
+  let hedef = once && once.paylasildi ? D.hedefSlot(once, ayar, dizi) : null;
+  if (dizi.saat && !(hedef > simdi + 60 * 60e3)) hedef = D.sonrakiSlotSaati(simdi + 90 * 60e3, [dizi.saat]);
+  // one video per slot (Furkan 31.10): another episode of this account already holds that hour -> the next free slot
+  if (hedef) {
+    const dolu = doluSaatler(kok, ctx.kimlik && ctx.kimlik.hesap, dizi);
+    for (let i = 0; i < 40 && dolu.some(t => Math.abs(t - hedef) < 30 * 60e3); i++) hedef = D.sonrakiSlotSaati(hedef + 60e3, ayar.saatler);
+  }
+  const neZaman = hedef ? new Date(hedef).toISOString() : null;
+  const r = await uret(ctx, null, { hazir, onay: true, otomatik: true, onayGerekli, calistir, kok, yaz, neZaman });
   const durum = { uretildi: onayGerekli ? 'onay-bekliyor' : 'sirada', 'onay-bekliyor': 'onay-bekliyor', 'butce-bekliyor': 'butce-bekliyor', 'insan-bekliyor': 'kontrol_et' }[r.durum] || 'kontrol_et';
   if (durum === 'butce-bekliyor') {
     b.durum = 'uretimde';
