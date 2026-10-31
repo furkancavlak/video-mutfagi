@@ -701,3 +701,4 @@ dialog{width:min(880px,94vw);margin:auto}
 .ist-hata .ik,.ist-bilgi .ik{flex:none;margin-top:2px}
 .ist-ic h3 small{font-weight:500;color:var(--ink-3)}
 #ist-egri{min-height:60px}
+.on-aciklama{margin:-6px 0 10px}

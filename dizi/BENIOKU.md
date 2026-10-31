@@ -48,3 +48,8 @@ Test: `node --test "dizi/test/*.test.js"`
 - Bölme hikâyenin tonunu etiketler: `komik | hüzünlü | ürkütücü | ciddi` (`ton`, `ton_neden`; komik değilse `hassasiyet_notu`). Komik olmayanda şakacı ses etiketi bölmede biçim hatasıdır; hassasiyet denetimi (`hikaye-hassasiyet.md`) alay, mağduru suçlama, gereksiz ayrıntı ve kimlik ele veren ayrıntıyı arar: bir kez yeniden yazılır, ikinci takılmada `hassasiyet` (reddedilen.json'da `furkan_baksin`).
 - Üretim tonu izler: `video.json → ton`; ses `tts.ton_ayarlari[ton]`; kapanışta komik efekt yok, müzik `marka.kapanis_muzigi_ciddi` ya da hiç; sahne istemi ve denetçiler ton bölümünü alır (`gorsel_dil.ton_kurallari`); açıklamada 👀 ve #komik yalnız komikte.
 - Etiketten önce bölünen diziler: `konu.json → dizi.ton_atamalari {id: ton}` ya da komik (calistir ilk koşuda yazar).
+
+## Metin stoku (önceden bölme)
+
+- `konu.json → dizi.metin_stok` (varsayılan 6): bu kadar hikâye önceden bölünmüş, metin onayı bekleyen dizi (`stok: true`, `metin_onay: 'bekliyor'`) olarak durur. Saatlik çalışma eksikse havuzdan tema sırasıyla böler (ton, hassasiyet, sadakat dahil), koşu başına en fazla 2 bölme. Aktif dizi sınırından ve günlük hedeften bağımsızdır; bekleyen ya da başlamamış stok dizisi aktif sayılmaz, seslendirilmez.
+- Günün yeni dizisi: başlamamış en eski ONAYLI stok dizisi başlar (`stok` silinir, `baslama` yazılır). Onaylı yoksa bir hikâye bölünür ve metin onayı bekler. Reddedilen metin yerini boşaltır, sonraki koşu yenisini böler.
