@@ -225,14 +225,14 @@ function isListesi() {
   });
 }
 
-// ---------- Instagram: the account's own posts with their numbers (read only, cached 15 min)
+// ---------- Instagram: the account's own posts with their numbers (read only, cached 30 min)
 const igSurer = new Map();
 // hesap: Instagram account (default oxygbio, whose cache keeps its old file name); P: paylas.js, injectable for tests
 async function instagram(yenile, hesap, P) {
   hesap = hesapGuvenli(hesapTemiz(hesap));
   const kendi = hesap && hesap !== HESAP0 ? hesap : null, onbellek = kendi ? path.join(KAYIT, `panel-instagram-${kendi}.json`) : ONBELLEK;
   const eski = okuJ(onbellek);
-  if (!yenile && eski && Date.now() - new Date(eski.zaman) < 15 * 60e3) return eski;
+  if (!yenile && eski && Date.now() - new Date(eski.zaman) < 30 * 60e3) return eski;
   if (igSurer.has(onbellek)) return igSurer.get(onbellek);
   const is = (async () => {
     P = P || igPaylas(); const a = P && P.readAyar(kendi || undefined);
@@ -254,12 +254,12 @@ async function instagram(yenile, hesap, P) {
   return is;
 }
 
-// follower count for the calendar's numbers (read only, cached 15 min in memory); null when the API does not give it
+// follower count for the calendar's numbers (read only, cached 30 min in memory); null when the API does not give it
 const takipciOnbellek = new Map();
 async function takipci(hesap, P) {
   hesap = hesapGuvenli(hesapTemiz(hesap));
   const kendi = hesap && hesap !== HESAP0 ? hesap : null, ad = kendi || HESAP0, e = takipciOnbellek.get(ad);
-  if (e && Date.now() - e.t < 15 * 60e3) return e.j;
+  if (e && Date.now() - e.t < 30 * 60e3) return e.j;
   P = P || igPaylas(); const a = P && P.readAyar(kendi || undefined);
   if (!a) return { bagli: false, takipci: null };
   const m = await P.graph('GET', '/me', { fields: 'followers_count', access_token: a.token }).catch(() => null);
