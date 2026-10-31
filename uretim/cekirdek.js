@@ -182,6 +182,13 @@ function marka(T, kimlik, C, ek = {}) {
   return { html: html.join('\n'), tl };
 }
 
+// top label "<TITLE> · BÖLÜM n": title and marker apart, font from the total length (30 px up to 30 characters, down to 22)
+function etiketParcala(etiket, bolum) {
+  const etk = String(etiket || '').toLocaleUpperCase('tr').trim(), ek = bolum ? ` · BÖLÜM ${bolum}` : '';
+  const ad = ek && etk.endsWith(ek) ? etk.slice(0, -ek.length) : etk, n = ad.length + ek.length;
+  return { ad, ek, px: n <= 30 ? 30 : n <= 36 ? 27 : n <= 42 ? 24 : 22 };
+}
+
 function markaKapanis(T, kimlik, C, { video = {}, kimlikDir } = {}) {
   const m = kimlik.marka, { Z } = T, html = [], tl = [];
   const kart = kapanisYukle(kimlik, kimlikDir);
@@ -192,13 +199,15 @@ function markaKapanis(T, kimlik, C, { video = {}, kimlikDir } = {}) {
   const bas = Z.kapanis != null ? Z.kapanis : T.END - kart({ C, at, bas: 0, sonraki, hesap }).sure;
   const k = kart({ C, at, bas, sonraki, hesap });
   if (video.etiket) {
-    const etk = String(video.etiket).toLocaleUpperCase('tr'), ek = bolum ? ` · BÖLÜM ${bolum}` : '';
-    html.push(`<div class="etk"><i></i>${esc(ek && etk.endsWith(ek) ? etk : etk + ek)}</div>`);
+    // the episode marker always shows: a long title gets a smaller font, and only the title part is cut with "…"
+    const { ad, ek, px } = etiketParcala(video.etiket, bolum);
+    html.push(`<div class="etk" style="font-size:${px}px"><i></i><span class="etk-ad">${esc(ad)}</span>${ek ? `<span class="etk-no">${esc(ek.trim())}</span>` : ''}</div>`);
     tl.push(`gsap.set('.etk',{opacity:0,y:-30});tl.to('.etk',{opacity:1,y:0,duration:.4,ease:'power3.out'},0.2);tl.set('.etk',{opacity:0},${at(bas)});`);
   }
   html.push(k.html); tl.push(...k.tl);
   const css = `${KISA_FONT}
-.etk{position:absolute;left:60px;top:150px;box-sizing:border-box;max-width:880px;height:64px;padding:0 32px 0 58px;border-radius:32px;background:${C.ink};color:#FFFDF8;font:800 30px/64px IT;letter-spacing:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.etk{position:absolute;left:60px;top:150px;box-sizing:border-box;display:flex;max-width:880px;height:64px;padding:0 32px 0 58px;border-radius:32px;background:${C.ink};color:#FFFDF8;font:800 30px/64px IT;letter-spacing:2px;white-space:nowrap;overflow:hidden}
+.etk-ad{min-width:0;overflow:hidden;text-overflow:ellipsis}.etk-no{flex:none;padding-left:.32em}
 .etk i{position:absolute;left:24px;top:22px;width:20px;height:20px;border-radius:50%;background:${C.domates || C.coral}}${k.css ? '\n' + k.css : ''}`;
   const varliklar = k.gorsel ? [{ kaynak: path.join(kimlikDir, k.gorsel), ad: k.gorsel }] : [];
   return { html: html.join('\n'), tl, css, varliklar };
@@ -264,4 +273,4 @@ function renderEt(hfDir, mixWav, outMp4, kodlama = KODLAMA) {
   console.log(`\nHAZIR: ${outMp4} (${(fs.statSync(outMp4).size / 1048576).toFixed(1)} MB)`);
 }
 
-module.exports = { KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, kapanisSesleri, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };
+module.exports = { etiketParcala, KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, kapanisSesleri, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };

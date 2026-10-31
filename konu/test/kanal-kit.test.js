@@ -83,9 +83,10 @@ test('new channel: kontur captions, no sting, top label and the channel closing 
   const mk = K.marka(T, kimlik, C, { video, kimlikDir: dir });
   assert.match(mk.html, /KAPFIX 3 @deneme_kanal #E5533C/);
   assert.ok(!/id="st"/.test(mk.html) && !/id="st2"/.test(mk.html) && !/class="tag"/.test(mk.html), 'no oxygbio stings or corner tag');
-  assert.match(mk.html, /<div class="etk"><i><\/i>DENEME HİKÂYE · BÖLÜM 2<\/div>/);
+  const etk = /<div class="etk" style="font-size:30px"><i><\/i><span class="etk-ad">DENEME HİKÂYE<\/span><span class="etk-no">· BÖLÜM 2<\/span><\/div>/;
+  assert.match(mk.html, etk);
   // a label that already names the episode (dizi/uret-bolum.js) is not suffixed twice
-  assert.match(K.marka(T, kimlik, C, { video: { ...video, etiket: 'DENEME HİKÂYE · BÖLÜM 2' }, kimlikDir: dir }).html, /<div class="etk"><i><\/i>DENEME HİKÂYE · BÖLÜM 2<\/div>/);
+  assert.match(K.marka(T, kimlik, C, { video: { ...video, etiket: 'DENEME HİKÂYE · BÖLÜM 2' }, kimlikDir: dir }).html, etk);
   assert.ok(mk.tl.includes(`tl.set('#kapfix',{opacity:1},${K.at(T.Z.kapanis)});`), 'card starts at Z.kapanis');
   assert.match(mk.tl.join(''), new RegExp(`tl\\.set\\('\\.etk',\\{opacity:0\\},${K.at(T.Z.kapanis).replace('.', '\\.')}\\)`));
   assert.deepStrictEqual(mk.varliklar, [{ kaynak: path.join(dir, 'fix.png'), ad: 'fix.png' }]);
@@ -118,4 +119,19 @@ test('new channel: card sound effects resolve to kanal/<kanal>/muzik/<name>.wav,
   assert.deepStrictEqual(K.kapanisSesleri({}, dir), []);
   // a volume that is not a number never reaches ffmpeg as NaN
   assert.deepStrictEqual(K.kapanisSesleri({ sfx: [['pop', 1, 'yuksek'], ['tik', 2, null], ['pop', 3, undefined]] }, dir).map(e => e[2]), [1, 1, 1]);
+});
+
+// a long title never hides the episode marker (server ep1: "İSTANBULKART DÖKÜMÜNDEKİ İHANET · BÖLÜ…")
+test('top label: marker kept apart from the title, smaller font for long titles, only the title is cut', () => {
+  assert.deepStrictEqual(K.etiketParcala('Veli grubu', 2), { ad: 'VELİ GRUBU', ek: ' · BÖLÜM 2', px: 30 });
+  assert.deepStrictEqual(K.etiketParcala('İstanbulkart dökümündeki ihanet · BÖLÜM 1', 1), { ad: 'İSTANBULKART DÖKÜMÜNDEKİ İHANET', ek: ' · BÖLÜM 1', px: 24 });
+  assert.strictEqual(K.etiketParcala('x'.repeat(60), 3).px, 22);
+  assert.deepStrictEqual(K.etiketParcala('Başlık', null), { ad: 'BAŞLIK', ek: '', px: 30 });
+  const { dir, kimlik } = geciciKanal(), C = K.palet(kimlik);
+  const video = { ...okuJ(path.join(V01, 'video.json')), anons_rolleri: [], etiket: 'İstanbulkart dökümündeki ihanet', bolum: 1, toplam_bolum: 2 };
+  const T = zaman(video, okuJ(path.join(V01, 'ses', 'kelimeler.json')), { sting: false, kapanis: 3 });
+  const mk = K.marka(T, kimlik, C, { video, kimlikDir: dir });
+  assert.match(mk.html, /<span class="etk-ad">İSTANBULKART DÖKÜMÜNDEKİ İHANET<\/span><span class="etk-no">· BÖLÜM 1<\/span>/);
+  assert.match(mk.css, /\.etk-ad\{min-width:0;overflow:hidden;text-overflow:ellipsis\}\.etk-no\{flex:none;padding-left:\.32em\}/);
+  assert.doesNotMatch(mk.css, /\.etk\{[^}]*text-overflow/, 'the whole label is never ellipsised');
 });

@@ -86,9 +86,10 @@ const gunAnahtar = (d = simdi()) => `${d.getFullYear()}-${String(d.getMonth() + 
 const ayAnahtar = (d = simdi()) => gunAnahtar(d).slice(0, 7);
 const damga = (d = simdi()) => gunAnahtar(d).replace(/-/g, '') + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0');
 
-// ---- spend ledger: kayit/konu/<kanal>/harcama.jsonl  {zaman, gun, tur: karakter|kredi|video, miktar, video}
+// ---- spend ledger: kayit/konu/<kanal>/harcama.jsonl  {zaman, gun, tur: karakter|kredi|video, miktar, video, ...ek}
+//      (characters: kaynak baslik|abonelik|tahmin, metin_uzunlugu, tahmini: true when only the script length is known)
 const defterF = ctx => path.join(ctx.kayit, 'harcama.jsonl');
-function harcamaYaz(ctx, tur, miktar, video) { satirEkle(defterF(ctx), { zaman: simdi().toISOString(), gun: gunAnahtar(), tur, miktar, video }); }
+function harcamaYaz(ctx, tur, miktar, video, ek = {}) { satirEkle(defterF(ctx), { zaman: simdi().toISOString(), gun: gunAnahtar(), tur, miktar, video, ...ek }); }
 function harcamaToplam(ctx, tur, d = simdi()) {
   const g = gunAnahtar(d), a = ayAnahtar(d);
   let gun = 0, ay = 0;
