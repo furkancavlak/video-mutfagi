@@ -128,3 +128,14 @@ test('isBolum: a job maps to its series episode by the video folder', () => {
   assert.deepStrictEqual(P.isBolum({ video: 'videolar/kanal-abc-b2' }, [{ id: 'abc', bolumler: [] }]), { dizi: 'abc', bolum: 2 });
   assert.strictEqual(P.isBolum({ video: 'videolar/baska' }, [{ id: 'abc', bolumler: [] }]), null);
 });
+
+test('a queued job off the slot grid keeps its own fixed slot and is never planned again', () => {
+  const d = dizi('a', [], 2, { stok: undefined });
+  d.bolumler[0].video = 'videolar/k-a-b1';
+  const isler = [{ id: 'j1', video: 'videolar/k-a-b1', ne_zaman: iso(yerel(20, 22)) }];
+  const p = P.planla({ diziler: [d], reyting: ry({ a: {} }), isler, ayar: AYAR, simdi: SIMDI });
+  const s = slot(p, 20, 22);
+  assert.ok(s, '22:00 shows up as its own slot');
+  assert.strictEqual(s.kilitli, true); assert.deepStrictEqual(s.atanan, { dizi: 'a', bolum: 1 });
+  assert.strictEqual(p.slotlar.filter(x => x.atanan && x.atanan.dizi === 'a' && x.atanan.bolum === 1).length, 1);
+});

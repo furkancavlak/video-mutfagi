@@ -100,11 +100,13 @@ function planYap({ diziler = [], reyting = null, isler = [], ayar = {}, simdi = 
   // 1. queued jobs: locked under 3 h, the rest shown as tentative
   for (const j of isler) {
     const t = Date.parse(j.ne_zaman || ''); if (!Number.isFinite(t) || t <= simdi || t > simdi + UFUK) continue;
-    const sl = slotlar.find(x => Math.abs(x.t - t) < 30 * 60e3); const e = isBolum(j, diziler);
-    if (!sl) continue;
+    let sl = slotlar.find(x => Math.abs(x.t - t) < 30 * 60e3); const e = isBolum(j, diziler);
+    // a job off the slot grid (an hour moved by hand, an older rule) still goes out at its time: its own fixed slot
+    const disi = !sl;
+    if (disi) { sl = { t, atanan: null, kilitli: false, neden: null, kuyrukta: null }; slotlar.push(sl); slotlar.sort((a, b) => a.t - b.t); }
     sl.kuyrukta = { dizi: e ? e.dizi : null, bolum: e ? e.bolum : null, is: j.id || null };
-    if (t - simdi < KILIT) {
-      sl.kilitli = true; sl.neden = 'kuyrukta, 3 saatten az kaldı';
+    if (disi || t - simdi < KILIT) {
+      sl.kilitli = true; sl.neden = disi ? 'kuyrukta, normal saatlerin dışında' : 'kuyrukta, 3 saatten az kaldı';
       const s = e && S.get(e.dizi);
       if (s && s.kuyruk[0] === e.bolum) ata(sl, s, sl.neden); else sl.atanan = e ? { dizi: e.dizi, bolum: e.bolum } : null;
       if (!e) sl.dolu = true;
