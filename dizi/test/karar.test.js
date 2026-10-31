@@ -249,3 +249,11 @@ test('metinKarar: onayla with edits (recap rule re-checked), reddet cuts the ser
   assert.strictEqual(ozetHatasi('İlk bölüm metni.', 1), null);
   assert.match(ozetHatasi('Önceki bölümde ' + 'kelime '.repeat(15) + '.\n\nx', 2), /en fazla 15 kelime/);
 });
+
+test('tonGoc: a series without a tone gets the kit assignment or komik; a set tone is kept', () => {
+  const { tonGoc } = require('../dizi');
+  const v = { diziler: [{ id: 'a' }, { id: 'b' }, { id: 'c', ton: 'ürkütücü' }, { id: 'd', ton: 'saçma' }] };
+  assert.strictEqual(tonGoc(v, { b: 'ciddi', d: 'olmayan' }), 3);
+  assert.deepStrictEqual(v.diziler.map(d => d.ton), ['komik', 'ciddi', 'ürkütücü', 'komik']);
+  assert.strictEqual(tonGoc(v), 0);
+});

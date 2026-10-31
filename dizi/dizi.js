@@ -119,6 +119,15 @@ function metinOnayGoc(veri) {
   return n;
 }
 
+// migration: a series from before the tone label gets one: the kit's own assignment (konu.json → dizi.ton_atamalari
+// {id: ton}) or komik. Returns how many were set.
+function tonGoc(veri, atamalar = {}) {
+  const { tonDogru } = require('./ton');
+  let n = 0;
+  for (const d of (veri && veri.diziler) || []) if (d && !tonDogru(d.ton)) { d.ton = tonDogru((atamalar || {})[d.id]) ? atamalar[d.id] : 'komik'; n++; }
+  return n;
+}
+
 function kararVer(dizi, n, tumDiziler, ayar, simdi) {
   const b = bul(dizi, n);
   if (!b) throw new Error(`bölüm ${n} yok`);
@@ -180,4 +189,4 @@ function kilitAl(kok, kanal) {
   return { mesaj: 'kilit: kilit dosyası alınamadı' };
 }
 
-module.exports = { yukle, kaydet, kararVer, elleKarar, kilitAl, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi };
+module.exports = { yukle, kaydet, kararVer, elleKarar, kilitAl, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi, tonGoc };

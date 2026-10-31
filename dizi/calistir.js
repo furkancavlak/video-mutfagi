@@ -1,7 +1,7 @@
 // Hourly series scheduler run: sync posted episodes from the queue, measure, decide continue/cut, fill the day, ask for due episodes.
 //   node dizi/calistir.js <kanal> [--kuru]      (--kuru = plan only: no writes, no production, no network)
 const fs = require('fs'), path = require('path');
-const { yukle, kaydet, kararVer, kilitAl, metinOnay, metinOnayGoc } = require('./dizi');
+const { yukle, kaydet, kararVer, kilitAl, metinOnay, metinOnayGoc, tonGoc } = require('./dizi');
 const ortak = require('../konu/ortak');
 
 // MAX_BEKLEYEN_METIN: new series waiting for Furkan's text approval do not count as active, but no more than this many
@@ -77,7 +77,10 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
     const kullanilan = new Set([...(diziler || []).flatMap(d => [d.id, d.kaynak && d.kaynak.id]).filter(Boolean), ...red.reddedilen.map(x => x.id)]);
     const reddet = (h, r) => {
       const ayrinti = r && r.ayrinti != null ? String(typeof r.ayrinti === 'string' ? r.ayrinti : JSON.stringify(r.ayrinti)).slice(0, 300) : undefined;
-      red.reddedilen.push({ kaynak: h.tur || null, id: h.id, neden: (r && r.neden) || 'bölünemedi', ...(ayrinti ? { ayrinti } : {}), zaman: new Date(simdi).toISOString() });
+      // a serious story that kept reading mocking or identifying is kept for Furkan to look at, not just dropped
+      const hassas = r && r.neden === 'hassasiyet';
+      red.reddedilen.push({ kaynak: h.tur || null, id: h.id, neden: (r && r.neden) || 'bölünemedi', ...(ayrinti ? { ayrinti } : {}), ...(hassas ? { furkan_baksin: true, url: h.url || null } : {}), zaman: new Date(simdi).toISOString() });
+      if (hassas) not(`${h.id}: hassasiyet denetimi iki kez takıldı, Furkan'a bırakıldı (${h.url || ''})`);
       kullanilan.add(h.id);
       ortak.yazJson(f, red);
       if (sonuc) sonuc.reddedilen = (sonuc.reddedilen || 0) + 1;
@@ -198,6 +201,9 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     // 0. series from before the text approval feature count as approved (written explicitly once)
     const goc = metinOnayGoc(veri);
     if (goc) notlar.push(`${goc} eski dizi metin onaylı sayıldı (metin_onay: onaylandi)`);
+    // series from before the tone label: the kit's assignment (dizi.ton_atamalari) or komik
+    const tg = tonGoc(veri, ayar.ton_atamalari);
+    if (tg) notlar.push(`${tg} eski diziye ton yazıldı (${veri.diziler.map(d => d.id + ': ' + d.ton).join(', ')})`);
 
     // 1. sync; a series whose last episode is already measured (older data) is finished
     senkronla(diziler, kuyruk, notlar);

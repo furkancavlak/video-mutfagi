@@ -19,7 +19,17 @@ Başlık: {{baslik}}
 - **2. ve sonraki bölümler "Önceki bölümde…" ile başlayan TEK cümlelik bir özetle açılır: en fazla 15 kelime.** Özet önceki bölümde anlatılanı söyler, yeni bilgi vermez. Özet kendi paragrafıdır: özetten sonra bir boş satır bırak. 1. bölümde özet yoktur.
 - **Açılış:** kaynakta gerçekten çarpıcı bir cümle varsa 1. bölümün başına taşıyabilirsin; yoksa kaynağın kendi açılışını koru.
 - **Yabancı (Reddit) hikâyeler** yabancı ortamını korur ve yabancı isimler kullanır; Türkiye'ye uyarlanmaz. Türkçe (Ekşi) hikâyelerde isimler değiştirilir, kişiler tanınmaz.
-- **Ses etiketleri** ([sarcastic], [laughs softly], [sighs] gibi) metinde seyrek ve yalnız kaynaktaki duyguya uyan yerde kullanılabilir.
+- **Ses etiketleri** metinde seyrek ve yalnız kaynaktaki duyguya uyan yerde kullanılabilir.
+
+## Ton (önce buna karar ver)
+
+Hikâyenin tonunu kaynağa göre belirle: `komik` (yazarın kendisi gülerek anlatıyor), `hüzünlü` (kayıp, ölüm, hastalık, ayrılık, aile dağılması), `ürkütücü` (korku, doğaüstü, tehlike) ya da `ciddi` (ihanet, haksızlık, şiddet, ağır bir olay). Komik olmayan hikâyeler de anlatılır; yalnız saygıyla.
+
+- **komik** hikâyede [sarcastic], [mischievously], [laughs softly] gibi etiketler kaynaktaki espriye uyduğu yerde kullanılabilir.
+- **hüzünlü, ürkütücü, ciddi** hikâyede şakacı etiket KESİNLİKLE yok: [sarcastic], [mischievously], [laughs], [proudly], [excited], [playfully] gibi hiçbir etiket kullanma. Kaynak destekliyorsa yalnız [sad], [softly], [sighs], [whispers], [quietly].
+- Hiçbir tonda kaynakta olmayan espri, şaka, kafiye ya da vurucu son cümle ekleme. Komik olmayan hikâyede dalga geçen, küçümseyen, olayı hafife alan söz yok; mağduru suçlayan bir ifade yok; ölüm, hastalık ya da şiddette gereksiz ayrıntı yok.
+- "Önceki bölümde…" özeti her tonda tarafsızdır: olanı sakin bir dille söyler.
+- Kişileri ve kurumları tanıtacak ayrıntı yazma: gerçek isimler değiştirilir, tam adres, hastane, okul, şirket ya da kurum adı genel bir ifadeyle anlatılır ("bir devlet hastanesi", "çalıştığım şirket").
 - Metin sesli okunacak: rakamları ve kısaltmaları okunduğu gibi yaz, emoji ve başlık koyma. Paragrafları boş satırla ayır.
 - Anlatıcı, hikâyeyi anlatan kişidir: cinsiyeti (erkek/kadin) ve yaş grubu (genc/orta/yasli) kaynaktan çıkarılır.
 
@@ -34,6 +44,8 @@ Yalnız şu JSON'u döndür. `bolumler` 2 ile 5 öğe arasındadır. `degisen_is
   "baslik_kisa": "en fazla 6 kelimelik kısa ad",
   "anlatici": {"cinsiyet": "erkek", "yas": "genc", "ton": "sakin"},
   "bolumler": [{"metin": "..."}, {"metin": "Önceki bölümde, ...\n\n..."}],
-  "degisen_isimler": {"eski isim": "yeni isim"}
+  "degisen_isimler": {"eski isim": "yeni isim"},
+  "ton": {"deger": "komik | hüzünlü | ürkütücü | ciddi", "neden": "tek cümlelik gerekçe"},
+  "hassasiyet": "komik değilse: anlatırken nelere dikkat edilmeli (gerçek bir ölüm, adı geçen bir kurum, çocuk, kişiyi tanıtabilecek ayrıntı); komikse boş"
 }
 ```

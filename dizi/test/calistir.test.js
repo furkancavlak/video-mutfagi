@@ -387,3 +387,15 @@ test('yeniDiziYap marks the new series bekliyor unless dizi.metin_onayi is false
   const d2 = await yeniDiziYap({ kaynak, bol })({ kanal: 'k', ayar: { dizi: { metin_onayi: false } } }, { simdi: SIMDI, diziler: [], kok: k, sonuc: { notlar: [] } });
   assert.ok(!('metin_onay' in d2));
 });
+
+test('a story stopped by the sensitivity check is recorded for Furkan (furkan_baksin, url, note)', async () => {
+  const { yeniDiziYap } = require('../calistir');
+  const k = kok(); kaydet(k, 'k', { diziler: [] });
+  const bol = { bol: async () => ({ ok: false, neden: 'hassasiyet', ayrinti: ['Bölüm 1: hastane adı'] }) };
+  const kaynak = { adaylar: async () => ({ ogeler: [{ id: 'eksi-7', tur: 'eksi', puan: 5, url: 'https://eksisozluk.com/entry/7' }], notlar: [] }) };
+  const sonuc = { notlar: [], reddedilen: 0 };
+  assert.strictEqual(await yeniDiziYap({ kaynak, bol })({ kanal: 'k', ayar: { dizi: {} } }, { simdi: SIMDI, diziler: [], kok: k, sonuc }), null);
+  const red = JSON.parse(fs.readFileSync(path.join(k, 'kayit', 'dizi', 'k', 'reddedilen.json'), 'utf8')).reddedilen[0];
+  assert.deepStrictEqual([red.id, red.neden, red.furkan_baksin, red.url], ['eksi-7', 'hassasiyet', true, 'https://eksisozluk.com/entry/7']);
+  assert.ok(sonuc.notlar.some(n => /hassasiyet denetimi iki kez takıldı, Furkan'a bırakıldı/.test(n)));
+});
