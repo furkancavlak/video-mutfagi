@@ -36,6 +36,15 @@ Hikâyenin tonunu kaynağa göre belirle: `komik` (yazarın kendisi gülerek anl
 - Metin sesli okunacak: rakamları ve kısaltmaları okunduğu gibi yaz, emoji ve başlık koyma. Paragrafları boş satırla ayır.
 - Anlatıcı, hikâyeyi anlatan kişidir: cinsiyeti (erkek/kadin) ve yaş grubu (genc/orta/yasli) kaynaktan çıkarılır.
 
+## Kapak başlığı (profil ızgarasında görünen kanca)
+
+Dizinin her bölüm kapağında aynı kısa başlık durur. **3 seçenek** yaz (`kapak_basliklari`):
+
+- En fazla 28 karakter, 2-5 kelime, büyük harf.
+- Açılış formülünü izler: hikâyenin **tuhaf durumu ya da karşıtlığı**. Düz konu adı değil, hikâyenin tutmadığı bir vaat değil; sonu ele vermez.
+- İyi: "ÇOCUĞUM YOK AMA VELİYİM", "ADINI SORMADIM", "İHANETİ KART ELE VERDİ", "9 YIL SONRA GELEN MESAJ".
+- Kötü: "3-J VELİ GRUBU" (yalnız konu), "UÇAKTAKİ KIZ" (merak yok).
+
 {{not}}
 
 ## Yanıt biçimi
@@ -45,6 +54,7 @@ Yalnız şu JSON'u döndür. `bolumler` 2 ile 5 öğe arasındadır. `degisen_is
 ```json
 {
   "baslik_kisa": "en fazla 6 kelimelik kısa ad",
+  "kapak_basliklari": ["EN FAZLA 28 KARAKTER", "İKİNCİ SEÇENEK", "ÜÇÜNCÜ SEÇENEK"],
   "anlatici": {"cinsiyet": "erkek", "yas": "genc", "ton": "sakin"},
   "bolumler": [{"metin": "..."}, {"metin": "Önceki bölümde, ...\n\n..."}],
   "degisen_isimler": {"eski isim": "yeni isim"},

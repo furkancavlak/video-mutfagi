@@ -9,6 +9,7 @@
 //     --kuru     only checks the tunnel; nothing is sent to Instagram
 //     --hazirla  Instagram downloads and processes the video, but it is NOT published
 //     --adres    the file is already at a public https address (server); skips the tunnel
+//     --kapak    the grid cover (cover_url): a jpg served through the same tunnel, or a public address
 //
 // Instagram fetches Reels from a public URL, so `gonder` serves the file from this computer
 // through a temporary Cloudflare quick tunnel (no account needed) only while Instagram downloads it.
@@ -28,6 +29,7 @@ const ayarYolu = hesap => {
 const KAYIT = path.join(__dirname, '..', 'kayit', 'paylasimlar.jsonl');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const zaman = { bekle: sleep };          // polling waits (tests replace bekle)
 const fail = msg => { console.error('HATA: ' + msg); process.exit(1); };
 const readAyar = hesap => { try { return JSON.parse(fs.readFileSync(ayarYolu(hesap), 'utf8')) } catch (e) { return null } };
 const writeAyar = (a, hesap) => { fs.mkdirSync(AYAR_DIR, { recursive: true }); fs.writeFileSync(ayarYolu(hesap), JSON.stringify(a, null, 2)); };
@@ -56,25 +58,27 @@ async function me(token) {
   return graph('GET', '/me', { fields: 'user_id,username,account_type,media_count', access_token: token });
 }
 
-// --- local file server with Range support (Instagram's fetcher may request byte ranges)
-function serve(file) {
-  const size = fs.statSync(file).size;
-  const name = '/' + encodeURIComponent(path.basename(file).replace(/[^a-zA-Z0-9._-]/g, '_'));
+// --- local file server with Range support (Instagram's fetcher may request byte ranges). The video and, optionally,
+// the episode cover go through the same server (and so the same tunnel), each under its own name.
+function serve(file, ekler = []) {
+  const dosyalar = [file, ...ekler].map(f => ({ f, size: fs.statSync(f).size, tur: /\.jpe?g$/i.test(f) ? 'image/jpeg' : 'video/mp4',
+    name: '/' + encodeURIComponent(path.basename(f).replace(/[^a-zA-Z0-9._-]/g, '_')) }));
   const hits = [];
   const srv = http.createServer((req, res) => {
     hits.push(`${req.method} ${req.headers.range || 'full'}`);
-    if (req.url.split('?')[0] !== name) { res.writeHead(404); return res.end(); }
-    const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
+    const d = dosyalar.find(x => x.name === req.url.split('?')[0]);
+    if (!d) { res.writeHead(404); return res.end(); }
+    const size = d.size, m = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
     let start = 0, end = size - 1, code = 200;
     if (m) { start = m[1] ? +m[1] : size - +m[2]; end = m[1] && m[2] ? +m[2] : size - 1; code = 206; }
-    res.writeHead(code, { 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1,
+    res.writeHead(code, { 'Content-Type': d.tur, 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1,
       ...(code === 206 ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}) });
     if (req.method === 'HEAD') return res.end();
     const t0 = Date.now(), i = hits.length - 1;
     res.on('close', () => { hits[i] += ` → ${res.writableFinished ? 'tamam' : 'YARIDA KESİLDİ'} ${((res.socket && res.socket.bytesWritten) / 1048576 || 0).toFixed(1)} MB ${((Date.now() - t0) / 1000).toFixed(0)} sn`; });
-    fs.createReadStream(file, { start, end }).pipe(res);
+    fs.createReadStream(d.f, { start, end }).pipe(res);
   });
-  return new Promise(ok => srv.listen(0, '127.0.0.1', () => ok({ srv, port: srv.address().port, name, hits })));
+  return new Promise(ok => srv.listen(0, '127.0.0.1', () => ok({ srv, port: srv.address().port, name: dosyalar[0].name, adlar: dosyalar.map(d => d.name), hits })));
 }
 
 function tunnel(port) {
@@ -97,17 +101,23 @@ function tunnel(port) {
 async function waitReachable(url) {
   for (let i = 0; i < 30; i++) {
     try { const r = await fetch(url, { method: 'HEAD' }); if (r.ok) return; } catch (e) {}
-    await sleep(2000);
+    await zaman.bekle(2000);
   }
   throw new Error('tünel adresi dışarıdan açılmadı: ' + url);
 }
 
 // adres: the video already sits at a public https address (e.g. on a server) -> no local server, no tunnel
-async function gonder(file, aciklama, kuru, hazirla, adres, hesap) {
+// ek.kapak: the episode cover for the profile grid, sent as cover_url: a public https address (klasor mode) or a local
+//           jpg served through the same tunnel. A cover that cannot be reached is dropped; a container rejected with a
+//           cover is tried once more without it. The cover never stops a post. (ek.ayar / ek.kayit: tests)
+async function gonder(file, aciklama, kuru, hazirla, adres, hesap, ek = {}) {
   if (!adres && !fs.existsSync(file)) throw new Error('video yok: ' + file);
-  const ayar = readAyar(hesap);
+  const ayar = ek.ayar || readAyar(hesap);
   if (!kuru && !ayar) throw new Error('önce token kaydet: node instagram/paylas.js kaydet <dosya>' + (hesap ? ' --hesap ' + hesap : ''));
-  const s = adres ? { hits: [], srv: { close() {} } } : await serve(file);
+  const kapakAdres = ek.kapak && /^https?:\/\//.test(ek.kapak) ? ek.kapak : null;
+  let kapakDosya = ek.kapak && !kapakAdres ? path.resolve(ek.kapak) : null, kapakNotu = null;
+  if (kapakDosya && (adres || !fs.existsSync(kapakDosya))) { kapakNotu = adres ? 'kapak yerel dosya, adres modunda verilemedi' : 'kapak dosyası yok'; kapakDosya = null; }
+  const s = adres ? { hits: [], srv: { close() {} } } : await serve(file, kapakDosya ? [kapakDosya] : []);
   let tn;
   try {
     let videoUrl = adres;
@@ -117,34 +127,55 @@ async function gonder(file, aciklama, kuru, hazirla, adres, hesap) {
       videoUrl = tn.url + s.name;
     } else console.log('1/5 Video şu adresten verilecek: ' + adres);
     await waitReachable(videoUrl);
-    console.log('    adres hazır');
+    let kapakUrl = kapakAdres || (kapakDosya ? tn.url + s.adlar[1] : null);
+    if (kapakUrl) {
+      try { await waitReachable(kapakUrl); }
+      catch (e) { kapakNotu = 'kapak adresi açılmadı, kapaksız gidiyor'; kapakUrl = null; }
+    }
+    console.log('    adres hazır' + (kapakUrl ? ' (kapak da)' : ''));
+    if (kapakNotu) console.log('    ' + kapakNotu);
     if (kuru) {
       const r = await fetch(videoUrl, { headers: { Range: 'bytes=0-1023' } });
       console.log(`KURU KOŞU: dışarıdan erişim ${r.status}, ${(await r.arrayBuffer()).byteLength} bayt. Instagram'a bir şey gönderilmedi.`);
       return { kuru: true };
     }
-    console.log('2/5 Instagram\'a bildiriliyor…');
-    const c = await graph('POST', `/${ayar.user_id}/media`, { media_type: 'REELS', video_url: videoUrl, caption: aciklama || '', share_to_feed: 'true', access_token: ayar.token });
-    console.log('3/5 Instagram videoyu indirip işliyor (1-5 dk)…');
-    let st;
-    for (let i = 0; i < 90; i++) {
-      await sleep(5000);
-      st = await graph('GET', `/${c.id}`, { fields: 'status_code,status', access_token: ayar.token });
-      if (st.status_code === 'FINISHED') break;
-      if (st.status_code === 'ERROR' || st.status_code === 'EXPIRED') throw new Error('Instagram videoyu kabul etmedi: ' + (st.status || st.status_code) + ` | videoya gelen istekler (${s.hits.length}): ` + (s.hits.slice(0, 8).join(', ') || 'HİÇ — Instagram adrese ulaşamadı'));
+    // one container: created, then polled until Instagram has downloaded and processed the video
+    const konteyner = async kapak => {
+      console.log('2/5 Instagram\'a bildiriliyor…' + (kapak ? ' (kapakla)' : ''));
+      const c = await graph('POST', `/${ayar.user_id}/media`, { media_type: 'REELS', video_url: videoUrl, caption: aciklama || '', share_to_feed: 'true', ...(kapak ? { cover_url: kapak } : {}), access_token: ayar.token });
+      console.log('3/5 Instagram videoyu indirip işliyor (1-5 dk)…');
+      let st;
+      for (let i = 0; i < 90; i++) {
+        await zaman.bekle(5000);
+        st = await graph('GET', `/${c.id}`, { fields: 'status_code,status', access_token: ayar.token });
+        if (st.status_code === 'FINISHED') break;
+        if (st.status_code === 'ERROR' || st.status_code === 'EXPIRED') throw new Error('Instagram videoyu kabul etmedi: ' + (st.status || st.status_code) + ` | videoya gelen istekler (${s.hits.length}): ` + (s.hits.slice(0, 8).join(', ') || 'HİÇ — Instagram adrese ulaşamadı'));
+      }
+      if (st.status_code !== 'FINISHED') { const e = new Error('Instagram 7,5 dk içinde işlemeyi bitirmedi'); e.sureDoldu = true; throw e; }
+      return c;
+    };
+    let c;
+    try { c = await konteyner(kapakUrl); }
+    catch (e) {
+      // a rejection while a cover was attached: once more without it (a timeout is not about the cover)
+      if (!kapakUrl || e.sureDoldu) throw e;
+      kapakNotu = 'kapakla reddedildi, kapaksız bir kez daha denendi: ' + e.message;
+      console.log('    ' + kapakNotu);
+      kapakUrl = null;
+      c = await konteyner(null);
     }
-    if (st.status_code !== 'FINISHED') throw new Error('Instagram 7,5 dk içinde işlemeyi bitirmedi');
-    if (hazirla) { console.log(`HAZIRLANDI, PAYLAŞILMADI: Instagram videoyu kabul etti (konteyner ${c.id}). Yayınlanmadı; 24 saat içinde kendiliğinden silinir.`); return { hazirlandi: c.id }; }
+    if (hazirla) { console.log(`HAZIRLANDI, PAYLAŞILMADI: Instagram videoyu kabul etti (konteyner ${c.id}). Yayınlanmadı; 24 saat içinde kendiliğinden silinir.`); return { hazirlandi: c.id, kapak: !!kapakUrl, ...(kapakNotu ? { kapak_notu: kapakNotu } : {}) }; }
     console.log('4/5 Paylaşılıyor…');
     let pub;
     // if this call fails we cannot know whether Instagram published anyway: callers must NOT retry such an error
     try { pub = await graph('POST', `/${ayar.user_id}/media_publish`, { creation_id: c.id, access_token: ayar.token }); }
     catch (e) { e.yayinBelirsiz = true; e.message += ' — yayınlanmış olabilir, tekrar göndermeden önce hesaba bak'; throw e; }
     const info = await graph('GET', `/${pub.id}`, { fields: 'permalink,timestamp', access_token: ayar.token }).catch(() => ({ permalink: '(link alınamadı, media ' + pub.id + ')' }));
-    fs.mkdirSync(path.dirname(KAYIT), { recursive: true });
-    fs.appendFileSync(KAYIT, JSON.stringify({ zaman: new Date().toISOString(), dosya: path.basename(file), media_id: pub.id, link: info.permalink, aciklama }) + '\n');
+    const kayit = ek.kayit || KAYIT;
+    fs.mkdirSync(path.dirname(kayit), { recursive: true });
+    fs.appendFileSync(kayit, JSON.stringify({ zaman: new Date().toISOString(), dosya: path.basename(file), media_id: pub.id, link: info.permalink, aciklama, kapak: !!kapakUrl }) + '\n');
     console.log('5/5 YAYINDA: ' + info.permalink);
-    return { media_id: pub.id, link: info.permalink, zaman: info.timestamp };
+    return { media_id: pub.id, link: info.permalink, zaman: info.timestamp, kapak: !!kapakUrl, ...(kapakNotu ? { kapak_notu: kapakNotu } : {}) };
   } finally {
     if (tn) tn.proc.kill();
     s.srv.close();
@@ -161,7 +192,7 @@ async function sonuc(mediaId, hesap) {
   return out;
 }
 
-module.exports = { gonder, sonuc, graph, readAyar, me, ayarYolu, API_SURUM };
+module.exports = { gonder, sonuc, graph, readAyar, me, ayarYolu, serve, zaman, API_SURUM };
 if (require.main !== module) return;
 
 (async () => {
@@ -186,9 +217,9 @@ if (require.main !== module) return;
     console.log(`Token yenilendi, ${r.gun} gün geçerli.`);
   } else if (cmd === 'gonder') {
     const i = rest.indexOf('--aciklama');
-    const j = rest.indexOf('--adres');
-    await gonder(a1, i >= 0 ? rest[i + 1] : '', rest.includes('--kuru'), rest.includes('--hazirla'), j >= 0 ? rest[j + 1] : null, hesap);
+    const j = rest.indexOf('--adres'), k = rest.indexOf('--kapak');
+    await gonder(a1, i >= 0 ? rest[i + 1] : '', rest.includes('--kuru'), rest.includes('--hazirla'), j >= 0 ? rest[j + 1] : null, hesap, k >= 0 ? { kapak: rest[k + 1] } : {});
   } else {
-    console.log('Kullanım: kaydet <token-dosyasi> | kontrol | yenile | gonder <video.mp4> [--aciklama "..."] [--kuru] [--hazirla] [--adres https://...]  (hepsine: --hesap <ad>)');
+    console.log('Kullanım: kaydet <token-dosyasi> | kontrol | yenile | gonder <video.mp4> [--aciklama "..."] [--kuru] [--hazirla] [--adres https://...] [--kapak <jpg|adres>]  (hepsine: --hesap <ad>)');
   }
 })().catch(e => fail(e.message));
