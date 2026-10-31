@@ -27,7 +27,7 @@ function kanalStili(ctx) {
 }
 
 // the model's list, cleaned: known fields only, narrator first with the voice's gender and age, unique kim, at most 6
-function temizle(liste, an) {
+function temizle(liste, an, kutuphaneIdleri = []) {
   const out = [], gor = new Set();
   for (const k of Array.isArray(liste) ? liste : []) {
     const kim = String((k && k.kim) || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
@@ -35,7 +35,8 @@ function temizle(liste, an) {
     gor.add(kim);
     out.push({ kim, ad: String(k.ad || kim).slice(0, 40), rol: String(k.rol || '').slice(0, 80),
       cinsiyet: k.cinsiyet === 'kadin' ? 'kadin' : 'erkek', yas: YAS.includes(k.yas) ? k.yas : 'genc',
-      meslek: MESLEK.includes(k.meslek) ? k.meslek : 'diger', basortusu: k.basortusu === true, ipucu: String(k.ipucu || '').slice(0, 120) });
+      meslek: MESLEK.includes(k.meslek) ? k.meslek : 'diger', basortusu: k.basortusu === true, ipucu: String(k.ipucu || '').slice(0, 120),
+      ...(kim !== 'anlatici' && kutuphaneIdleri.includes(k.kutuphane) ? { kutuphane: k.kutuphane } : {}) });
   }
   let a = out.find(k => k.kim === 'anlatici');
   if (!a) { a = { kim: 'anlatici', ad: 'anlatıcı', rol: 'hikâyeyi anlatan', cinsiyet: 'erkek', yas: 'genc', meslek: 'diger', basortusu: false, ipucu: '' }; }
@@ -47,11 +48,14 @@ function temizle(liste, an) {
 
 async function kisileriCikar(ctx, dizi, { calistir, sor = LLM.sor } = {}) {
   const an = anlaticiKim(dizi, ctx.kimlik), llm = ctx.ayar && ctx.ayar.llm;
+  // this story's own approved library characters (a person drawn in an earlier episode) are reused, never redesigned
+  const kut = require('../uretim/kutuphane').liste(ctx.dir, dizi.id).filter(k => k.dizi === dizi.id);
   const metin = (dizi.bolumler || []).map(b => String(b.metin || '').replace(/\[[^\]]*\]\s*/g, '')).join('\n\n');
   try {
-    const r = await sor(LLM.istem('hikaye-kisiler', { baslik: dizi.baslik || '', metin, anlatici_cinsiyet: an.cinsiyet === 'kadin' ? 'kadın' : 'erkek' }),
+    const r = await sor(LLM.istem('hikaye-kisiler', { baslik: dizi.baslik || '', metin, anlatici_cinsiyet: an.cinsiyet === 'kadin' ? 'kadın' : 'erkek',
+      kutuphane: kut.length ? kut.map(k => `- ${k.id}: ${k.ad} (${k.gorunum || ''})`).join('\n') : 'Yok.' }),
       { ayar: llm, model: llm && llm.model_metin, efor: 'low', json: true, calistir, is: 'hikaye-kisiler' });
-    return temizle(r && r.kisiler, an);
+    return temizle(r && r.kisiler, an, kut.map(k => k.id));
   } catch (e) {
     return temizle([], an);       // no cast list is no reason to stop an episode: the narrator alone still gets a look
   }
@@ -61,12 +65,12 @@ async function ata(ctx, dizi, diziler = [], { calistir, sor, stil } = {}) {
   stil = stil || kanalStili(ctx);
   if (!stil) return dizi.kisiler || [];
   if (!Array.isArray(dizi.kisiler) || !dizi.kisiler.length) dizi.kisiler = await kisileriCikar(ctx, dizi, { calistir, sor });
-  if (dizi.kisiler.every(k => k.gorunum)) return dizi.kisiler;
+  if (dizi.kisiler.every(k => k.gorunum || k.kutuphane)) return dizi.kisiler;
   const kacin = (diziler || []).filter(d => d && d.id !== dizi.id && Array.isArray(d.kisiler))
     .sort((a, b) => (Date.parse(b.olusturma || '') || 0) - (Date.parse(a.olusturma || '') || 0)).slice(0, SON_DIZI)
     .flatMap(d => d.kisiler.map(k => k.gorunum).filter(Boolean));
   for (const k of dizi.kisiler) {
-    if (k.gorunum) continue;
+    if (k.gorunum || k.kutuphane) continue;
     const ayni = dizi.kisiler.map(x => x.gorunum).filter(Boolean);
     k.gorunum = stil(k, `${dizi.id}|${k.kim}`, kacin, ayni);
   }
@@ -78,10 +82,12 @@ const haritasi = dizi => Object.fromEntries((dizi.kisiler || []).filter(k => k.k
 
 function istemMetni(kisiler) {
   if (!Array.isArray(kisiler) || !kisiler.length) return '';
-  return 'Bu hikâyenin kişileri (görünümleri sabit; kıyafet/saç/ten seçeneği verme, yalnız ifade, poz ve kim):\n' + kisiler.map(k => k.kim === 'anlatici'
+  return 'Bu hikâyenin kişileri (görünümleri sabit; kıyafet/saç/ten seçeneği verme, yalnız ifade, poz ve kim):\n' + kisiler.map(k => k.kutuphane
+    ? `- ${k.ad}${k.rol ? ` (${k.rol})` : ''}: daha önce çizildi -> kutuphane.${k.kutuphane}({ ... }) (karakter.adam ile çizme)`
+    : k.kim === 'anlatici'
     ? `- anlatıcı: ${(k.gorunum || {}).tanim || ''} -> karakter.adam({ ... }) (kim vermeden)`
     : `- ${k.ad}${k.rol ? ` (${k.rol})` : ''}: ${(k.gorunum || {}).tanim || ''} -> karakter.adam({ kim: '${k.kim}', ... })`).join('\n')
-    + '\nListede olmayan bir yetişkin gerekirse ona da kendi adıyla kim ver (ör. kim: \'garson\', cinsiyet, yas); kendi görünümünü alır. Çocuklar karakter.cocuk ile çizilir. Karakter kütüphanesinde (aşağıda) aynı kişi varsa onu kütüphaneden kullan, burada üretileni değil.';
+    + '\nListede olmayan bir yetişkin gerekirse ona da kendi adıyla kim ver (ör. kim: \'garson\', cinsiyet, yas); kendi görünümünü alır. Çocuklar karakter.cocuk ile çizilir.';
 }
 
 module.exports = { ata, anlatici, haritasi, istemMetni, temizle, kisileriCikar, kanalStili };
