@@ -403,6 +403,8 @@ function gunAc(gun) {
 }
 // ---------------- "Onayını bekleyenler": everything that waits for Furkan, above the calendar
 function onayBarCiz() {
+  // Furkan: approvals live on the Onaylar page (its sidebar badge shows the count); the calendar stays clean
+  const yer = $('#onay-bar'); if (yer) yer.innerHTML = ''; return;
   const M = metinBekleyenler(), V = OL.filter(e => e.durum === 'onay' && e.is && e.is.onay_gerekli);
   if (!M.length && !V.length) { $('#onay-bar').innerHTML = takvimKaynak() === null ? '' : `<div class="ob-bos">${ikon('tik', 14)}Bekleyen onay yok ✓</div>`; return; }
   $('#onay-bar').innerHTML = `<section class="ob kart"><div class="ob-ust"><h2>Onayını bekleyenler</h2><span class="say">${M.length + V.length}</span><button class="dugme ince ob-git" data-onaylar-git="">Onaylar sayfasında aç ${ikon('ileri', 14)}</button></div><div class="ob-gruplar">
