@@ -118,7 +118,8 @@ test('ozet: KPIs, daily series, per-video curve and 1/24/48 h, series drop, them
   assert.strictEqual(o.diziler[0].karar, 'devam');
   assert.deepStrictEqual(o.tonlar.map(t => t.ad), ['hüzünlü']); assert.deepStrictEqual(o.konular[0], { ad: 'aşk', video: 2, ort: Math.round((9600 + 2150) / 2) });
   assert.deepStrictEqual(o.slotlar.map(s => s.ad), ['12:00', '17:00']);
-  assert.ok(I.ozet({ kok, hesap: 'h', gun: 5, simdi, ek }).gun === 28, 'unknown period -> 28');
+  assert.ok(I.ozet({ kok, hesap: 'h', gun: 5, simdi, ek }).gun === 5, 'custom day count kept');
+  assert.ok(I.ozet({ kok, hesap: 'h', gun: 0, simdi, ek }).gun === 28, 'out of range -> 28');
   assert.deepStrictEqual(I.ozet({ kok, hesap: 'yok', gun: 7, simdi }).videolar, []);
 });
 

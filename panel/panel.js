@@ -369,7 +369,7 @@ function bolumMp4(video, isMp4) {
 // ---------- İstatistikler: aggregates of the hourly snapshots (never Instagram), joined with the queue's posted jobs, the
 // series of every channel posting to this account and the video lengths (videolar/<ad>/ses/zaman.json → toplam)
 const hesapGovde = h => ({ hesap: hesapGuvenli(hesapTemiz(h)) || HESAP0 });   // only a clean account name reaches the shell
-const istatistikGovde = b => { const h = hesapGuvenli(hesapTemiz(b.hesap)) || HESAP0, g = +b.gun; return { hesap: h, gun: [7, 28, 90].includes(g) ? g : 28 }; };
+const istatistikGovde = b => { const h = hesapGuvenli(hesapTemiz(b.hesap)) || HESAP0, g = +b.gun; return { hesap: h, gun: Number.isInteger(g) && g >= 1 && g <= 365 ? g : 28 }; };
 function istatistikCevap(b) {
   const { hesap, gun } = istatistikGovde(b);
   const isler2 = ['paylasilan', 'bekleyen'].flatMap(k => isler(k)).filter(j => (isHesap(j) || HESAP0) === hesap);

@@ -106,6 +106,7 @@ test('instagram / takipci / istatistik come from the snapshots without any Insta
   const o = P.istatistikCevap({ hesap: 'snap_hesap', gun: 7 });
   assert.deepStrictEqual([o.hesap, o.gun, o.takipci, o.videolar.map(v => v.id)], ['snap_hesap', 7, 321, ['m1']]);
   assert.ok(o.kpi && o.kpi.donem && o.kpi.onceki && Array.isArray(o.gunluk) && o.gunluk.length === 7);
-  assert.strictEqual(P.istatistikCevap({ hesap: 'snap_hesap', gun: 3 }).gun, 28, 'unknown period -> 28');
+  assert.strictEqual(P.istatistikCevap({ hesap: 'snap_hesap', gun: 3 }).gun, 3, 'any day count 1-365 is kept');
+  assert.strictEqual(P.istatistikCevap({ hesap: 'snap_hesap', gun: 999 }).gun, 28, 'out of range -> 28');
   assert.throws(() => P.istatistikCevap({ hesap: '../x' }), /hesap/);
 });

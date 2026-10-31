@@ -180,13 +180,13 @@ test('the old permanent cache (an array) is dropped: everything is asked again',
 
 test('observation row: v2 shape, 0 stays 0, a missing metric is null with its reason in yok', async () => {
   const kok = kokYap(), yayin = T0 - 30 * DK;
-  const P = sahteP({ sayfalar: { ilk: { data: [reel('R', yayin)] } }, ret: ['facebook_views'], deger: (id, m) => ({ views: 0, reach: 3, likes: undefined, comments: null })[m] ?? (m === 'likes' || m === 'comments' ? undefined : 7) });
+  const P = sahteP({ sayfalar: { ilk: { data: [reel('R', yayin)] } }, ret: ['reels_skip_rate'], deger: (id, m) => ({ views: 0, reach: 3, likes: undefined, comments: null })[m] ?? (m === 'likes' || m === 'comments' ? undefined : 7) });
   await P.kos(kok, 'h', T0);
   const [g] = gozlemSatirlari(kok, 'h');
   assert.deepStrictEqual([g.v, g.zaman, g.media_id, g.yayin, g.yas_s, g.api, 'hata' in g], [2, iso(T0), 'R', iso(yayin), 1800, 'vTEST', false]);
   assert.deepStrictEqual(Object.keys(g.metrik).sort(), [...I.METRIKLER].sort(), 'every metric has a slot');
-  assert.deepStrictEqual([g.metrik.views, g.metrik.reach, g.metrik.likes, g.metrik.facebook_views], [0, 3, null, null]);
-  assert.deepStrictEqual(g.yok, { likes: 'bos', comments: 'bos', facebook_views: 'desteklenmiyor' });
+  assert.deepStrictEqual([g.metrik.views, g.metrik.reach, g.metrik.likes, g.metrik.reels_skip_rate], [0, 3, null, null]);
+  assert.deepStrictEqual(g.yok, { likes: 'bos', comments: 'bos', reels_skip_rate: 'desteklenmiyor' });
   // readers: gozlemler by media and by days; medyaSon answers from the row, the series measurement copies the new fields
   assert.strictEqual(I.gozlemler('h', { kok, simdi: T0, mediaId: 'R' }).length, 1);
   assert.strictEqual(I.gozlemler('h', { kok, simdi: T0 + 3 * GUN, gun: 1 }).length, 0);
