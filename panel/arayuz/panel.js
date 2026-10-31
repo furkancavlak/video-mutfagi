@@ -498,6 +498,9 @@ function kanalBlokCiz() {
 // machine without snapshots) the page falls back to the account's posts as the calendar sees them.
 let TK = null;                                     // follower count answer for the selected channel
 let ISV = null, istGun = 7, istGrafik = 'views', istSira = { k: 't', yon: -1 };
+// the Takip column: istDuzenle = the cell being typed into ({id, deger}); istTakipFiltre = only the reels older than 7 days
+// without a real number; istKitle = whose demographics the Kitle section shows (followers or engaged accounts)
+let istDuzenle = null, istTakipFiltre = false, istKitle = 'takipci';
 const sayiKart = (baslik, deger, alt, ipucu) => `<div class="kart sk"><span class="sk-ad">${esc(baslik)}</span><b class="sk-deger${deger === '—' ? ' yok' : ''}">${deger}</b>${alt ? `<span class="sk-alt">${alt}</span>` : ''}${ipucu ? `<span class="sk-ipucu">${esc(ipucu)}</span>` : ''}</div>`;
 function paylasimlar() {
   const G = igGonderiler();
@@ -513,6 +516,7 @@ function icerikler() {
     return { id: v.id, t: v.yayin ? new Date(v.yayin) : null, baslik: v.dizi ? v.dizi.baslik : v.baslik || 'Video', bolum: v.dizi ? `Bölüm ${v.dizi.n}/${v.dizi.toplam}` : '', konu: v.konu || null, ton: v.ton || null,
       kapak: v.video ? klasor(v.video) : null, link: guvenli(v.link), slot: v.slot || null, views: s.views ?? null, reach: s.reach ?? null, likes: s.likes ?? null, comments: s.comments ?? null, saved: s.saved ?? null, shares: s.shares ?? null, etk: et,
       s1: v.v1s ?? null, s24: v.v24s ?? null, s48: v.v48s ?? null, oran: v.izlenme_orani != null ? v.izlenme_orani * 100 : null, sure: s.ort_izleme_sn ?? null, uzunluk: v.sure_sn ?? null,
+      takip: v.takip ?? null, takipElle: !!v.takip_elle, takipTahmini: v.takip_tahmini ?? null, takipSira: v.takip_elle ? v.takip : v.takip_tahmini ?? null, acilis: v.acilis || null,
       egri: (v.egri || []).map(([z, n]) => ({ t: new Date(z), v: n })) };
   });
   const B = bolumler();
@@ -522,7 +526,7 @@ function icerikler() {
     return { id: g.id, t: new Date(g.zaman), baslik: ep ? (ep.d.baslik_kisa || ep.d.baslik) : g.baslik || 'Video', bolum: ep ? `Bölüm ${ep.b.n}/${(ep.d.bolumler || []).length}` : '',
       konu: ep ? ep.d.konu || null : null, ton: ep ? ep.d.ton || null : null, kapak: ep ? (AS[bolumKlasor(ep.d, ep.b)] ? bolumKlasor(ep.d, ep.b) : klasor(ep.b.video)) : null, link: guvenli(g.link), slot: null,
       views: g.views ?? null, reach: g.reach ?? null, likes: g.likes ?? null, comments: g.comments ?? null, saved: g.saved ?? null, shares: g.shares ?? null, etk: et,
-      s1: null, s24: null, s48: null, oran: null, sure: null, uzunluk: null, egri: [] };
+      s1: null, s24: null, s48: null, oran: null, sure: null, uzunluk: null, takip: null, takipElle: false, takipTahmini: null, takipSira: null, acilis: null, egri: [] };
   });
 }
 const yuzde = (a, b) => a == null || b == null || !b ? null : Math.round((a - b) / b * 100);
@@ -553,11 +557,47 @@ function cizgi(seri, etiket, kap) {
   return `<svg class="ig" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(etiket)}">${izgara}<path d="${alan}" class="ig-alan"/><polyline points="${yol.join(' ')}" class="ig-cizgi"/>${noktalar}${tarihler}</svg>`;
 }
 const istHataVar = () => !!(ISV && ISV.son_hata && (!ISV.son_anlik || ISV.son_hata.zaman >= ISV.son_anlik));
+// a reel the page asks a real follow count for: older than 7 days, none typed yet (only with the snapshots)
+const takipEksikMi = x => istVar() && !x.takipElle && x.t && Date.now() - x.t > 7 * 864e5;
+// the Takip cell: the typed number plain, else "≈ estimate" muted, else "—"; the cell being edited holds a number box
+function takipHucre(x) {
+  if (istDuzenle && istDuzenle.id === x.id) return `<td class="ist-takip duz"><input type="number" min="0" max="10000000" step="1" inputmode="numeric" class="ist-takip-gir" data-ist-takip-gir="${esc(x.id)}" value="${esc(istDuzenle.deger)}" aria-label="Gerçek takip sayısı" title="Enter kaydeder, Esc vazgeçer, boş bırakıp Enter silen"></td>`;
+  const ipucu = x.takipElle ? 'Elle girilen gerçek takip. Değiştirmek için tıkla.' : 'Tahmin: paylaşımdan sonraki ilk 24 saatte (ya da sonraki videoya kadar) takipçi artışı. Gerçeğini girmek için tıkla.';
+  const ic = x.takipElle ? esc(sayi(x.takip)) : x.takipTahmini != null ? `<span class="gri">≈ ${esc(sayi(x.takipTahmini))}</span>` : '<span class="gri">—</span>';
+  return istVar() ? `<td class="ist-takip" data-ist-takip="${esc(x.id)}" title="${esc(ipucu)}">${ic}</td>` : `<td>${ic}</td>`;
+}
+// the account's audience (kitle.json, refreshed once a day on the server) and the daily follow / reach split
+function kitleBolum() {
+  if (!istVar()) return '';
+  const K = ISV.kitle || null, src = K ? K[istKitle] || {} : {}, bos = '<div class="ince-yazi ist-veri-yok">veri yok</div>';
+  const top = o => Object.values(o || {}).reduce((a, v) => a + v, 0);
+  const satirlar = (L, toplam) => { const tepe = Math.max(1, ...L.map(x => x[1])); return L.map(([ad, v], i) => `<div class="ist-ic-s"><span title="${esc(ad)}">${esc(ad)}</span><i style="--w:${Math.round(v / tepe * 100)}%" class="${i === 0 ? 'ilk' : ''}"></i><b>${esc(sayi(v))}</b><small>${toplam ? '%' + Math.round(v / toplam * 100) : ''}</small></div>`).join(''); };
+  const kart = (baslik, ic, alt) => `<div class="kart ist-ic ist-kitle-kart"><h3>${esc(baslik)}${alt ? ` <small>${esc(alt)}</small>` : ''}</h3>${ic || bos}</div>`;
+  // cities: "Istanbul, Istanbul Province" -> "Istanbul"
+  const sehir = Object.entries(src.city || {}).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => [String(k).split(',')[0].trim(), v]);
+  const yas = Object.entries(src.age || {}).sort((a, b) => a[0].localeCompare(b[0], 'tr', { numeric: true }));
+  const CINS = { F: 'Kadın', M: 'Erkek', U: 'Belirtilmemiş' }, CRENK = { F: 'var(--tomato)', M: 'var(--sky)', U: 'var(--line-2)' };
+  const cins = Object.entries(src.gender || {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]), cTop = top(Object.fromEntries(cins));
+  const cinsHtml = cTop ? `<div class="ist-pay">${cins.map(([k, v]) => `<i style="flex:${v};background:${CRENK[k] || 'var(--herb)'}" title="${esc(CINS[k] || k)}"></i>`).join('')}</div><div class="ist-pay-ad">${cins.map(([k, v]) => `<span><i style="background:${CRENK[k] || 'var(--herb)'}"></i>${esc(CINS[k] || k)} <b>%${Math.round(v / cTop * 100)}</b></span>`).join('')}</div>` : '';
+  // online hours: 24 bars in the account's time zone (as Graph gives them); the channel's posting hours are marked
+  const S = (dzGecerli() && DZ.ayar && Array.isArray(DZ.ayar.saatler) && DZ.ayar.saatler.length ? DZ.ayar.saatler : ((kuyrukOf(takvimKaynak() || 'yerel') || {}).saatler || [])).map(s => +String(s).split(':')[0]);
+  const C = K && K.cevrimici, cTepe = C ? Math.max(1, ...Object.values(C)) : 1;
+  const saatHtml = C ? `<div class="ist-saatler">${Array.from({ length: 24 }, (_, h) => { const v = C[String(h)] ?? null; return `<div class="ist-saat${S.includes(h) ? ' paylasim' : ''}" title="${String(h).padStart(2, '0')}:00 · ${v == null ? '—' : esc(sayi(v)) + ' takipçi çevrimiçi'}${S.includes(h) ? ' · paylaşım saati' : ''}"><i style="height:${v == null ? 2 : Math.max(4, v / cTepe * 100)}%"></i><span>${h % 3 === 0 ? h : ''}</span></div>`; }).join('')}</div><div class="ince-yazi">Saatler hesabın saat diliminde. Yeşil çubuklar şu anki paylaşım saatleri.</div>` : '';
+  // the period's reach split and the daily follows in / out
+  const G = (ISV.gunluk || []), eT = G.reduce((a, g) => a + (g.erisim_takipci || 0), 0), eD = G.reduce((a, g) => a + (g.erisim_takipci_degil || 0), 0);
+  const erisimHtml = eT + eD ? `<div class="ist-pay"><i style="flex:${eT};background:var(--herb)" title="Takipçiler"></i><i style="flex:${eD};background:var(--sky)" title="Takipçi olmayanlar"></i></div><div class="ist-pay-ad"><span><i style="background:var(--herb)"></i>Takipçiler <b>%${Math.round(eT / (eT + eD) * 100)}</b></span><span><i style="background:var(--sky)"></i>Takipçi olmayanlar <b>%${Math.round(eD / (eT + eD) * 100)}</b></span></div><div class="ince-yazi">Seçili dönemin günlük erişimleri toplandı.</div>` : '';
+  const TG = G.filter(g => g.takip_gelen != null || g.takip_giden != null), tTepe = Math.max(1, ...TG.map(g => Math.max(g.takip_gelen || 0, g.takip_giden || 0)));
+  const takipHtml = TG.length ? `<div class="ist-ciftler">${G.map(g => `<div class="ist-cift" title="${esc(new Date(g.gun + 'T12:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }))} · +${esc(sayi(g.takip_gelen ?? 0))} / -${esc(sayi(g.takip_giden ?? 0))}"><span class="ist-cift-c"><i class="gelen" style="height:${(g.takip_gelen || 0) / tTepe * 100}%"></i><i class="giden" style="height:${(g.takip_giden || 0) / tTepe * 100}%"></i></span></div>`).join('')}</div><div class="ist-pay-ad"><span><i style="background:var(--herb)"></i>Takip eden <b>${esc(sayi(TG.reduce((a, g) => a + (g.takip_gelen || 0), 0)))}</b></span><span><i style="background:var(--tomato)"></i>Bırakan <b>${esc(sayi(TG.reduce((a, g) => a + (g.takip_giden || 0), 0)))}</b></span></div>` : '';
+  return `<h2 class="bolum">Kitle${K && K.zaman ? ` <span class="say" title="${esc(tarih(K.zaman))}">${esc(kacOnce(K.zaman))}</span>` : ''}</h2>
+    <div class="secici ist-kitle-sec"><button data-ist-kitle="takipci" class="${istKitle === 'takipci' ? 'on' : ''}">Takipçiler</button><button data-ist-kitle="etkilesim" class="${istKitle === 'etkilesim' ? 'on' : ''}">Etkileşenler</button></div>
+    <div class="ist-kitle">${kart('Şehirler', sehir.length ? satirlar(sehir, top(src.city)) : '', 'ilk 8')}${kart('Yaş', yas.length ? satirlar(yas, top(src.age)) : '')}${kart('Cinsiyet', cinsHtml)}
+      ${kart('Çevrimiçi saatler', saatHtml, 'takipçiler')}${kart('Erişim: takipçi mi?', erisimHtml, istGun === 1 ? 'son 24 saat' : `son ${istGun} gün`)}${kart('Günlük takip', takipHtml, 'gelen / giden')}</div>`;
+}
 // how long ago, in the page's words: "az önce", "N dk önce", "N sa önce"
 const kacOnce = t => { const dk = Math.floor(Math.max(0, Date.now() - new Date(t)) / 6e4); return dk < 1 ? 'az önce' : dk < 60 ? `${dk} dk önce` : `${Math.floor(dk / 60)} sa önce`; };
 function istatistikSayfaCiz() {
   const el = $('#s-istatistik'); if (!el) return;
-  $('#ist-donem button').forEach(b => b.classList.toggle('on', +b.dataset.istGun === istGun || (b.dataset.istGun === 'ozel' && ![1, 3, 7, 15, 28, 90].includes(istGun))));
+  $$('#ist-donem button').forEach(b => b.classList.toggle('on', +b.dataset.istGun === istGun || (b.dataset.istGun === 'ozel' && ![1, 3, 7, 15, 28, 90].includes(istGun))));
   { const oz = $('#ist-ozel'); if (oz) oz.textContent = [1, 3, 7, 15, 28, 90].includes(istGun) ? 'Özel' : `Özel: ${istGun} gün`; }
   const zaman = istVar() ? ISV.son_anlik : IG && IG.zaman, sonVeri = istVar() && ISV.son_veri;
   $('#ist-zaman').textContent = sonVeri ? `Son veri: ${kacOnce(sonVeri)}` : zaman ? `son güncelleme: ${saat(zaman)}${ayniGun(zaman, Date.now()) ? '' : ' · ' + gunTarih(zaman)}` : '';
@@ -588,14 +628,16 @@ function istatistikSayfaCiz() {
     etiket = 'Günlük izlenme'; if (!G) not = 'Saatlik ölçüm gelene kadar: o gün paylaşılan videoların bugüne kadarki izlenmesi.';
   } else { seri = G ? gunler.map(d => { const x = gBul(d); return { t: d, v: x && x.takipci != null ? x.takipci : null }; }) : []; etiket = 'Takipçi'; }
   const grafikBos = `<div class="liste-bos ince">—<br><span class="ince-yazi">${istGrafik === 'views' ? (G ? 'Bu dönem için ölçüm yok.' : 'Bu dönemde paylaşım yok.') : 'Takipçi geçmişi saatlik ölçüm birikince görünür.'}</span></div>`;
-  // the content table, sortable
-  const S = istSira, sirali = [...bu].sort((a, b) => { const x = a[S.k], y = b[S.k]; return (x == null) - (y == null) || (x == null ? 0 : (typeof x === 'string' ? x.localeCompare(y, 'tr') : x - y) * S.yon); });
-  const kol = [['baslik', 'Video'], ['t', 'Tarih'], ['views', 'İzlenme'], ['s24', '24 saat'], ['oran', 'Ort. izlenme %'], ['likes', 'Beğeni'], ['comments', 'Yorum'], ['saved', 'Kayıt'], ['shares', 'Paylaşım']];
+  // the content table, sortable; the strip above it filters to the reels still waiting for a real follow count
+  const eksik = T.filter(takipEksikMi); if (!eksik.length) istTakipFiltre = false;
+  const serit = eksik.length ? `<button class="ist-takip-serit${istTakipFiltre ? ' on' : ''}" data-ist-takip-filtre>${ikon('kalem', 15)}<span>Gerçek takip sayısı girilmemiş <b>${eksik.length}</b> video var (7 günden eski)</span><span class="serit-git">${istTakipFiltre ? 'Filtreyi kaldır' : 'Göster'}</span></button>` : '';
+  const S = istSira, sirali = [...(istTakipFiltre ? eksik : bu)].sort((a, b) => { const x = a[S.k], y = b[S.k]; return (x == null) - (y == null) || (x == null ? 0 : (typeof x === 'string' ? x.localeCompare(y, 'tr') : x - y) * S.yon); });
+  const kol = [['baslik', 'Video'], ['t', 'Tarih'], ['views', 'İzlenme'], ['s24', '24 saat'], ['oran', 'Ort. izlenme %'], ['likes', 'Beğeni'], ['comments', 'Yorum'], ['saved', 'Kayıt'], ['shares', 'Paylaşım'], ['takipSira', 'Takip']];
   const hucre = v => v == null ? '<span class="gri">—</span>' : esc(sayi(Math.round(v)));
   const tablo = sirali.length ? `<div class="ist-tablo-sar"><table class="ist-tablo"><thead><tr>${kol.map(([k2, a]) => `<th data-ist-sira="${k2}" class="${S.k === k2 ? 'on' : ''}${k2 === 'baslik' ? ' sol' : ''}">${a}${S.k === k2 ? (S.yon > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead><tbody>
     ${sirali.map(x => `<tr data-ist-video="${esc(x.id)}"><td class="sol"><span class="ist-v">${kucukKapak({ kapak: x.kapak, konu: x.konu, mp4: null, link: x.link, durum: 'paylasildi' })}<span><b>${esc(x.baslik)}</b>${x.bolum ? `<small>${esc(x.bolum)}</small>` : ''}</span></span></td>
       <td>${esc(x.t.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }))} <small>${esc(saat(x.t))}</small></td><td><b>${hucre(x.views)}</b></td><td>${hucre(x.s24)}</td><td>${x.oran == null ? '<span class="gri">—</span>' : '%' + esc(Math.round(x.oran))}</td>
-      <td>${hucre(x.likes)}</td><td>${hucre(x.comments)}</td><td>${hucre(x.saved)}</td><td>${hucre(x.shares)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="liste-bos">Bu dönemde paylaşılan video yok.</div>';
+      <td>${hucre(x.likes)}</td><td>${hucre(x.comments)}</td><td>${hucre(x.saved)}</td><td>${hucre(x.shares)}</td>${takipHucre(x)}</tr>`).join('')}</tbody></table></div>` : '<div class="liste-bos">Bu dönemde paylaşılan video yok.</div>';
   // series: episode bars with the change between episodes and the decision
   const DL = istVar() ? (ISV.diziler || []).map(d => ({ d, B: (d.bolumler || []).map(b => ({ n: b.n, v: b.views, p: b.dusus != null ? Math.round(b.dusus * 100) : null, karar: b.karar && b.karar !== 'bekle' ? b.karar : null })) }))
     : (dzGecerli() ? DZ.diziler.filter(d => (d.bolumler || []).some(b => bolumIzlenme(b) != null)) : []).map(d => ({ d, B: (d.bolumler || []).map(b => ({ n: b.n, v: bolumIzlenme(b), p: bolumDegisim(d, b), karar: b.karar && b.karar !== 'bekle' ? b.karar : null, neden: b.karar_neden })) }));
@@ -613,20 +655,40 @@ function istatistikSayfaCiz() {
   $('#ist-icerik').innerHTML = `${banner}<div class="sayilar ist-kpi">${kpi}</div>
     <div class="kart ist-grafik-kart"><div class="gk-ust"><b>${etiket}</b><div class="secici" id="ist-grafik-sec"><button data-ist-grafik="views" class="${istGrafik === 'views' ? 'on' : ''}">İzlenme</button><button data-ist-grafik="takipci" class="${istGrafik === 'takipci' ? 'on' : ''}">Takipçi</button></div></div>
       <div id="ist-grafik"></div>${not ? `<div class="ince-yazi">${esc(not)}</div>` : ''}</div>
-    <h2 class="bolum">İçerikler <span class="say">${bu.length}</span></h2>${tablo}
+    <h2 class="bolum">İçerikler <span class="say">${istTakipFiltre ? eksik.length : bu.length}</span></h2>${serit}${tablo}
     <h2 class="bolum">Hikâyeler</h2><div class="ist-hikler">${hik}</div>
     <h2 class="bolum">Ne işe yarıyor?</h2>${cik.length ? `<div class="ist-sonuc">${ikon('ileri', 16)}${esc(cik.join(', ').replace(/^./, c => c.toLocaleUpperCase('tr')))}.</div>` : ''}
-    <div class="ist-icgoru">${grupHtml('Konuya göre ortalama izlenme', gKonu)}${grupHtml('Tona göre ortalama izlenme', gTon)}${grupHtml('Saate göre ortalama izlenme', gSlot, istVar() ? '24. saatteki izlenme' : '')}</div>`;
+    <div class="ist-icgoru">${grupHtml('Konuya göre ortalama izlenme', gKonu)}${grupHtml('Tona göre ortalama izlenme', gTon)}${grupHtml('Saate göre ortalama izlenme', gSlot, istVar() ? '24. saatteki izlenme' : '')}</div>
+    ${kitleBolum()}`;
   $('#ist-grafik').innerHTML = cizgi(seri, etiket) || grafikBos;   // drawn after the box exists, at its real width
   const sar = $('#ist-icerik .ist-tablo-sar'); if (sar) sar.scrollLeft = kay.x;
   if (window.scrollY !== kay.y) window.scrollTo(0, kay.y);
+  const gir = $('#ist-icerik .ist-takip-gir'); if (gir && document.activeElement !== gir) { gir.focus({ preventScroll: true }); gir.select(); }
+}
+// the Takip cell: click opens the number box, Enter saves (empty = clear), Esc cancels; the page redraws in place
+function istTakipAc(id) { const x = icerikler().find(v => v.id === id); if (!x) return; istDuzenle = { id, deger: x.takipElle ? String(x.takip) : '' }; istatistikSayfaCiz(); }
+function istTakipVazgec() { if (!istDuzenle) return; istDuzenle = null; istatistikSayfaCiz(); }
+async function istTakipKaydet() {
+  if (!istDuzenle || istDuzenle.kayit) return;
+  const { id } = istDuzenle, ham = String(istDuzenle.deger).trim(), takip = ham === '' ? null : Number(ham);
+  if (takip !== null && !(Number.isInteger(takip) && takip >= 0 && takip <= 1e7)) return bildir('Takip 0 ile 10.000.000 arasında bir tam sayı olmalı', true);
+  // the numbers come from the server in server mode, so the real count is written there too
+  const sv = !!istMakine('istatistik');
+  if (sv && !svOzellik('istatistik-takip')) return bildir('Sunucudaki panel bu özelliği henüz bilmiyor: sunucuyu güncelle.', true);
+  istDuzenle.kayit = true;
+  try {
+    await api('istatistik/takip', { hesap: hesapAd(kanalHesap()), media_id: id, takip, ...(sv ? { makine: 'sunucu' } : {}) });
+    const v = ISV && (ISV.videolar || []).find(y => y.id === id); if (v) { v.takip = takip; v.takip_elle = takip !== null; }
+    istDuzenle = null; istatistikSayfaCiz(); bildir(takip === null ? 'Takip sayısı silindi' : 'Takip sayısı kaydedildi ✓');
+  } catch (e) { if (istDuzenle) istDuzenle.kayit = false; bildir(e.message, true); }
 }
 // a video's detail: every number and its growth curve (views over hours since posting)
 function istVideoAc(id) {
   const x = icerikler().find(v => v.id === id); if (!x) return;
   const n = (a, v) => `<div><b>${v == null ? '—' : esc(typeof v === 'string' ? v : sayi(Math.round(v)))}</b><span>${a}</span></div>`;
   pencere(pUst(x.baslik + (x.bolum ? ' · ' + x.bolum : '')) + `<div class="ince-yazi">${x.t ? esc(x.t.toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) : ''}${x.konu ? ' · ' + esc(konuAd(x.konu)) : ''}${x.ton ? ' · ' + esc(TON_ADI[x.ton] || x.ton) : ''}${x.slot ? ' · ' + esc(x.slot) + ' saati' : ''}</div>
-    <div class="m-rakam ist-rakam">${n('izlenme', x.views)}${n('erişim', x.reach)}${n('1. saat', x.s1)}${n('24. saat', x.s24)}${n('48. saat', x.s48)}${n('ort. izlenme', x.sure == null ? null : sureYaz(x.sure))}${n('izlenme oranı', x.oran == null ? null : '%' + Math.round(x.oran))}${n('beğeni', x.likes)}${n('yorum', x.comments)}${n('kayıt', x.saved)}${n('paylaşım', x.shares)}${n('video süresi', x.uzunluk == null ? null : sureYaz(x.uzunluk))}</div>
+    ${x.acilis ? `<blockquote class="ist-acilis">${esc(x.acilis)}</blockquote>` : ''}
+    <div class="m-rakam ist-rakam">${n('takip', x.takipElle ? x.takip : x.takipTahmini == null ? null : '≈ ' + sayi(x.takipTahmini))}${n('izlenme', x.views)}${n('erişim', x.reach)}${n('1. saat', x.s1)}${n('24. saat', x.s24)}${n('48. saat', x.s48)}${n('ort. izlenme', x.sure == null ? null : sureYaz(x.sure))}${n('izlenme oranı', x.oran == null ? null : '%' + Math.round(x.oran))}${n('beğeni', x.likes)}${n('yorum', x.comments)}${n('kayıt', x.saved)}${n('paylaşım', x.shares)}${n('video süresi', x.uzunluk == null ? null : sureYaz(x.uzunluk))}</div>
     <h3 class="ist-alt-baslik">Paylaşımdan sonraki saatlerde izlenme</h3><div id="ist-egri"></div>
     ${x.link ? `<div class="p-alt"><a class="dugme" href="${esc(x.link)}" target="_blank" rel="noopener">${ikon('dis', 14)}Instagram’da aç</a></div>` : ''}`);
   const e = x.egri.filter(p => p.v != null && x.t), seri = e.map(p => ({ t: p.t, v: p.v, etiket: `${Math.max(0, Math.round((p.t - x.t) / 36e5))}. sa` }));
@@ -1255,6 +1317,8 @@ async function islem(yol, govde, mesaj) { try { await api(yol, govde); bildir(me
 document.addEventListener('click', e => {
   const b = e.target.closest('button,[data-kapat]');
   if (!b) {
+    if (e.target.closest('td.ist-takip.duz')) return;   // typing a follow count, not opening the video
+    const tc = e.target.closest('td[data-ist-takip]'); if (tc) return istTakipAc(tc.dataset.istTakip);
     const v = !e.target.closest('a') && e.target.closest('tr[data-ist-video]'); if (v) return istVideoAc(v.dataset.istVideo);
     const th = e.target.closest('th[data-ist-sira]'); if (th) { istSira = { k: th.dataset.istSira, yon: istSira.k === th.dataset.istSira ? -istSira.yon : (th.dataset.istSira === 'baslik' ? 1 : -1) }; return istatistikSayfaCiz(); }
     const h = !e.target.closest('a') && e.target.closest('.gun-h[data-gun]'); if (h) gunAc(h.dataset.gun); return;
@@ -1273,6 +1337,8 @@ document.addEventListener('click', e => {
     istGun = g; ISV = null; istatistikSayfaCiz(); istatistikYukle();
   }
   else if (d.istGrafik) { istGrafik = d.istGrafik; istatistikSayfaCiz(); }
+  else if (d.istKitle) { istKitle = d.istKitle; istatistikSayfaCiz(); }
+  else if (d.istTakipFiltre !== undefined) { istTakipFiltre = !istTakipFiltre; istatistikSayfaCiz(); }
   else if (d.istSira) { istSira = { k: d.istSira, yon: istSira.k === d.istSira ? -istSira.yon : (d.istSira === 'baslik' ? 1 : -1) }; istatistikSayfaCiz(); }
   else if (d.tkGorunum) { if (d.tkGorunum !== tkGorunum) { tkGorunum = d.tkGorunum; ayKaydir = 0; try { localStorage.setItem('vm-takvim', tkGorunum); } catch {} takvimCiz(); } }
   else if (d.durumF) { durumFiltre = d.durumF; takvimCiz(); }
@@ -1314,6 +1380,13 @@ document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.zaman && t.value) islem('kuyruk/zaman', { id: t.dataset.zaman, makine: t.dataset.makine, zaman: ofsetli(t.value) }, 'Saat değişti');
   if (t.id === 'kanal-sec') { DZ = null; dzKirli = false; kanal = t.value; try { localStorage.setItem('vm-kanal', kanal); } catch {} IG = null; TK = null; SV = null; AS = {}; HV = null; ISV = null; onIslenen.clear(); Object.keys(onImza).forEach(k => onImza[k] = null); yukle(); if ($('#s-onaylar').classList.contains('on')) { havuzYukle.t = Date.now(); havuzYukle(); } }
+});
+// the Takip number box
+document.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.istTakipGir !== undefined && istDuzenle) istDuzenle.deger = e.target.value; });
+document.addEventListener('keydown', e => {
+  if (!(e.target.dataset && e.target.dataset.istTakipGir !== undefined)) return;
+  if (e.key === 'Enter') { e.preventDefault(); istTakipKaydet(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); istTakipVazgec(); }
 });
 // the line chart's hover card
 document.addEventListener('mouseover', e => {

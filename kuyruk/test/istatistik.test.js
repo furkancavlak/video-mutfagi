@@ -34,14 +34,15 @@ test('anlik: one line with followers, reel metrics, recent comments; an unsuppor
   assert.deepStrictEqual([reel.id, reel.tur, reel.baslik, reel.views, reel.ig_reels_avg_watch_time, 'ig_reels_video_view_total_time' in reel], ['1', 'reel', 'İlk bölüm', 10, 21500, false]);
   assert.deepStrictEqual(reel.yorumlar, ['Devamı gelsin!', 'harika']);
   assert.deepStrictEqual([r.medya[1].tur, 'views' in r.medya[1]], ['image', false], 'only reels get insights');
-  assert.deepStrictEqual(r.hesap_insight, { reach: 77, profile_views: 77, views: 77, accounts_engaged: 77 });
+  assert.deepStrictEqual(r.hesap_insight, { reach: 77, profile_views: 77, views: 77, accounts_engaged: 77, takip_gelen: null, takip_giden: null, erisim_takipci: null, erisim_takipci_degil: null }, 'a plain total cannot be split by follow_type');
   const satir = fs.readFileSync(path.join(kok, 'kayit', 'istatistik', 'hesap_a', '2026-11.jsonl'), 'utf8').trim().split('\n');
   assert.strictEqual(satir.length, 1);
   assert.ok(!satir[0].includes('GIZLI'), 'no token in the file');
-  // within 55 min: the account part is skipped; only the 2.5 h old reel is due again (10 min cadence)
+  // within 55 min: the account part is skipped; only the 2.5 h old reel is due again (10 min cadence), and while it is
+  // younger than 6 h the follower count is read too
   const once = P.cagri.length;
   assert.strictEqual((await I.anlik({ hesap: 'hesap_a', kok, P, simdi: T0 + 30 * 60e3 })).atlandi, true);
-  assert.deepStrictEqual(P.cagri.slice(once).map(c => c[0]), ['/1/insights']);
+  assert.deepStrictEqual(P.cagri.slice(once), [['/me', 'followers_count'], ['/1/insights', P.cagri[P.cagri.length - 1][1]]]);
   // next hour: the refused metric is no longer asked; one insights call per reel
   const P2 = sahteP({ ret: ['ig_reels_video_view_total_time'] });
   await I.anlik({ hesap: 'hesap_a', kok, P: P2, simdi: T0 + 61 * 60e3 });

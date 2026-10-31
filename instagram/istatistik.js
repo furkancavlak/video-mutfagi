@@ -17,6 +17,13 @@
 //      medya: [{id, t, baslik, link, tur, olcum?, views, reach, ..., ig_reels_avg_watch_time (ms), yorumlar?: [text]}]}
 //     an account API error writes {zaman, hesap, hata} and the account part waits for the next hour.
 //   desteklenmeyen.json    {"<api>|<media type>|<metric>": {kod, mesaj, zaman}}: metrics Graph refused, asked again after 24 h
+//                          (account metrics under the type "hesap"; a breakdown call as "<metric>:<breakdown>")
+//   takipci-<YYYY-MM>.jsonl the follower series {v: 2, zaman, takipci}: every run while a reel is younger than 6 h (one
+//                          /me call), plus the follower count of every account part, so the series has no hourly holes
+//   kitle.json             audience, refreshed once a day (>= 20 h after the last refresh that brought anything):
+//     {zaman, takipci: {city, age, gender}, etkilesim: {city, age, gender}, cevrimici: {"0": n, ..., "23": n} | null}
+//     each part is fetched on its own; a failed one keeps its previous value
+//   takip-elle.json        real follows per reel typed in the panel: {"<media_id>": {takip, zaman}}
 // The token is never printed or stored here.
 const fs = require('fs'), path = require('path'), os = require('os');
 const ortak = require('../konu/ortak');   // yazJson (tmp + rename), kilitAl
@@ -36,6 +43,9 @@ const DESTEKSIZ_SURE = 24 * SAAT;
 const METRIKLER = ['views', 'reach', 'likes', 'comments', 'saved', 'shares', 'total_interactions', 'ig_reels_avg_watch_time', 'ig_reels_video_view_total_time', 'reels_skip_rate'];   // crossposted_views / facebook_views: Graph answers 'Fatal' (-1) for this account (31.10)
 const HESAP_METRIK = ['reach', 'profile_views', 'views', 'accounts_engaged'];
 const YORUM_SAAT = 72, YORUM_EN_FAZLA = 50;
+const GENC_REEL = 6 * SAAT;                         // while a reel is this young the follower count is read on every run
+const KITLE_ARALIK = 20 * SAAT, KITLE_KIRILIM = ['city', 'age', 'gender'];
+const TAKIP_BOSLUK = 3 * SAAT, TAKIP_PENCERE = 24 * SAAT, TAKIP_ESKI = 7 * GUN, TAKIP_EN_FAZLA = 1e7;
 const ID = /^[\w.-]+$/;
 
 const dizin = (kok, hesap) => path.join(kok, 'kayit', 'istatistik', hesap);
@@ -118,6 +128,79 @@ function desteksizMi(e) {
   return kod === 100 && /metric/i.test(s.replace(/^\w+ \/\S*: /, ''));
 }
 
+// ---------------------------------------------------------------- account insight answers
+// a breakdown answer -> {dimension: value}. Graph's shape: total_value.breakdowns[0].results[] = {dimension_values: [...],
+// value} (several dimensions are joined with '|'); a value that is already a {key: n} map is taken as is. null = neither
+// (e.g. a plain total without a breakdown); {} = a breakdown with no rows.
+function kirilim(d) {
+  if (!d || typeof d !== 'object') return null;
+  const b = d.total_value && Array.isArray(d.total_value.breakdowns) ? d.total_value.breakdowns[0] : null;
+  if (b && Array.isArray(b.results)) {
+    const o = {};
+    for (const r of b.results) {
+      if (!r || typeof r !== 'object') continue;
+      const k = (Array.isArray(r.dimension_values) ? r.dimension_values : [r.dimension_values]).filter(x => x != null && x !== '').join('|'), v = sayi(r.value);
+      if (k && v != null) o[k] = (o[k] || 0) + v;
+    }
+    return o;
+  }
+  const v = Array.isArray(d.values) && d.values.length ? d.values[d.values.length - 1].value : d.total_value && d.total_value.value;
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = {}; for (const [k, x] of Object.entries(v)) { const n = sayi(x); if (n != null) o[k] = n; }
+  return o;
+}
+// follow_type rows -> [followers, non-followers]. For reach they are the two audiences; for follows_and_unfollows Graph
+// labels the follows FOLLOWER and the unfollows NON_FOLLOWER (FOLLOWS / UNFOLLOWS are accepted too). Unknown keys are left out.
+function takipTuru(o) {
+  if (!o) return [null, null];
+  let a = null, b = null;
+  for (const [k, v] of Object.entries(o)) {
+    const K = String(k).toUpperCase();
+    if (/^(NON_?FOLLOWERS?|UNFOLLOWS?|UNFOLLOWERS?)$/.test(K)) b = (b || 0) + v;
+    else if (/^(FOLLOWERS?|FOLLOWS?)$/.test(K)) a = (a || 0) + v;
+  }
+  return [a, b];
+}
+// online_followers: the newest values[] entry whose value is a non-empty {hour: count} map; hours are in the account's
+// time zone (Graph's own), stored raw. null while Graph sends {} (it does for small accounts).
+function cevrimiciOku(d) {
+  for (const x of [...((d && d.values) || [])].reverse()) {
+    const v = x && x.value;
+    if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+    const o = {}; for (const [h, n] of Object.entries(v)) if (/^\d{1,2}$/.test(h) && +h < 24 && sayi(n) != null) o[String(+h)] = sayi(n);
+    if (Object.keys(o).length) return o;
+  }
+  return null;
+}
+const kitleOku = (kok, hesap) => { if (!ID.test(hesap || '')) return null; const k = okuJ(path.join(dizin(kok, hesap), 'kitle.json'), null); return k && typeof k === 'object' && !Array.isArray(k) && k.zaman ? k : null; };
+// is the daily audience refresh due? (no kitle.json, an unreadable time, or >= 20 h since the last one)
+const kitleZamani = (k, simdi) => { const t = Date.parse(k && k.zaman); return !Number.isFinite(t) || simdi - t >= KITLE_ARALIK; };
+
+// ---------------------------------------------------------------- real follows typed in the panel
+const takipElleDosya = (kok, hesap) => path.join(dizin(kok, hesap), 'takip-elle.json');
+function takipElleOku(kok, hesap) {
+  if (!ID.test(hesap || '')) return {};
+  const j = okuJ(takipElleDosya(kok, hesap), {}), o = {};
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return o;
+  for (const [id, x] of Object.entries(j)) if (ID.test(id) && x && Number.isInteger(x.takip) && x.takip >= 0 && x.takip <= TAKIP_EN_FAZLA) o[id] = { takip: x.takip, zaman: x.zaman || null };
+  return o;
+}
+// the checks of a write: an id like the registry's, a whole number 0..1e7, or null to clear
+function takipElleGecerli({ hesap, media_id, takip }) {
+  if (!ID.test(hesap || '')) throw new Error('hesap adı geçersiz');
+  if (typeof media_id !== 'string' || !ID.test(media_id) || media_id.length > 80) throw new Error('video id geçersiz');
+  if (takip !== null && !(typeof takip === 'number' && Number.isInteger(takip) && takip >= 0 && takip <= TAKIP_EN_FAZLA)) throw new Error('takip 0 ile 10.000.000 arasında bir tam sayı olmalı');
+  return { hesap, media_id, takip };
+}
+// set (takip: integer) or clear (takip: null) one reel's real follows; written to a temp file and renamed
+function takipElleYaz({ kok = KOK0, hesap, media_id, takip, simdi = Date.now() } = {}) {
+  takipElleGecerli({ hesap, media_id, takip });
+  const f = takipElleDosya(kok, hesap), j0 = okuJ(f, {}), j = j0 && typeof j0 === 'object' && !Array.isArray(j0) ? j0 : {};
+  if (takip === null) delete j[media_id]; else j[media_id] = { takip, zaman: new Date(simdi).toISOString() };
+  ortak.yazJson(f, j);
+  return { ok: true, media_id, takip, zaman: takip === null ? null : j[media_id].zaman };
+}
+
 // ---------------------------------------------------------------- one run for one account
 // deps: P = instagram/paylas.js (graph, readAyar, API_SURUM), simdi
 async function anlik({ hesap = 'oxygbio', kok = KOK0, P, simdi = Date.now() } = {}) {
@@ -140,6 +223,32 @@ async function anlikIc({ hesap, kok, P, simdi, D }) {
   const desteksiz = (tur, m) => { const e = ds[`${api}|${tur}|${m}`]; return !!(e && simdi - Date.parse(e.zaman) < DESTEKSIZ_SURE); };
   const reddet = (tur, m, e) => { ds[`${api}|${tur}|${m}`] = { kod: hataKodu(e), mesaj: gizle(e.message || e).slice(0, 200), zaman }; };
   const kaydet = () => { ortak.yazJson(kayitF, R); ortak.yazJson(dsF, ds); };
+  // one /me/insights call that never throws: a metric Graph refuses is cached under hesap|<anahtar> (asked again after
+  // 24 h); yalinDa: when the breakdown itself is refused, ask once more without it (a {key: n} value still parses)
+  async function hesapSor(anahtar, q, yalinDa = false) {
+    if (desteksiz('hesap', anahtar)) return null;
+    const sor = async q2 => { const j = await P.graph('GET', '/me/insights', { ...q2, access_token: tok }); delete ds[`${api}|hesap|${anahtar}`]; return (j.data || [])[0] || null; };
+    try { return await sor(q); }
+    catch (e) {
+      if (yalinDa && q.breakdown && desteksizMi(e)) { const { breakdown, ...q2 } = q; try { return await sor(q2); } catch (e2) { if (desteksizMi(e2)) reddet('hesap', anahtar, e2); return null; } }
+      if (desteksizMi(e)) reddet('hesap', anahtar, e);
+      return null;
+    }
+  }
+  // the daily audience refresh: both demographics metrics per breakdown and the online hours, each on its own
+  async function kitleTazele() {
+    const kF = path.join(D, 'kitle.json'), K0 = kitleOku(kok, hesap);
+    if (!kitleZamani(K0, simdi)) return;
+    const K = { zaman, takipci: { ...((K0 && K0.takipci) || {}) }, etkilesim: { ...((K0 && K0.etkilesim) || {}) }, cevrimici: K0 ? K0.cevrimici ?? null : null };
+    let yeni = 0;
+    for (const [alan, metric] of [['takipci', 'follower_demographics'], ['etkilesim', 'engaged_audience_demographics']]) for (const b of KITLE_KIRILIM) {
+      const o = kirilim(await hesapSor(`${metric}:${b}`, { metric, period: 'lifetime', metric_type: 'total_value', timeframe: 'this_month', breakdown: b }));
+      if (o) { K[alan][b] = o; yeni++; }
+    }
+    const d = await hesapSor('online_followers', { metric: 'online_followers', period: 'lifetime' });
+    if (d) { K.cevrimici = cevrimiciOku(d); yeni++; }
+    if (yeni) ortak.yazJson(kF, K);   // nothing came back: asked again at the next account part
+  }
 
   // ---- account part (hourly)
   let hesapSatiri = null, liste = [];
@@ -153,6 +262,11 @@ async function anlikIc({ hesap, kok, P, simdi, D }) {
         try { const j = await P.graph('GET', '/me/insights', { metric: m, period: 'day', metric_type: 'total_value', access_token: tok }); const d = (j.data || [])[0]; if (d) hi[m] = insightDeger(d); delete ds[`${api}|hesap|${m}`]; }
         catch (e) { yok.push(m); if (desteksizMi(e)) reddet('hesap', m, e); }
       }
+      // the day's follows / unfollows and the follower vs non-follower reach (breakdown follow_type); null when unavailable
+      const [gelen, giden] = takipTuru(kirilim(await hesapSor('follows_and_unfollows', { metric: 'follows_and_unfollows', period: 'day', metric_type: 'total_value', breakdown: 'follow_type' }, true)));
+      const [eT, eD] = takipTuru(kirilim(await hesapSor('reach:follow_type', { metric: 'reach', period: 'day', metric_type: 'total_value', breakdown: 'follow_type' })));
+      Object.assign(hi, { takip_gelen: gelen, takip_giden: giden, erisim_takipci: eT, erisim_takipci_degil: eD });
+      await kitleTazele();
       // the listing, newest first, page by page until a page reaches past 60 days
       const sinir = simdi - LISTE_GUN * GUN;
       let sonra = null;
@@ -165,7 +279,7 @@ async function anlikIc({ hesap, kok, P, simdi, D }) {
         if (!sonra) break;
       }
       const takipci = Number.isFinite(Number(me.followers_count)) ? Number(me.followers_count) : null;
-      hesapSatiri = { kullanici: me.username || null, takipci, medya_sayisi: me.media_count ?? null, hesap_insight: Object.keys(hi).length ? hi : null, ...(yok.length ? { hesap_insight_yok: yok } : {}) };
+      hesapSatiri = { kullanici: me.username || null, takipci, medya_sayisi: me.media_count ?? null, hesap_insight: Object.values(hi).some(v => v != null) ? hi : null, ...(yok.length ? { hesap_insight_yok: yok } : {}) };
     } catch (e) {
       kaydet();
       return yazSatir({ zaman, hesap, hata: gizle(e.message || e) });
@@ -183,6 +297,13 @@ async function anlikIc({ hesap, kok, P, simdi, D }) {
   for (const { d, b } of diziBolumleri(kok, hesap)) {
     const id = String(b.media_id), k = R[id] = R[id] || {};
     Object.assign(k, { t: k.t || b.paylasildi || null, link: k.link || b.link || null, baslik: k.baslik || d.baslik_kisa || d.baslik || '', tur: k.tur || 'reel', dizi: d.id, bolum: b.n });
+  }
+
+  // ---- the follower series: every run while a reel is younger than 6 h (the account part brings its own count)
+  const takipF = ayDosyasi(kok, hesap, simdi, 'takipci-');
+  if (hesapSatiri) { if (hesapSatiri.takipci != null) ekle(takipF, { v: 2, zaman, takipci: hesapSatiri.takipci }); }
+  else if (Object.values(R).some(k => k.tur === 'reel' && (yasi(k, simdi) ?? Infinity) < GENC_REEL)) {
+    try { const me = await P.graph('GET', '/me', { fields: 'followers_count', access_token: tok }); const n = sayi(me && me.followers_count); if (n != null) ekle(takipF, { v: 2, zaman, takipci: n }); } catch (e) { }
   }
 
   // ---- media part: every reel that is due
@@ -291,10 +412,53 @@ function ara(noktalar, T, yayin, enAz = 0) {
   return p[0][1];
 }
 const seyrelt = (l, n = 100) => l.length <= n ? l : Array.from({ length: n }, (_, i) => l[Math.round(i * (l.length - 1) / (n - 1))]);
+// followers at time T from the series [[t, followers]] (oldest first): exact on a point, linear between two points at most
+// 3 h apart, null outside the series or inside a longer gap
+function takipAra(seri, T) {
+  if (!Number.isFinite(T) || !seri.length || T < seri[0][0] || T > seri[seri.length - 1][0]) return null;
+  for (let i = 0; i < seri.length; i++) {
+    const [t1, v1] = seri[i];
+    if (t1 === T) return v1;
+    if (t1 > T) { const [t0, v0] = seri[i - 1]; return t1 - t0 > TAKIP_BOSLUK ? null : v0 + (v1 - v0) * (T - t0) / (t1 - t0); }
+  }
+  return null;
+}
+// follow estimate of the reel posted at t: the follower gain from t to the next reel's posting time, at most t + 24 h.
+// It attributes every gain in that window to this reel (the profile, older reels and outside traffic land in it too) and
+// keeps losses: a negative number is real unfollowing. null while the window is not over or an end falls in a gap > 3 h.
+// yayinlar: posting times of every reel of the account, sorted.
+function takipTahmini(seri, yayinlar, t) {
+  if (!Number.isFinite(t)) return null;
+  const sonraki = yayinlar.find(x => x > t), son = Math.min(sonraki ?? Infinity, t + TAKIP_PENCERE);
+  const a = takipAra(seri, t), b = takipAra(seri, son);
+  return a == null || b == null ? null : Math.round(b - a);
+}
+// [[t, followers]] from rows with {zaman, takipci}, one value per time, oldest first
+const takipSerisi = (...kaynak) => { const m = new Map(); for (const l of kaynak) for (const x of l) { const t = Date.parse(x.zaman), v = sayi(x.takipci); if (Number.isFinite(t) && v != null) m.set(t, v); } return [...m].sort((a, b) => a[0] - b[0]); };
+// the first sentence of an episode text (eleven_v3 audio tags out; the sentence rule of dizi/uret-bolum.js cumleler), max 120 chars
+function acilisCumlesi(metin) {
+  const s = String(metin || '').replace(/\[[^\]]*\]\s*/g, '').replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  const m = /(?:(?<![.…])\.(?![.…])|[!?]+)["'”’)]*(?=\s|$)/.exec(s), c = m ? s.slice(0, m.index + m[0].length).trim() : s;
+  return c.length > 120 ? c.slice(0, 119).trimEnd() + '…' : c;
+}
+// an episode's identity card: the series record first (e = {d, b}), then what the panel read from its video folder (v)
+function kimlikKarti(e, v) {
+  v = v && typeof v === 'object' ? v : {};
+  const d = e ? e.d : {}, b = e ? e.b : {};
+  return {
+    acilis: acilisCumlesi(b.metin) || acilisCumlesi(v.metin),
+    bolum: e && Number.isInteger(b.n) ? b.n : sayi(v.bolum),
+    toplam_bolum: e && (d.bolumler || []).length ? d.bolumler.length : sayi(v.toplam_bolum),
+    ses: (d.anlatici && typeof d.anlatici.ses === 'string' && d.anlatici.ses) || (typeof v.ses === 'string' && v.ses) || null,
+    kapak_baslik: (typeof d.kapak_baslik === 'string' && d.kapak_baslik) || (typeof v.kapak_baslik === 'string' && v.kapak_baslik) || null,
+  };
+}
+const HESAP_KITLE = ['takip_gelen', 'takip_giden', 'erisim_takipci', 'erisim_takipci_degil'];
 const oran = (a, b) => (a == null || !b ? null : +(a / b).toFixed(4));
 
 // ek: { isler: queue jobs (paylasilan, with media_id/video/ne_zaman/paylasildi), diziler: series stores of this account,
-//       sure: video folder -> seconds }
+//       sure: video folder -> seconds, kimlik: video folder -> {metin, ses, bolum, toplam_bolum} from its video.json }
 function ozet({ kok = KOK0, hesap, gun = 28, simdi = Date.now(), ek = {} } = {}) {
   gun = Number.isInteger(+gun) && +gun >= 1 && +gun <= 365 ? +gun : 28;   // presets 1/3/7/15/28/90 or a custom day count
   const bas = simdi - gun * GUN, onceBas = simdi - 2 * gun * GUN;
@@ -343,8 +507,18 @@ function ozet({ kok = KOK0, hesap, gun = 28, simdi = Date.now(), ek = {} } = {})
       konu: e ? e.d.konu || null : null, ton: e ? e.d.ton || 'komik' : null,
       slot: j && (j.ne_zaman || j.paylasildi) ? `${String(saatIst(j.ne_zaman || j.paylasildi)).padStart(2, '0')}:00` : Number.isFinite(x.yayin) ? `${String(saatIst(x.yayin)).padStart(2, '0')}:00` : null,
       video: j ? j.video || null : null,
+      ...kimlikKarti(e, j && ek.kimlik ? ek.kimlik[j.video] : null),
     };
   }).sort((a, b) => Date.parse(b.yayin || 0) - Date.parse(a.yayin || 0));
+  // follows per reel: the estimate from the follower series and the real number typed in the panel (takip-elle.json).
+  // The series: the 10-minute reads, the account snapshots and the hourly lines, from an hour before the oldest reel.
+  const enEski = Math.min(onceBas - 2 * GUN, ...videolar.map(v => Date.parse(v.yayin)).filter(Number.isFinite)) - SAAT;
+  const tSeri = takipSerisi(ayliklar(kok, hesap, 'takipci-', enEski, simdi), enEski < onceBas - 2 * GUN ? ayliklar(kok, hesap, 'hesap-', enEski, simdi) : hs, iyi);
+  const yayinlar = [...new Set([...videolar.map(v => Date.parse(v.yayin)), ...Object.values(R).filter(k => k && k.tur === 'reel').map(k => Date.parse(k.t))].filter(Number.isFinite))].sort((a, b) => a - b);
+  const elle = takipElleOku(kok, hesap);
+  for (const v of videolar) { const m = elle[v.id]; v.takip_tahmini = takipTahmini(tSeri, yayinlar, Date.parse(v.yayin)); v.takip = m ? m.takip : null; v.takip_elle = !!m; }
+  // reels older than 7 days without a real number: the page asks for them, so they are sent even outside the period
+  const takipEksik = v => !v.takip_elle && Number.isFinite(Date.parse(v.yayin)) && simdi - Date.parse(v.yayin) > TAKIP_ESKI;
   // KPIs of a period [b, s)
   const kpi = (b, s) => {
     const icinde = videolar.filter(v => v.yayin && Date.parse(v.yayin) >= b && Date.parse(v.yayin) < s);
@@ -359,7 +533,10 @@ function ozet({ kok = KOK0, hesap, gun = 28, simdi = Date.now(), ek = {} } = {})
   const gunluk = [];
   for (let i = gun - 1; i >= 0; i--) {
     const T = simdi - i * GUN, g = gunIst(T), gBas = Date.parse(g + 'T00:00:00+03:00'), gSon = gBas + GUN;
-    gunluk.push({ gun: g, views: Math.max(0, toplamAn(Math.min(gSon, simdi)) - toplamAn(gBas)), takipci: takipciAn(Math.min(gSon, simdi)) });
+    // the account's day totals (follows in / out, reach by audience): the last snapshot of that day carries the day's value
+    const h = hs.filter(x => { const t = Date.parse(x.zaman); return t >= gBas && t < gSon && x.hesap_insight; }).pop(), hk = {};
+    if (h) for (const k of HESAP_KITLE) if (sayi(h.hesap_insight[k]) != null) hk[k] = sayi(h.hesap_insight[k]);
+    gunluk.push({ gun: g, views: Math.max(0, toplamAn(Math.min(gSon, simdi)) - toplamAn(gBas)), takipci: takipciAn(Math.min(gSon, simdi)), ...hk });
   }
   // per series: episodes in order with their views and the drop from the previous episode
   const diziler = (ek.diziler || []).map(d => {
@@ -376,14 +553,16 @@ function ozet({ kok = KOK0, hesap, gun = 28, simdi = Date.now(), ek = {} } = {})
     takipci: son ? son.takipci : null, hesap_insight: son ? son.hesap_insight || null : null, hesap_insight_yok: son ? son.hesap_insight_yok || [] : [],
     kpi: { donem: kpi(bas, simdi), onceki: kpi(onceBas, bas) },
     gunluk,
-    videolar: videolar.filter(v => donemde(v) || (v.egri.length && Date.parse(v.egri[v.egri.length - 1][0]) >= bas)),
+    videolar: videolar.filter(v => donemde(v) || (v.egri.length && Date.parse(v.egri[v.egri.length - 1][0]) >= bas) || takipEksik(v)),
+    takip_eksik: videolar.filter(takipEksik).length,
+    kitle: kitleOku(kok, hesap),
     diziler,
     konular: grupla(v => v.konu, v => v.son.views), tonlar: grupla(v => v.ton, v => v.son.views),
     slotlar: grupla(v => v.slot, v => v.v24s).sort((a, b) => a.ad.localeCompare(b.ad)),
   };
 }
 
-module.exports = { anlik, anliklar, sonAnlik, medyaSon, gozlemler, ozet, hesaplar, ara, kadans, zamaniGeldi, canlandi, desteksizMi, METRIKLER, ARALIK, KADANS, TOLERANS, CANLANMA_KAT, CANLANMA_EN_AZ };
+module.exports = { anlik, anliklar, sonAnlik, medyaSon, gozlemler, ozet, hesaplar, ara, kadans, zamaniGeldi, canlandi, desteksizMi, kirilim, takipTuru, cevrimiciOku, kitleZamani, takipAra, takipTahmini, acilisCumlesi, takipElleYaz, takipElleOku, takipElleGecerli, METRIKLER, ARALIK, KADANS, TOLERANS, CANLANMA_KAT, CANLANMA_EN_AZ, GENC_REEL, KITLE_ARALIK };
 
 if (require.main === module) {
   const argv = process.argv.slice(2), i = argv.indexOf('--hesap'), tek = i >= 0 ? argv[i + 1] : null;
