@@ -135,8 +135,9 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
     // 1. the weekly pool
     if (temalar.length) {
       const H = havuz.yukle(kok, ctx.kanal), esik = havuz.ayar(ctx).azaldi;
-      // a pool change is merged into the file as it is now (the panel's Ele / Öne al write it too)
-      const kaydetH = (x, alan) => { Object.assign(x, alan); return kilitle(() => { const T = havuz.yukle(kok, ctx.kanal), y = (T.hikayeler || []).find(z => z.id === x.id); if (y) { Object.assign(y, alan); havuz.kaydet(kok, ctx.kanal, T); } }); };
+      // a pool change is merged into the file as it is now (the panel's Ele / Öne al write it too); only a story still
+      // havuzda there is written, so a panel "Ele" made during the split wins (false = it was struck meanwhile)
+      const kaydetH = (x, alan) => { Object.assign(x, alan); return kilitle(() => { const T = havuz.yukle(kok, ctx.kanal), y = (T.hikayeler || []).find(z => z.id === x.id); if (!y || y.durum !== 'havuzda') return false; Object.assign(y, alan); havuz.kaydet(kok, ctx.kanal, T); return true; }); };
       for (const x of havuz.sirala(H, sira)) {
         if (kullanilan.has(x.id)) { await kaydetH(x, { durum: 'kullanildi' }); continue; }
         let h;
@@ -154,7 +155,10 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
           continue;
         }
         const r = await bol.bol(ctx, h, {});
-        if (r && r.ok) { await kaydetH(x, { durum: 'kullanildi', kullanildi: new Date(simdi).toISOString() }); return yeni(h, r, x.konu); }
+        if (r && r.ok) {
+          if (await kaydetH(x, { durum: 'kullanildi', kullanildi: new Date(simdi).toISOString() })) return yeni(h, r, x.konu);
+          not(`havuz ${x.id}: bölünürken panelden elendi, dizi açılmadı`); kullanilan.add(x.id); continue;
+        }
         await kaydetH(x, { durum: 'elendi', neden: (r && r.neden) || 'bölünemedi' });
         await reddet(h, r);
       }

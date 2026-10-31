@@ -518,3 +518,19 @@ test('series lock: a stale one (dead pid, or another host past 6 h) is taken ove
   assert.strictEqual(yukle(k, 'k').diziler[0].bolumler[0].durum, 'metin');
   fs.unlinkSync(f);
 });
+
+test('pool split: a story struck in the panel ("Ele") during the split stays struck and opens no series', async () => {
+  const { yeniDiziYap } = require('../calistir');
+  const Hv = require('../havuz');
+  const k = kok(); kaydet(k, 'k', { diziler: [] });
+  Hv.kaydet(k, 'k', { hikayeler: [{ id: 'eksi-1', konu: 'aşk', fav: 9, durum: 'havuzda', metin: 'a' }, { id: 'eksi-2', konu: 'aşk', fav: 1, durum: 'havuzda', metin: 'b' }] });
+  const bol = { bol: async (cx, h) => { if (h.id === 'eksi-1') Hv.ele(k, 'k', 'eksi-1', 'Furkan eledi'); return { ok: true, dizi: { id: h.id, kanal: 'k', durum: 'aktif', bolumler: [bolum(1), bolum(2)] } }; } };
+  const kaynak = { adaylar: async () => ({ ogeler: [], notlar: [] }) };
+  const sonuc = { notlar: [] };
+  const cx = { kanal: 'k', ayar: { dizi: { kaynak: { konular: [{ ad: 'aşk', basliklar: ['/ask--1'] }] } } } };
+  const d = await yeniDiziYap({ kaynak, bol, havuz: Hv })(cx, { simdi: SIMDI, diziler: [], kok: k, sonuc });
+  assert.strictEqual(d.id, 'eksi-2', 'the next pooled story is used instead');
+  const [x1, x2] = Hv.yukle(k, 'k').hikayeler;
+  assert.deepStrictEqual([x1.durum, x1.neden, x2.durum], ['elendi', 'Furkan eledi', 'kullanildi']);
+  assert.ok(sonuc.notlar.some(m => /eksi-1: bölünürken panelden elendi/.test(m)));
+});
