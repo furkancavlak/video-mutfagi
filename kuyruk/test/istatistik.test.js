@@ -38,10 +38,10 @@ test('anlik: one line with followers, reel metrics, recent comments; an unsuppor
   const satir = fs.readFileSync(path.join(kok, 'kayit', 'istatistik', 'hesap_a', '2026-11.jsonl'), 'utf8').trim().split('\n');
   assert.strictEqual(satir.length, 1);
   assert.ok(!satir[0].includes('GIZLI'), 'no token in the file');
-  // within 55 min: skipped, no call at all
+  // within 55 min: the account part is skipped; only the 2.5 h old reel is due again (10 min cadence)
   const once = P.cagri.length;
   assert.strictEqual((await I.anlik({ hesap: 'hesap_a', kok, P, simdi: T0 + 30 * 60e3 })).atlandi, true);
-  assert.strictEqual(P.cagri.length, once);
+  assert.deepStrictEqual(P.cagri.slice(once).map(c => c[0]), ['/1/insights']);
   // next hour: the refused metric is no longer asked; one insights call per reel
   const P2 = sahteP({ ret: ['ig_reels_video_view_total_time'] });
   await I.anlik({ hesap: 'hesap_a', kok, P: P2, simdi: T0 + 61 * 60e3 });
@@ -72,10 +72,11 @@ test('medyaSon: the newest snapshot numbers of a media when younger than 2 h, el
   assert.strictEqual(I.medyaSon(kok, 'h', '999', 2 * 3600e3, T0 + 3600e3), null);
 });
 
-test('ara: views at T interpolated between snapshots, from 0 at posting; null past the last point', () => {
+test('ara: views at T interpolated between snapshots, from 0 at posting; null past the last point and across a long gap', () => {
   const y = Date.parse('2026-11-01T10:00:00Z'), p = [[y + 2 * 3600e3, 200], [y + 26 * 3600e3, 1400]];
-  assert.strictEqual(I.ara(p, y + 3600e3, y), 100);
-  assert.strictEqual(I.ara(p, y + 24 * 3600e3, y), 1300);
+  assert.strictEqual(I.ara(p, y + 3600e3, y, 3600e3), 100, 'hourly source: 2 h after posting is inside 3 x 1 h + the listing hour');
+  assert.strictEqual(I.ara(p, y + 24 * 3600e3, y, 3600e3), null, 'a 24 h hole at 2 h of age says nothing');
+  assert.strictEqual(I.ara(p, y + 26 * 3600e3, y), 1400, 'on a point');
   assert.strictEqual(I.ara(p, y + 48 * 3600e3, y), null);
 });
 
@@ -83,7 +84,7 @@ test('ara: views at T interpolated between snapshots, from 0 at posting; null pa
 function yazAnliklar(kok, hesap) {
   const f = path.join(kok, 'kayit', 'istatistik', hesap); fs.mkdirSync(f, { recursive: true });
   const y1 = Date.parse('2026-10-28T09:00:00Z'), y2 = Date.parse('2026-10-30T14:00:00Z'), satir = [];
-  for (let h = 0; h <= 96; h += 6) {
+  for (let h = 0; h <= 96; h++) {   // hourly, like the real lines (ara leaves longer gaps empty)
     const t = y1 + h * 3600e3, m = [{ id: '11', t: new Date(y1).toISOString(), baslik: 'Ep 1', link: 'L1', tur: 'reel', views: 100 * h, reach: 80 * h, likes: h, comments: 1, saved: 1, shares: 0, ig_reels_avg_watch_time: 30000 }];
     if (t >= y2) m.push({ id: '12', t: new Date(y2).toISOString(), baslik: 'Ep 2', link: 'L2', tur: 'reel', views: 50 * (t - y2) / 3600e3, reach: 40, likes: 2, comments: 0, saved: 0, shares: 1, ig_reels_avg_watch_time: 20000 });
     satir.push(JSON.stringify({ zaman: new Date(t).toISOString(), hesap, takipci: 1000 + h, medya: m }));

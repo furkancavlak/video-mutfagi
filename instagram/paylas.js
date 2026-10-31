@@ -15,7 +15,8 @@
 const fs = require('fs'), path = require('path'), os = require('os'), http = require('http');
 const { spawn } = require('child_process');
 
-const API = 'https://graph.instagram.com/' + (process.env.IG_API_VERSION || 'v23.0');
+const API_SURUM = process.env.IG_API_VERSION || 'v23.0';   // also recorded with every statistics observation
+const API = 'https://graph.instagram.com/' + API_SURUM;
 const AYAR_DIR = path.join(os.homedir(), '.video-mutfagi');
 // one token file per account: oxygbio (default) keeps the original name, others get instagram-<hesap>.json
 // the name is normalised (strip @, trim, lowercase) and must be a plain account name: it becomes part of a file path
@@ -160,7 +161,7 @@ async function sonuc(mediaId, hesap) {
   return out;
 }
 
-module.exports = { gonder, sonuc, graph, readAyar, me, ayarYolu };
+module.exports = { gonder, sonuc, graph, readAyar, me, ayarYolu, API_SURUM };
 if (require.main !== module) return;
 
 (async () => {

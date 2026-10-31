@@ -35,7 +35,7 @@ test('kur: adds the line; reinstall replaces it (quoted path) instead of duplica
   z.kur('kanal_a'); z.kur('kanal_a'); z.kur('kanal_a');
   const l = d.tab.split('\n').filter(Boolean);
   assert.equal(l.length, 4);
-  assert.equal(l.filter(x => istatistikIsareti.test(x)).length, 1, 'one hourly statistics line');
+  assert.equal(l.filter(x => istatistikIsareti.test(x)).length, 1, 'one statistics line');
   assert.equal(l.filter(x => diziIsareti('kanal_a').test(x)).length, 1);
   assert.equal(l.filter(x => havuzIsareti('kanal_a').test(x)).length, 1, 'one weekly pool line');
   assert.ok(l.includes(KUYRUK), 'queue line untouched');
@@ -135,8 +135,8 @@ test('havuz line: reinstall and kaldir dedup per channel, other channel and the 
 });
 
 // one Instagram read per hour (Furkan 31.10): one shared :05 snapshot line, whatever channels are installed
-test('istatistik line: :05 hourly, TZ + nice, one line for all channels, kaldir of a channel leaves it', () => {
-  assert.equal(istatistikKronSatiri('/r/vm', NODE), `5 * * * * cd "/r/vm" && TZ=Europe/Istanbul nice -n 19 "${NODE}" "/r/vm/instagram/istatistik.js" anlik >> "/r/vm/kayit/istatistik.log" 2>&1`);
+test('istatistik line: every 10 min, TZ + nice, one line for all channels, kaldir of a channel leaves it', () => {
+  assert.equal(istatistikKronSatiri('/r/vm', NODE), `*/10 * * * * cd "/r/vm" && TZ=Europe/Istanbul nice -n 19 "${NODE}" "/r/vm/instagram/istatistik.js" anlik >> "/r/vm/kayit/istatistik.log" 2>&1`);
   const d = sahte(KUYRUK + '\n'), z = yap(d);
   z.kur('kanal_a'); z.kur('kanal_ab'); z.kur('kanal_a');
   assert.equal(d.tab.split('\n').filter(l => istatistikIsareti.test(l)).length, 1);
