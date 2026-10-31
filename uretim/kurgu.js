@@ -26,7 +26,8 @@ if (video.sablon) S = require(sahneFile)({ C, T, at: K.at, f: K.f1, r2, rnd, W: 
 else {
   const M = require('./motor')({ T, at: K.at, f: K.f1 });
   const kf = path.join(kimlikDir, ((kimlik.gorsel_dil || {}).karakter || {}).dosya || 'karakter.js');
-  const karakter = fs.existsSync(kf) ? K.guvenliYukle(kf)({ C, f: K.f1 }) : null;
+  // the story's looks (video.json → karakter_gorunum for the narrator, kisi_gorunumleri for everyone else, dizi/gorunum.js)
+  const karakter = fs.existsSync(kf) ? K.guvenliYukle(kf)({ C, f: K.f1, gorunum: video.karakter_gorunum || null, kisiGorunumleri: video.kisi_gorunumleri || null }) : null;
   // approved recurring characters of the channel / this story (uretim/kutuphane.js, kit folder karakterler/)
   const kutuphane = require('./kutuphane').yukle(kimlikDir, video.dizi || null, { C, f: K.f1, karakter });
   S = K.guvenliYukle(sahneFile)({ C, T, at: K.at, f: K.f1, r2, rnd, W: K.W, H: K.H, M, karakter, kutuphane });

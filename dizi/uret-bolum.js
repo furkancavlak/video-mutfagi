@@ -8,6 +8,7 @@ const path = require('path');
 const O = require('../konu/ortak');
 
 const TON = require('./ton');
+const G = require('./gorunum');
 const temiz = s => String(s || '').replace(/\[[^\]]*\]\s*/g, '').replace(/\s+/g, ' ').trim();   // eleven_v3 audio tags out
 // sentences end at a single "." or at "!"/"?"; an ellipsis ("Bir sabah... tanımadığım") is a pause, not an end
 function cumleler(s) {
@@ -64,11 +65,14 @@ function hazirYap(dizi, n) {
 // the queue job's `video` (uret.js writes it relative to kok)
 const videoAdi = (kok, dir) => path.isAbsolute(dir) ? path.relative(kok, dir).split(path.sep).join('/') : String(dir).split(path.sep).join('/');
 
-async function uretBolum(ctx, dizi, n, { onayGerekli = true, calistir, kok = O.KOK, uret, yaz = console.log } = {}) {
+async function uretBolum(ctx, dizi, n, { onayGerekli = true, calistir, kok = O.KOK, uret, yaz = console.log, diziler = [] } = {}) {
   uret = uret || require('../konu/uret').uret;
   const b = (dizi.bolumler || []).find(x => x.n === n);
   if (!b) throw new Error(`bölüm ${n} yok`);
   const hazir = hazirYap(dizi, n);      // before any state change: a bad episode leaves it as it was
+  // the story's cast and their looks (clothes, hair, colours) are the series' own: made once, unlike other stories' people
+  await G.ata(ctx, dizi, diziler, { calistir });
+  if (G.anlatici(dizi)) Object.assign(hazir.video_ek, { karakter_gorunum: G.anlatici(dizi), kisi_gorunumleri: G.haritasi(dizi), kisiler: dizi.kisiler });
   b.durum = 'uretimde';
   // the scheduler is automation: spending follows konu.json → otomasyon.butce, never an interactive gate
   const r = await uret(ctx, null, { hazir, onay: true, otomatik: true, onayGerekli, calistir, kok, yaz });
