@@ -70,9 +70,9 @@ async function uretBolum(ctx, dizi, n, { onayGerekli = true, calistir, kok = O.K
   const b = (dizi.bolumler || []).find(x => x.n === n);
   if (!b) throw new Error(`bölüm ${n} yok`);
   const hazir = hazirYap(dizi, n);      // before any state change: a bad episode leaves it as it was
-  // the narrator's look (clothes, hair, colours) is the series' own: chosen once, unlike the other stories' (dizi/gorunum.js)
-  const gorunum = G.bul(ctx.kimlik, G.ata(dizi, diziler, ctx.kimlik));
-  if (gorunum) hazir.video_ek.karakter_gorunum = gorunum;
+  // the story's cast and their looks (clothes, hair, colours) are the series' own: made once, unlike other stories' people
+  await G.ata(ctx, dizi, diziler, { calistir });
+  if (G.anlatici(dizi)) Object.assign(hazir.video_ek, { karakter_gorunum: G.anlatici(dizi), kisi_gorunumleri: G.haritasi(dizi), kisiler: dizi.kisiler });
   b.durum = 'uretimde';
   // the scheduler is automation: spending follows konu.json → otomasyon.butce, never an interactive gate
   const r = await uret(ctx, null, { hazir, onay: true, otomatik: true, onayGerekli, calistir, kok, yaz });

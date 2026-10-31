@@ -406,9 +406,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
       const P = parcala(Z, parcaSayisi);
       const ortak = {
         formul: md('dersler/FORMUL.md'), renkler: ctx.kimlik.renkler || {}, gorsel_dil: gdMetin, kurallar: kesinKurallar(gd),
-        karakter: (fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.') + (video.karakter_gorunum ? `
-
-Bu hikâyenin anlatıcısı: ${video.karakter_gorunum.tanim || video.karakter_gorunum.id}. Görünümü sabit, kıyafet/saç/ten seçeneği verme. Hikâyedeki diğer her kişiyi kendi adıyla (kim) çiz; onlar anlatıcıdan ve birbirinden farklı görünür.` : ''),
+        karakter: (fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.') + (video.kisiler ? '\n\n' + require('../dizi/gorunum').istemMetni(video.kisiler) : ''),
         motor: basYorum(path.join(O.KOK, 'uretim', 'motor.js')), sure: Z.toplam.toFixed(1), marka: (Z.sting[0] || 0).toFixed(2),
         ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'), kutuphane: Kut.istemMetni(ctx.dir, video.dizi || null), ton: tonMetni(video.ton, gd),
       };
