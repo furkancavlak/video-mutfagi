@@ -339,7 +339,8 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       const j = isBul(kuyrukOku(kok), `videolar/${ctx.kanal}-${d.id}-b${u.n}`);
       if (j) { benimse(b, j); notlar.push(`${u.id} bölüm ${u.n}: kuyrukta işi var (${j.id}), yeniden üretilmedi`); kaydetSon(); continue; }
       try {
-        const r = await uretBolum(ctx, d, u.n, { onayGerekli: onayDonemi, kok, diziler });
+        const r = // dizi.oto_onay: Furkan let this story go out without the video approval (31.10: Veli finali)
+        await uretBolum(ctx, d, u.n, { onayGerekli: onayDonemi && d.oto_onay !== true, kok, diziler });
         // uretBolum contract: returns {durum, dir?, mp4?}; the state is written whatever the episode's current one
         if (r && r.durum) b.durum = r.durum === 'butce-bekliyor' ? 'uretimde' : r.durum;
         // the panel shows this chip; it clears as soon as production gets past the budget gate
