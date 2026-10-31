@@ -576,7 +576,6 @@ dialog{width:min(880px,94vw);margin:auto}
 /* ===== Onaylar: a calm inbox ===== */
 .rozet-say{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:999px;display:inline-grid;place-items:center;font:700 11px/1 var(--body);background:var(--sun);color:#1E1A15}
 .ob-git{margin-left:auto}
-#s-onaylar{max-width:1100px}
 #s-onaylar .baslik-satir{align-items:baseline}
 .on-baslik{display:flex;align-items:center;gap:10px}
 .on-baslik small{font:500 13px var(--body);color:var(--ink-3)}
@@ -702,3 +701,37 @@ dialog{width:min(880px,94vw);margin:auto}
 .ist-ic h3 small{font-weight:500;color:var(--ink-3)}
 #ist-egri{min-height:60px}
 .on-aciklama{margin:-6px 0 10px}
+
+/* Onaylar: full-width grids of compact cards; the item opens in the centred window */
+.on-izgara{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:12px}
+.on-kart.on-k-metin,.on-kart.on-k-video,.on-kart.on-k-havuz,.on-kart.on-k-bak{display:flex;flex-direction:column;gap:8px;text-align:left;padding:14px 16px;cursor:pointer;transition:border-color .15s,transform .15s}
+.on-kart.on-k-metin:hover,.on-kart.on-k-video:hover,.on-kart.on-k-havuz:hover,.on-kart.on-k-bak:hover{border-color:var(--line-2);transform:translateY(-1px)}
+.on-k-metin{border-color:color-mix(in srgb,var(--mor) 45%,var(--line))}
+.on-k-ust{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.on-k-ad{font:700 16px/1.25 var(--display);letter-spacing:-.01em;color:var(--ink)}
+.on-k-ozet{font-size:13.5px;line-height:1.5;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.on-k-ozet.iki{-webkit-line-clamp:2}
+.on-k-git{margin-top:auto;display:inline-flex;align-items:center;gap:5px;font:700 13px var(--body);color:var(--mor-t)}
+.on-hassas-rozet{display:inline-flex;align-items:center;gap:4px;font:700 10.5px/1 var(--body);letter-spacing:.04em;text-transform:uppercase;padding:4px 7px;border-radius:6px;background:var(--honey-soft);color:var(--sun-t)}
+.on-kart.on-k-video{flex-direction:row;align-items:flex-start;gap:12px}
+.on-k-video .sat-kapak{width:54px;height:96px;border-radius:8px}
+.on-k-ic{min-width:0;display:flex;flex-direction:column;gap:5px}
+.on-k-zaman{display:inline-flex;align-items:center;gap:5px;font:600 12.5px var(--body);color:var(--ink-2)}
+.on-k-not{display:inline-flex;align-items:flex-start;gap:5px;font:600 12px var(--body);color:var(--sun-t)}
+.on-k-not.kotu{color:var(--bad-t)}
+.on-k-dugme{margin-top:auto;display:flex;gap:6px;justify-content:flex-end}
+.on-k-havuz .konu-cip{background:color-mix(in srgb,var(--k) 18%,transparent);color:var(--k)}
+.on-k-bak{border-color:color-mix(in srgb,var(--sun) 40%,var(--line))}
+dialog.on-pencere .gp-ust h2{font-size:24px}
+.on-m-tur{display:block;font:700 11px var(--body);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.on-m-govde{gap:14px}
+.on-m-govde .on-form{margin-top:0}
+.on-v-modal{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:20px;align-items:start}
+.on-v-modal .gp-bilgi{gap:12px}
+.on-tam-ozet{font-size:15.5px;line-height:1.7;color:var(--ink);white-space:pre-wrap}
+@media (max-width:760px){.on-v-modal{grid-template-columns:minmax(0,1fr)}.on-v-modal .gp-video video{max-height:56vh;width:auto;max-width:100%;margin:0 auto;display:block}}
+.on-bilgi{display:inline-flex;align-items:center;gap:3px}
+dialog.on-pencere .gp-ust h2{text-transform:none}
+dialog.on-pencere:not(.on-m){height:fit-content}
+dialog.on-pencere:not(.on-m) .gp{max-height:calc(100vh - 48px)}
+@media (max-width:760px){dialog.on-pencere:not(.on-m){height:100%}}

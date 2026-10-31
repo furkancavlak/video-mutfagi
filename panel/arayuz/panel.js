@@ -344,7 +344,7 @@ const olayImza = e => [olayAnahtar(e), e.tur, e.baslik, e.views, e.ig ? 1 : 0, e
 const gunImza = gun => OL.filter(e => ayniGun(olayGunu(e), gunBas(+gun)) && goster(e)).map(olayImza).join('#') + `|${igBekle()}|${dzBekle()}`;
 function acikPencereyiTazele() {
   const p = $('#pencere'); if (!p.open || $$('#pencere video').some(v => !v.paused)) return;
-  if (p.classList.contains('gun-panel') && gunAc.acik != null && gunImza(gunAc.acik) !== gunAc.imza) {
+  if (p.classList.contains('gun-panel') && !p.classList.contains('on-pencere') && gunAc.acik != null && gunImza(gunAc.acik) !== gunAc.imza) {
     const l = $('#pencere-ic .gp-liste'), sc = l ? l.scrollTop : 0; gunAc(gunAc.acik); const l2 = $('#pencere-ic .gp-liste'); if (l2) l2.scrollTop = sc;
   } else if (p.classList.contains('olay-pencere') && olayAc.anahtar) {
     const e = OL.find(x => olayAnahtar(x) === olayAc.anahtar);
@@ -786,84 +786,70 @@ async function dzKarar(d) {
 }
 
 
-// ---------------- Onaylar: a calm inbox of everything that waits for Furkan, read and approved in spare moments
+// ---------------- Onaylar: a calm inbox of everything that waits for Furkan. Each section is a grid of compact cards;
+// a card opens the whole item in the centred window (‹ › walk the section, Esc closes). After a text or video decision
+// the window moves on to the next waiting item, so the whole stack goes quickly.
 let HV = null;                                     // the story pool answer (GET /api/dizi/havuz) for the selected channel
-const onaySayisi = () => metinBekleyenler().length + OL.filter(e => e.durum === 'onay' && e.is && e.is.onay_gerekli).length + (dzGecerli() ? (DZ.furkan_baksin || []).length : 0);
+const onIslenen = new Set();                       // decided in this window, hidden until the next reload confirms it
+const onMetinler = () => metinBekleyenler().filter(d => !onIslenen.has('m:' + d.id));
+const onVideolar = () => OL.filter(e => e.durum === 'onay' && e.is && e.is.onay_gerekli && !onIslenen.has('v:' + e.is.id));
+const onHavuz = () => HV && !HV.yok && !HV.hata ? (HV.siradaki || []).filter(x => !onIslenen.has('h:' + x.id)) : [];
+const onBak = () => dzGecerli() && Array.isArray(DZ.furkan_baksin) ? DZ.furkan_baksin : [];
+const onaySayisi = () => onMetinler().length + onVideolar().length + onBak().length;
 const kelimeSay = t => String(t).replace(/\[[^\]]*\]/g, ' ').split(/\s+/).filter(Boolean).length;
 const bosSatir = yazi => `<div class="on-bos">${ikon('tik', 14)}${esc(yazi)}</div>`;
-function metinKart(d) {
-  const url = guvenli(d.kaynak && d.kaynak.url), B = d.bolumler || [];
-  return `<article class="kart on-kart on-metin" id="on-m-${esc(d.id)}" data-mid="${esc(d.id)}">
-    <div class="on-ust"><div class="m-cipler">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}<span class="on-bilgi">${esc(B.length)} bölüm</span>${d.anlatici ? `<span class="on-bilgi">Ses: ${esc(d.anlatici.ad || d.anlatici.ses)}</span>` : ''}</div>
-      ${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Ekşi'de aç</a>` : ''}</div>
-    <h3>${esc(d.baslik_kisa || d.baslik)}</h3>${d.baslik && d.baslik !== d.baslik_kisa ? `<div class="ince-yazi">Kaynak başlık: ${esc(d.baslik)}</div>` : ''}
-    ${d.hassasiyet_notu || (d.ton && d.ton !== 'komik') ? `<div class="mt-hassas"><b>Hassasiyet notu</b>${d.ton_neden ? `<span>Ton: ${esc(d.ton_neden)}</span>` : ''}<span>${esc(d.hassasiyet_notu || 'Bu hikâye komik değil: dalga geçen, hafife alan ya da kişiyi tanıtan bir söz kalmasın.')}</span></div>` : ''}
-    <form class="on-form">${B.map(b => `<label class="on-bolum"><span>Bölüm ${esc(b.n)}<small data-say>${kelimeSay(b.metin || '')} kelime</small></span><textarea name="b${esc(b.n)}" data-ilk="${esc(b.metin || '')}">${esc(b.metin || '')}</textarea></label>`).join('')}
-      <span class="dz-hata" role="alert"></span>
-      <div class="on-dugmeler"><button type="submit" class="dugme buyuk sari">${ikon('tik', 18)}Metni onayla</button><button type="button" class="dugme buyuk tehlike" data-on-reddet>${ikon('carpi', 18)}Hikâyeyi reddet</button></div>
-    </form></article>`;
-}
+// a story's short summary: its own ozet, else the first lines of episode 1 (no recap there)
+const hikayeOzet = d => d.ozet || String(((d.bolumler || [])[0] || {}).metin || '').replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 260);
+const hassasMi = d => !!(d.hassasiyet_notu || (d.ton && d.ton !== 'komik'));
+const ayrintiYaz = a => { try { const j = JSON.parse(a); return Array.isArray(j) ? j.join(' · ') : String(a); } catch { return String(a || ''); } };
+
+// ---- compact cards
+const metinKart = d => `<button class="kart on-kart on-k-metin" data-on-ac="m:${esc(d.id)}">
+    <span class="on-k-ust">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}${hassasMi(d) ? `<span class="on-hassas-rozet">${ikon('uyari', 12)}Hassas</span>` : ''}<span class="on-bilgi">${esc((d.bolumler || []).length)} bölüm</span></span>
+    <b class="on-k-ad">${esc(d.baslik_kisa || d.baslik)}</b><span class="on-k-ozet">${esc(hikayeOzet(d))}</span>
+    <span class="on-k-git">Oku ve onayla ${ikon('ileri', 14)}</span></button>`;
 function videoKart(e) {
-  const i = OL.indexOf(e), m = e.makine, j = e.is;
-  const video = e.mp4 ? `<video src="${m === 'sunucu' ? sunucuDosya(e.mp4) : dosya(e.mp4)}" ${kapakVar(e.kapak) ? `poster="${kapakUrl(e.kapak)}"` : ''} controls playsinline preload="none"></video>` : `<div class="gp-yok"><span>Video dosyası yok</span></div>`;
-  const notlar = [j.not && `<div class="on-not">${ikon('uyari', 15)}<span><b>Bekletiliyor:</b> ${esc(j.not)}</span></div>`,
-    j.hata && `<div class="on-not kotu">${ikon('uyari', 15)}<span><b>Son deneme hatalı:</b> ${esc(j.hata)}${j.sonraki_deneme ? ` · yeniden denenecek: ${esc(tarih(j.sonraki_deneme))}` : ''}</span></div>`].filter(Boolean).join('');
-  return `<article class="kart on-kart on-video" id="on-v-${esc(j.id)}" data-vi="${i}">
-    <div class="gp-video">${video}</div>
-    <div class="gp-bilgi">
-      <div class="m-cipler">${durumCip('onay')}${e.konu ? `<span class="konu-cip">${esc(e.konu)}</span>` : ''}${m === 'sunucu' ? `<span class="kanal-rozet acik">${esc(makineAd('sunucu'))}</span>` : ''}</div>
-      <h3>${esc(e.baslik)}${e.bolum ? ` <small>${esc(e.bolum)}</small>` : ''}</h3>
-      <div class="m-zaman">${ikon('saat', 15)}${e.t ? esc(new Date(e.t).toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) : 'Saati yok: onaylayınca ilk boş saate konur'}</div>
-      ${notlar}
-      ${e.aciklama ? `<div class="m-altyazi"><span>Açıklama</span>${esc(e.aciklama)}</div>` : ''}
-      <form class="m-saat" hidden><input type="datetime-local" value="${e.t ? yerel(e.t) : yerel(Date.now() + 36e5)}"><button class="dugme sari">Kaydet</button></form>
-      <div class="on-dugmeler"><button class="dugme buyuk sari" data-on-onayla>${ikon('tik', 18)}Onayla</button><button class="dugme buyuk" data-on-saat>${ikon('saat', 18)}Saati değiştir</button><button class="dugme buyuk tehlike" data-on-iptal>${ikon('carpi', 18)}İptal</button></div>
-    </div></article>`;
+  const j = e.is;
+  return `<button class="kart on-kart on-k-video" data-on-ac="v:${esc(j.id)}">${kucukKapak(e)}<span class="on-k-ic">
+    <span class="on-k-ust">${durumCip('onay')}${e.konu ? `<span class="konu-cip">${esc(e.konu)}</span>` : ''}</span>
+    <b class="on-k-ad">${esc(e.baslik)}</b>${e.bolum ? `<span class="on-bilgi">${esc(e.bolum)}</span>` : ''}
+    <span class="on-k-zaman">${ikon('saat', 13)}${e.t ? esc(tarih(e.t)) : 'Saati yok'}</span>
+    ${j.not ? `<span class="on-k-not">${ikon('uyari', 12)}${esc(j.not)}</span>` : j.hata ? `<span class="on-k-not kotu">${ikon('uyari', 12)}${esc(j.hata)}</span>` : ''}</span></button>`;
 }
+const havuzKart = x => `<div class="kart on-kart on-k-havuz" data-on-ac="h:${esc(x.id)}" role="button" tabindex="0">
+    <span class="on-k-ust"><span class="konu-cip" style="--k:${konuRenk(x.konu)}">${esc(x.konu)}</span>${x.oncelik ? '<span class="on-sira">Sıradaki</span>' : ''}<span class="on-bilgi">${ikon('goz', 12)}${esc(sayi(x.fav))} fav</span></span>
+    <b class="on-k-ad">${esc(x.baslik || x.id)}</b><span class="on-k-ozet iki">${esc(x.ozet || '')}</span>
+    <span class="on-k-dugme">${x.oncelik ? '' : `<button class="dugme ince" data-on-one="${esc(x.id)}">Öne al</button>`}<button class="dugme ince tehlike" data-on-ele="${esc(x.id)}">Ele</button></span></div>`;
+const bakKart = x => `<button class="kart on-kart on-k-bak" data-on-ac="b:${esc(x.id)}">
+    <span class="on-k-ust"><span class="on-hassas-rozet">${ikon('uyari', 12)}Hassasiyet</span><span class="on-bilgi">${x.zaman ? esc(tarih(x.zaman)) : ''}</span></span>
+    <b class="on-k-ad">${esc(x.id)}</b><span class="on-k-ozet iki">${esc(ayrintiYaz(x.ayrinti) || x.neden)}</span></button>`;
+
+// ---- the page
+// the pool's last fill: an ISO time or an object carrying one
+const sonDoldurma = () => { const v = HV && HV.son_doldurma, z = v && typeof v === 'object' ? v.zaman || v.bitis || v.bas || null : v; return z && !isNaN(new Date(z)) ? gunTarih(z) : null; };
 function havuzBolum() {
   if (!kanal) return '';
   if (HV === null || takvimKaynak() === null) return yukleniyor('Havuz sunucudan geliyor…');
   if (HV.yok || (!HV.hata && !HV.toplam && !(HV.siradaki || []).length && !(HV.stok || []).length)) return bosSatir('Bu kanalın hikâye havuzu yok');
   if (HV.hata) return `<div class="on-bos kotu">${esc(HV.hata)}</div>`;
-  const gruplar = [];
-  for (const x of HV.siradaki || []) { let g = gruplar.find(y => y.konu === x.konu); if (!g) gruplar.push(g = { konu: x.konu, L: [] }); g.L.push(x); }
-  const stok = `<div class="on-stok">${(HV.stok || []).map(s => `<span class="on-stok-cip${s.adet < 3 ? ' az' : ''}"><i class="nokta-k" style="--k:${konuRenk(s.konu)}"></i>${esc(konuAd(s.konu))} <b>${esc(s.adet)}</b></span>`).join('')}<span class="ince-yazi">toplam ${esc(HV.toplam || 0)} / hedef ${esc(HV.hedef || '—')}${HV.son_doldurma ? ` · son doldurma ${esc(isNaN(new Date(HV.son_doldurma)) ? String(HV.son_doldurma).slice(0, 16) : gunTarih(HV.son_doldurma))}` : ''}</span></div>`;
-  if (!gruplar.length) return stok + bosSatir('Havuzda sıradaki hikâye yok');
-  return stok + gruplar.map(g => `<div class="on-grup"><h3><i class="nokta-k" style="--k:${konuRenk(g.konu)}"></i>${esc(konuAd(g.konu))}</h3>${g.L.map(x => `<article class="kart on-kart on-havuz" id="on-h-${esc(x.id)}" data-hid="${esc(x.id)}">
-      <div class="on-h-ic"><div class="on-h-ust"><b>${esc(x.baslik || x.id)}</b>${x.oncelik ? '<span class="on-sira">Sıradaki</span>' : ''}</div>
-        ${x.ozet ? `<p class="on-ozet" title="Tamamını görmek için tıkla">${esc(x.ozet)}</p>` : ''}
-        <div class="on-h-alt"><span>${ikon('goz', 13)}${esc(sayi(x.fav))} fav</span>${x.tahmini_bolum ? `<span>~${esc(x.tahmini_bolum)} bölüm</span>` : ''}${x.kelime ? `<span>${esc(sayi(x.kelime))} kelime</span>` : ''}${guvenli(x.link) ? `<a href="${esc(guvenli(x.link))}" target="_blank" rel="noopener">${ikon('dis', 13)}Ekşi'de oku</a>` : ''}</div></div>
-      <div class="on-h-dugme">${x.oncelik ? '' : `<button class="dugme ince" data-on-one>Öne al</button>`}<button class="dugme ince tehlike" data-on-ele>Ele</button></div></article>`).join('')}</div>`).join('');
+  const stok = `<div class="on-stok">${(HV.stok || []).map(s => `<span class="on-stok-cip${s.adet < 3 ? ' az' : ''}"><i class="nokta-k" style="--k:${konuRenk(s.konu)}"></i>${esc(konuAd(s.konu))} <b>${esc(s.adet)}</b></span>`).join('')}<span class="ince-yazi">toplam ${esc(HV.toplam || 0)} / hedef ${esc(HV.hedef || '—')}${sonDoldurma() ? ` · son doldurma ${esc(sonDoldurma())}` : ''}</span></div>`;
+  const L = onHavuz();
+  return stok + (L.length ? `<div class="on-izgara">${L.map(havuzKart).join('')}</div>` : bosSatir('Havuzda sıradaki hikâye yok'));
 }
-function bakBolum() {
-  if (dzGecerli() && !Array.isArray(DZ.furkan_baksin)) return `<div class="on-bos">${ikon('saat', 14)}Bu liste sunucudaki panel güncellenince görünecek.</div>`;
-  const L = dzGecerli() ? DZ.furkan_baksin || [] : [];
-  if (!L.length) return bosSatir('Bakman gereken hikâye yok');
-  const ayrinti = a => { try { const j = JSON.parse(a); return Array.isArray(j) ? j.join(' · ') : String(a); } catch { return String(a || ''); } };
-  return L.map(x => `<article class="kart on-kart on-bak"><div><b>${esc(x.id)}</b><span class="ince-yazi">${x.zaman ? esc(tarih(x.zaman)) : ''}</span></div>
-    <div class="on-not">${ikon('uyari', 15)}<span><b>Hassasiyet denetimi durdurdu:</b> ${esc(ayrinti(x.ayrinti) || x.neden)}</span></div>
-    ${guvenli(x.url) ? `<a class="dugme ince" href="${esc(guvenli(x.url))}" target="_blank" rel="noopener">${ikon('dis', 14)}Ekşi'de oku</a>` : ''}</article>`).join('') + '<div class="ince-yazi on-ipucu">Bunlardan birini yine de kullanmak istersen Claude’a söyle; havuza geri koyar.</div>';
-}
-// redraw a section only when its items changed, never over an edit in progress or a playing video
 const onImza = {};
-function bolumCiz(id, imza, html, koru) {
-  const el = $('#' + id); if (!el || (onImza[id] === imza && el.innerHTML)) return;
-  if (koru && koru(el)) return;
-  onImza[id] = imza; el.innerHTML = html;
-}
+function bolumCiz(id, imza, html) { const el = $('#' + id); if (!el || (onImza[id] === imza && el.innerHTML)) return; onImza[id] = imza; el.innerHTML = html; }
 function onaylarCiz() {
   const n = onaySayisi(); $('#onay-say').textContent = n || ''; $('#onay-say').hidden = !n;
   if (!$('#s-onaylar')) return;
-  const M = metinBekleyenler(), V = OL.filter(e => e.durum === 'onay' && e.is && e.is.onay_gerekli);
-  $('#on-metin-say').textContent = M.length || ''; $('#on-video-say').textContent = V.length || '';
-  const bak = dzGecerli() ? DZ.furkan_baksin || [] : []; $('#on-bak-say').textContent = bak.length || '';
+  const M = onMetinler(), V = onVideolar(), B = onBak();
+  $('#on-metin-say').textContent = M.length || ''; $('#on-video-say').textContent = V.length || ''; $('#on-bak-say').textContent = B.length || '';
   const bekle = takvimKaynak() === null || dzBekle();
-  bolumCiz('on-metin', bekle ? 'y' : M.map(d => d.id).join(','), bekle ? yukleniyor('Hikâyeler sunucudan geliyor…') : M.length ? M.map(metinKart).join('') : bosSatir('Bekleyen metin yok'),
-    el => [...el.querySelectorAll('textarea')].some(t => t.value !== t.dataset.ilk || t === document.activeElement));
-  bolumCiz('on-video', bekle ? 'y' : V.map(e => e.is.id + (e.t ? +e.t : '') + (e.is.not || '') + (e.is.hata || '')).join(','), bekle ? yukleniyor('Sıra sunucudan geliyor…') : V.length ? V.map(videoKart).join('') : bosSatir('Onay bekleyen video yok'),
-    el => [...el.querySelectorAll('video')].some(v => !v.paused) || !!el.querySelector('form.m-saat:not([hidden])'));
-  bolumCiz('on-havuz', JSON.stringify([HV, dzGecerli()]), havuzBolum());
-  bolumCiz('on-bak', bekle ? 'y' : JSON.stringify(bak), bekle ? yukleniyor('Bilgiler geliyor…') : bakBolum());
+  bolumCiz('on-metin', bekle ? 'y' : M.map(d => d.id).join(), bekle ? yukleniyor('Hikâyeler sunucudan geliyor…') : M.length ? `<div class="on-izgara">${M.map(metinKart).join('')}</div>` : bosSatir('Bekleyen metin yok'));
+  bolumCiz('on-video', bekle ? 'y' : V.map(e => e.is.id + (e.t ? +e.t : '') + (e.is.not || '') + (e.is.hata || '')).join(), bekle ? yukleniyor('Sıra sunucudan geliyor…') : V.length ? `<div class="on-izgara">${V.map(videoKart).join('')}</div>` : bosSatir('Onay bekleyen video yok'));
+  bolumCiz('on-havuz', JSON.stringify([HV, dzGecerli(), [...onIslenen]]), havuzBolum());
+  bolumCiz('on-bak', bekle ? 'y' : JSON.stringify(B) + (dzGecerli() && !Array.isArray(DZ.furkan_baksin)), bekle ? yukleniyor('Bilgiler geliyor…')
+    : dzGecerli() && !Array.isArray(DZ.furkan_baksin) ? `<div class="on-bos">${ikon('saat', 14)}Bu liste sunucudaki panel güncellenince görünecek.</div>`
+    : B.length ? `<div class="on-izgara">${B.map(bakKart).join('')}</div><div class="ince-yazi on-ipucu">Bunlardan birini yine de kullanmak istersen Claude’a söyle; havuza geri koyar.</div>` : bosSatir('Bakman gereken hikâye yok'));
 }
 async function havuzYukle() {
   const at = kanal, mk = dzM(); if (!at) return;
@@ -871,49 +857,101 @@ async function havuzYukle() {
   catch (e) { if (at === kanal) HV = /konular|boş/.test(e.message) ? { yok: true, _makine: mk } : { hata: 'Havuz alınamadı: ' + e.message, _makine: mk }; }
   onaylarCiz();
 }
-// an approved / rejected / struck card leaves the page with a short toast
-async function kartGitsin(kart, is, mesaj) {
-  kart.classList.add('gidiyor'); const dugmeler = kart.querySelectorAll('button'); dugmeler.forEach(b => b.disabled = true);
-  try { await is(); bildir(mesaj); kart.style.height = kart.offsetHeight + 'px'; requestAnimationFrame(() => kart.classList.add('gitti')); setTimeout(() => kart.remove(), 260); return true; }
-  catch (err) { kart.classList.remove('gidiyor'); dugmeler.forEach(b => b.disabled = false); const h = kart.querySelector('.dz-hata'); if (h) h.textContent = err.message; bildir(err.message, true); return false; }
+
+// ---- the centred window: one item, ‹ › through its section
+const onListe = tur => tur === 'm' ? onMetinler().map(d => d.id) : tur === 'v' ? onVideolar().map(e => e.is.id) : tur === 'h' ? onHavuz().map(x => x.id) : onBak().map(x => x.id);
+const ON_AD = { m: 'Metin onayı', v: 'Video onayı', h: 'Sıradaki konu', b: 'Furkan baksın' };
+function onAc(anahtarId) {
+  const [tur, id] = [anahtarId.slice(0, 1), anahtarId.slice(2)], L = onListe(tur), i = L.indexOf(id);
+  if (i < 0) { if ($('#pencere').open && $('#pencere').classList.contains('on-pencere')) onSonraki(tur, null); return; }
+  const gez = `<div class="gp-alt"><button class="dugme" data-on-git="${tur}:${esc(L[i - 1] || '')}" ${i > 0 ? '' : 'disabled'}>‹ Önceki</button><span class="ince-yazi">${ON_AD[tur]} · ${i + 1} / ${L.length} · Esc ile kapat</span><button class="dugme" data-on-git="${tur}:${esc(L[i + 1] || '')}" ${i < L.length - 1 ? '' : 'disabled'}>Sonraki ›</button></div>`;
+  let govde = '', baslik = '';
+  if (tur === 'm') {
+    const d = onMetinler().find(x => x.id === id), url = guvenli(d.kaynak && d.kaynak.url), B = d.bolumler || [];
+    baslik = d.baslik_kisa || d.baslik;
+    govde = `<div class="m-cipler">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}<span class="on-bilgi">${esc(B.length)} bölüm</span>${d.anlatici ? `<span class="on-bilgi">Ses: ${esc(d.anlatici.ad || d.anlatici.ses)}</span>` : ''}${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Ekşi'de aç</a>` : ''}</div>
+      ${d.baslik && d.baslik !== d.baslik_kisa ? `<div class="ince-yazi">Kaynak başlık: ${esc(d.baslik)}</div>` : ''}
+      ${hassasMi(d) ? `<div class="mt-hassas"><b>Hassasiyet notu</b>${d.ton_neden ? `<span>Ton: ${esc(d.ton_neden)}</span>` : ''}<span>${esc(d.hassasiyet_notu || 'Bu hikâye komik değil: dalga geçen, hafife alan ya da kişiyi tanıtan bir söz kalmasın.')}</span></div>` : ''}
+      <form class="on-form" id="on-form">${B.map(b => `<label class="on-bolum"><span>Bölüm ${esc(b.n)}<small data-say>${kelimeSay(b.metin || '')} kelime</small></span><textarea name="b${esc(b.n)}" data-ilk="${esc(b.metin || '')}">${esc(b.metin || '')}</textarea></label>`).join('')}
+        <span class="dz-hata" role="alert"></span>
+        <div class="on-dugmeler"><button type="submit" class="dugme buyuk sari">${ikon('tik', 18)}Metni onayla</button><button type="button" class="dugme buyuk tehlike" data-on-reddet>${ikon('carpi', 18)}Hikâyeyi reddet</button></div></form>`;
+  } else if (tur === 'v') {
+    const e = onVideolar().find(x => x.is.id === id), j = e.is, m = e.makine;
+    baslik = e.baslik + (e.bolum ? ' · ' + e.bolum : '');
+    govde = `<div class="on-v-modal"><div class="gp-video">${e.mp4 ? `<video src="${m === 'sunucu' ? sunucuDosya(e.mp4) : dosya(e.mp4)}" ${kapakVar(e.kapak) ? `poster="${kapakUrl(e.kapak)}"` : ''} controls playsinline preload="metadata"></video>` : '<div class="gp-yok"><span>Video dosyası yok</span></div>'}</div>
+      <div class="gp-bilgi"><div class="m-cipler">${durumCip('onay')}${e.konu ? `<span class="konu-cip">${esc(e.konu)}</span>` : ''}${m === 'sunucu' ? `<span class="kanal-rozet acik">${esc(makineAd('sunucu'))}</span>` : ''}</div>
+        <div class="m-zaman">${ikon('saat', 15)}${e.t ? esc(new Date(e.t).toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) : 'Saati yok: onaylayınca ilk boş saate konur'}</div>
+        ${j.not ? `<div class="on-not">${ikon('uyari', 15)}<span><b>Bekletiliyor:</b> ${esc(j.not)}</span></div>` : ''}${j.hata ? `<div class="on-not kotu">${ikon('uyari', 15)}<span><b>Son deneme hatalı:</b> ${esc(j.hata)}${j.sonraki_deneme ? ` · yeniden denenecek: ${esc(tarih(j.sonraki_deneme))}` : ''}</span></div>` : ''}
+        ${e.aciklama ? `<div class="m-altyazi"><span>Açıklama</span>${esc(e.aciklama)}</div>` : ''}
+        <form class="m-saat" id="on-saat" hidden><input type="datetime-local" value="${e.t ? yerel(e.t) : yerel(Date.now() + 36e5)}"><button class="dugme sari">Kaydet</button></form>
+        <span class="dz-hata" role="alert"></span>
+        <div class="on-dugmeler"><button class="dugme buyuk sari" data-on-onayla>${ikon('tik', 18)}Onayla</button><button class="dugme buyuk" data-on-saat>${ikon('saat', 18)}Saati değiştir</button><button class="dugme buyuk tehlike" data-on-iptal>${ikon('carpi', 18)}İptal</button></div></div></div>`;
+  } else if (tur === 'h') {
+    const x = onHavuz().find(y => y.id === id);
+    baslik = x.baslik || x.id;
+    govde = `<div class="m-cipler"><span class="konu-cip">${esc(x.konu)}</span>${x.oncelik ? '<span class="on-sira">Sıradaki</span>' : ''}<span class="on-bilgi">${ikon('goz', 12)}${esc(sayi(x.fav))} fav</span>${x.tahmini_bolum ? `<span class="on-bilgi">~${esc(x.tahmini_bolum)} bölüm</span>` : ''}${x.kelime ? `<span class="on-bilgi">${esc(sayi(x.kelime))} kelime</span>` : ''}${x.tarih ? `<span class="on-bilgi">${esc(x.tarih)}</span>` : ''}</div>
+      ${x.ozet ? `<p class="on-tam-ozet">${esc(x.ozet)}</p>` : '<div class="ince-yazi">Özet yok.</div>'}
+      <span class="dz-hata" role="alert"></span>
+      <div class="on-dugmeler">${guvenli(x.link) ? `<a class="dugme buyuk" href="${esc(guvenli(x.link))}" target="_blank" rel="noopener">${ikon('dis', 18)}Ekşi'de oku</a>` : ''}${x.oncelik ? '' : `<button class="dugme buyuk" data-on-one="${esc(x.id)}">${ikon('ileri', 18)}Öne al</button>`}<button class="dugme buyuk tehlike" data-on-ele="${esc(x.id)}">${ikon('carpi', 18)}Ele</button></div>`;
+  } else {
+    const x = onBak().find(y => y.id === id);
+    baslik = x.id;
+    govde = `<div class="on-not">${ikon('uyari', 15)}<span><b>Hassasiyet denetimi iki kez durdurdu:</b> ${esc(ayrintiYaz(x.ayrinti) || x.neden)}</span></div>
+      <div class="ince-yazi">${x.zaman ? esc(tarih(x.zaman)) : ''} · Bu hikâyeyi yine de kullanmak istersen Claude’a söyle; havuza geri koyar.</div>
+      ${guvenli(x.url) ? `<div class="on-dugmeler"><a class="dugme buyuk" href="${esc(guvenli(x.url))}" target="_blank" rel="noopener">${ikon('dis', 18)}Ekşi'de oku</a></div>` : ''}`;
+  }
+  pencere(`<div class="gp"><div class="gp-ust"><div><span class="on-m-tur">${ON_AD[tur]}</span><h2>${esc(baslik)}</h2></div><button class="kapat" data-kapat aria-label="Kapat (Esc)">✕</button></div>
+    <div class="gp-liste on-m-govde">${govde}</div>${gez}</div>`, 'gun-panel on-pencere on-' + tur);
+  onAc.acik = anahtarId;
+  onModalBagla(tur, id);
+}
+// after a decision: the next waiting item of the same section, or close when none is left
+function onSonraki(tur, id) {
+  if (id) onIslenen.add(tur + ':' + id);
+  onImza['on-metin'] = onImza['on-video'] = onImza['on-havuz'] = null; onaylarCiz();
+  const L = onListe(tur);
+  if (L.length) onAc(tur + ':' + L[0]); else { $('#pencere').close(); bildir(tur === 'm' ? 'Bekleyen metin kalmadı ✓' : tur === 'v' ? 'Onay bekleyen video kalmadı ✓' : 'Liste bitti'); }
+}
+function onModalBagla(tur, id) {
+  const q = s => $('#pencere-ic ' + s), hata = m => { const h = q('.dz-hata'); if (h) h.textContent = m || ''; };
+  const kilit = acik => $$('#pencere-ic .on-dugmeler button, #pencere-ic form button').forEach(b => b.disabled = acik);
+  const yap = async (is, mesaj, sonra) => { hata(); kilit(true); try { await is(); bildir(mesaj); onSonraki(tur, id); if (sonra) sonra(); } catch (err) { kilit(false); hata(err.message); bildir(err.message, true); } };
+  if (tur === 'm') {
+    $$('#pencere-ic textarea').forEach(t => t.oninput = () => { t.closest('label').querySelector('[data-say]').textContent = `${kelimeSay(t.value)} kelime${t.value !== t.dataset.ilk ? ' · düzeltildi' : ''}`; });
+    q('#on-form').onsubmit = ev => { ev.preventDefault(); const degisen = {}; $$('#pencere-ic textarea').forEach(t => { if (t.value !== t.dataset.ilk) degisen[t.name.slice(1)] = t.value; });
+      yap(() => api('dizi/metin', { kanal, makine: dzM(), id, karar: 'onayla', ...(Object.keys(degisen).length ? { metinler: degisen } : {}) }), 'Metin onaylandı ✓ Bölüm 1 hazırlanacak', dizilerYukle); };
+    q('[data-on-reddet]').onclick = () => { if (confirm('Bu hikâye reddedilsin mi? Hiçbir bölümü yapılmaz ve bir daha önerilmez.')) yap(() => api('dizi/metin', { kanal, makine: dzM(), id, karar: 'reddet' }), 'Hikâye reddedildi', dizilerYukle); };
+  } else if (tur === 'v') {
+    const e = onVideolar().find(x => x.is.id === id);
+    q('[data-on-onayla]').onclick = () => yap(() => api('kuyruk/onayla', { id, makine: e.makine }), 'Onaylandı ✓', yukle);
+    q('[data-on-iptal]').onclick = () => { if (confirm('Bu video sıradan çıkarılsın mı? Paylaşılmaz.')) yap(() => api('kuyruk/iptal', { id, makine: e.makine }), 'Sıradan çıkarıldı', yukle); };
+    q('[data-on-saat]').onclick = () => { const f = q('#on-saat'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input').focus(); };
+    q('#on-saat').onsubmit = async ev => { ev.preventDefault(); const v = q('#on-saat input').value; if (!v) return; try { await api('kuyruk/zaman', { id, makine: e.makine, zaman: ofsetli(v) }); bildir('Saat değişti'); q('#on-saat').hidden = true; await yukle(); } catch (err) { hata(err.message); bildir(err.message, true); } };
+  }
+}
+async function havuzIslem(b, tur, id) {
+  b.disabled = true;
+  try {
+    if (tur === 'ele') { if (!confirm('Bu hikâye elensin mi? Bir daha kullanılmaz.')) { b.disabled = false; return; } await api('dizi/havuz/ele', { kanal, makine: dzM(), id, neden: 'Furkan eledi' }); onIslenen.add('h:' + id); bildir('Elendi'); }
+    else { await api('dizi/havuz/one', { kanal, makine: dzM(), id }); bildir('Öne alındı: konusunun sıradaki hikâyesi'); }
+    onImza['on-havuz'] = null;
+    if ($('#pencere').open && $('#pencere').classList.contains('on-pencere')) { if (tur === 'ele') onSonraki('h', id); }
+    await havuzYukle();
+    if (tur === 'one' && $('#pencere').open && onAc.acik === 'h:' + id) onAc('h:' + id);
+  } catch (err) { b.disabled = false; bildir(err.message, true); }
 }
 function onaylarBagla() {
-  const kok = $('#s-onaylar');
-  kok.addEventListener('input', e => { const t = e.target; if (t.tagName !== 'TEXTAREA') return; const s = t.closest('label').querySelector('[data-say]'); s.textContent = `${kelimeSay(t.value)} kelime${t.value !== t.dataset.ilk ? ' · düzeltildi' : ''}`; });
-  kok.addEventListener('submit', async e => {
-    const f = e.target; e.preventDefault();
-    const mk = f.closest('.on-metin'), vk = f.closest('.on-video');
-    if (mk) {
-      const id = mk.dataset.mid, degisen = {};
-      f.querySelectorAll('textarea').forEach(t => { if (t.value !== t.dataset.ilk) degisen[t.name.slice(1)] = t.value; });
-      f.querySelector('.dz-hata').textContent = '';
-      if (await kartGitsin(mk, () => api('dizi/metin', { kanal, makine: dzM(), id, karar: 'onayla', ...(Object.keys(degisen).length ? { metinler: degisen } : {}) }), 'Metin onaylandı ✓ Bölüm 1 hazırlanacak')) { onImza['on-metin'] = null; dizilerYukle(); }
-    } else if (vk) {
-      const ev = OL[+vk.dataset.vi], v = f.querySelector('input').value; if (!v || !ev) return;
-      try { await api('kuyruk/zaman', { id: ev.is.id, makine: ev.makine, zaman: ofsetli(v) }); bildir('Saat değişti'); f.hidden = true; onImza['on-video'] = null; await yukle(); } catch (err) { bildir(err.message, true); }
-    }
-  });
-  kok.addEventListener('click', async e => {
-    const oz = e.target.closest('.on-ozet'); if (oz) { oz.classList.toggle('acik'); return; }
-    const b = e.target.closest('button'); if (!b) return;
-    const d = b.dataset, mk = b.closest('.on-metin'), vk = b.closest('.on-video'), hk = b.closest('.on-havuz');
-    if (d.onReddet !== undefined && mk) {
-      if (!confirm('Bu hikâye reddedilsin mi? Hiçbir bölümü yapılmaz ve bir daha önerilmez.')) return;
-      if (await kartGitsin(mk, () => api('dizi/metin', { kanal, makine: dzM(), id: mk.dataset.mid, karar: 'reddet' }), 'Hikâye reddedildi')) { onImza['on-metin'] = null; dizilerYukle(); }
-    } else if (vk) {
-      const ev = OL[+vk.dataset.vi]; if (!ev) return;
-      if (d.onOnayla !== undefined) { if (await kartGitsin(vk, () => api('kuyruk/onayla', { id: ev.is.id, makine: ev.makine }), 'Onaylandı ✓')) { onImza['on-video'] = null; yukle(); } }
-      else if (d.onSaat !== undefined) { const f = vk.querySelector('form.m-saat'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input').focus(); }
-      else if (d.onIptal !== undefined) { if (confirm('Bu video sıradan çıkarılsın mı? Paylaşılmaz.') && await kartGitsin(vk, () => api('kuyruk/iptal', { id: ev.is.id, makine: ev.makine }), 'Sıradan çıkarıldı')) { onImza['on-video'] = null; yukle(); } }
-    } else if (hk) {
-      const id = hk.dataset.hid;
-      if (d.onEle !== undefined) { if (confirm('Bu hikâye elensin mi? Bir daha kullanılmaz.') && await kartGitsin(hk, () => api('dizi/havuz/ele', { kanal, makine: dzM(), id, neden: 'Furkan eledi' }), 'Elendi')) havuzYukle(); }
-      else if (d.onOne !== undefined) { b.disabled = true; try { await api('dizi/havuz/one', { kanal, makine: dzM(), id }); bildir('Öne alındı: konusunun sıradaki hikâyesi'); onImza['on-havuz'] = null; await havuzYukle(); } catch (err) { b.disabled = false; bildir(err.message, true); } }
-    }
-  });
+  document.addEventListener('click', e => {
+    const one = e.target.closest('[data-on-one]'), ele = e.target.closest('[data-on-ele]');
+    if (one) { e.stopPropagation(); return havuzIslem(one, 'one', one.dataset.onOne); }
+    if (ele) { e.stopPropagation(); return havuzIslem(ele, 'ele', ele.dataset.onEle); }
+    const git = e.target.closest('[data-on-git]'); if (git) { e.stopPropagation(); const [t, x] = [git.dataset.onGit.slice(0, 1), git.dataset.onGit.slice(2)]; if (x) onAc(t + ':' + x); return; }
+    const ac = e.target.closest('[data-on-ac]'); if (ac && !e.target.closest('a')) { e.stopPropagation(); onAc(ac.dataset.onAc); }
+  }, true);
+  document.addEventListener('keydown', e => { const k = e.target.closest && e.target.closest('[data-on-ac][role=button]'); if (k && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onAc(k.dataset.onAc); } });
 }
-// the calendar's approval bar points here
-function onaylaraGit(hedef) { sekme('onaylar'); onaylarCiz(); const el = hedef && document.getElementById(hedef); if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }
+// the calendar's approval bar points here: "on-m-<id>" / "on-v-<job>" open that item, empty opens the page
+function onaylaraGit(hedef) { sekme('onaylar'); onaylarCiz(); const m = /^on-([mv])-(.+)$/.exec(hedef || ''); if (m) onAc(m[1] + ':' + m[2]); }
 
 // ---------------- Posted videos for the Results page (Instagram first, the queue's own numbers otherwise)
 function gonderiler() {
@@ -1144,7 +1182,7 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.zaman && t.value) islem('kuyruk/zaman', { id: t.dataset.zaman, makine: t.dataset.makine, zaman: ofsetli(t.value) }, 'Saat değişti');
-  if (t.id === 'kanal-sec') { DZ = null; dzKirli = false; kanal = t.value; try { localStorage.setItem('vm-kanal', kanal); } catch {} IG = null; TK = null; SV = null; AS = {}; HV = null; ISV = null; Object.keys(onImza).forEach(k => onImza[k] = null); yukle(); if ($('#s-onaylar').classList.contains('on')) { havuzYukle.t = Date.now(); havuzYukle(); } }
+  if (t.id === 'kanal-sec') { DZ = null; dzKirli = false; kanal = t.value; try { localStorage.setItem('vm-kanal', kanal); } catch {} IG = null; TK = null; SV = null; AS = {}; HV = null; ISV = null; onIslenen.clear(); Object.keys(onImza).forEach(k => onImza[k] = null); yukle(); if ($('#s-onaylar').classList.contains('on')) { havuzYukle.t = Date.now(); havuzYukle(); } }
 });
 // the line chart's hover card
 document.addEventListener('mouseover', e => {
