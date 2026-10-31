@@ -25,7 +25,15 @@ const ARAYUZ = path.join(__dirname, 'arayuz');
 const KAYIT = path.join(KOK, 'kayit'), ISLER = path.join(KAYIT, 'panel-isler');
 const ONBELLEK = path.join(KAYIT, 'panel-instagram.json'), DERSLER = path.join(KAYIT, 'dersler.json');
 const PORT = +(arg('--port') || 4747);
-const ANAHTAR = crypto.randomBytes(18).toString('base64url');
+// the key survives restarts (kept outside the repo) so a desktop shortcut keeps working; tests get a fresh random one
+function kaliciAnahtar() {
+  const f = path.join(os.homedir(), '.video-mutfagi', 'panel-anahtar.txt');
+  try { const k = fs.readFileSync(f, 'utf8').trim(); if (/^[\w-]{20,}$/.test(k)) return k; } catch { }
+  const k = crypto.randomBytes(18).toString('base64url');
+  try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, k + '\n', { mode: 0o600 }); } catch { }
+  return k;
+}
+const ANAHTAR = require.main === module ? kaliciAnahtar() : crypto.randomBytes(18).toString('base64url');
 
 const okuJ = (f, v = null) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return v; } };
 const icinde = (f, d) => path.resolve(f).startsWith(path.resolve(d) + path.sep);
