@@ -17,7 +17,10 @@ Başlık: {{baslik}}
 - **Her bölüm yaklaşık bir dakika** (özet dahil kabaca 120–150 kelime). Bu yumuşak bir hedeftir: bir bölüm kırılma noktası yüzünden biraz kısa ya da uzun olabilir, son bölüm daha kısa olabilir. Uzun hikâye **daha uzun bölüm değil, daha çok bölüm** alır; bir bölüm 170 kelimeyi geçecekse onu iki bölüme ayır. Köşeli parantezli ses etiketleri kelime sayılmaz.
 - **Son bölüm dışındaki her bölüm kaynaktaki gerçek bir merak noktasında biter** (cliffhanger). Bölümü kendin yapay bir sürprizle bitirme; kaynağın kendi kırılma anında kes. Son bölüm hikâyenin kendi sonuyla biter.
 - **2. ve sonraki bölümler "Önceki bölümde…" ile başlayan TEK cümlelik bir özetle açılır: en fazla 15 kelime.** Özet önceki bölümde anlatılanı söyler, yeni bilgi vermez. Özet kendi paragrafıdır: özetten sonra bir boş satır bırak. 1. bölümde özet yoktur.
-- **Açılış:** kaynakta gerçekten çarpıcı bir cümle varsa 1. bölümün başına taşıyabilirsin; yoksa kaynağın kendi açılışını koru.
+- **Açılış formülü (1. bölümün ilk bir-iki cümlesi):** izleyici ilk iki saniyede hikâyenin ne olduğunu anlamalı. İlk cümle **kim + başına gelen tuhaf/çarpıcı durum**, ikinci cümle (gerekiyorsa) **onu tuhaf yapan karşıtlık**. Örnek kalıp (içeriğini kullanma): "Tanımadığım bir numara beni 3-J velileri grubuna ekledi. Çocuğum yok, evli bile değilim."
+  - Bu cümleler **kaynaktaki gerçek durumdan** kurulur; olay uydurulmaz, sonuç ya da dönüm noktası ele verilmez (yalnız başlangıçtaki durum söylenir). Sonra hikâye kendi sırasıyla anlatılmaya devam eder.
+  - **Yasak açılışlar:** olaysız giriş ("Size bir hikâyem var", "Hâlâ hatırladıkça gülümsediğim bir anım var", "Yıllar önceydi", "Nereden başlasam"), yalnız duygu ya da tarih söyleyen cümle, kaynakta olmayan kanca ("Meğer hayatımın hatasıymış", "Sonunu tahmin edemezsiniz").
+  - Komik olmayan hikâyede de aynı formül, sakin bir dille: "Annem öldükten iki hafta sonra telefonuna bir mesaj geldi." gibi; durum söylenir, abartılmaz.
 - **Yabancı (Reddit) hikâyeler** yabancı ortamını korur ve yabancı isimler kullanır; Türkiye'ye uyarlanmaz. Türkçe (Ekşi) hikâyelerde isimler değiştirilir, kişiler tanınmaz.
 - **Ses etiketleri** metinde seyrek ve yalnız kaynaktaki duyguya uyan yerde kullanılabilir.
 
