@@ -199,3 +199,21 @@ test('ozet: takip / takip_elle / takip_tahmini per reel, takip_eksik, kitle, dai
   assert.deepStrictEqual([v('C').acilis, v('C').ses, v('C').bolum, v('C').kapak_baslik], ['Tek video.', 'VOICE2', null, null], 'from the video folder');
   assert.strictEqual(I.ozet({ kok, hesap: 'yok', gun: 7, simdi }).kitle, null);
 });
+
+test('ozet: saatlik only for gun <= 3, whole hours from the period start to now, views delta and followers per hour', () => {
+  const kok = kokYap(), d = D(kok, 'h'), simdi = T0 + 20 * 60e3;   // 20 minutes into an hour
+  const gz = []; for (let h = -80; h <= 0; h++) gz.push({ v: 2, zaman: iso(T0 + h * SAAT), media_id: 'A', yayin: iso(T0 - 90 * SAAT), yas_s: 1, api: 'v', metrik: { views: 100 + 10 * (h + 80) }, yok: {} });
+  gz.sort((a, b) => Date.parse(a.zaman) - Date.parse(b.zaman));
+  yaz(path.join(d, 'gozlem-2026-11.jsonl'), gz);
+  fs.writeFileSync(path.join(d, 'medya.json'), JSON.stringify({ A: { t: iso(T0 - 90 * SAAT), tur: 'reel', baslik: 'A' } }));
+  const tk = []; for (let h = -80; h <= 0; h++) tk.push({ zaman: iso(T0 + h * SAAT), hesap: 'h', takipci: 500 + h + 80, medya: [] });   // the hourly snapshots
+  yaz(path.join(d, '2026-11.jsonl'), tk);
+  const o = I.ozet({ kok, hesap: 'h', gun: 1, simdi }), o3 = I.ozet({ kok, hesap: 'h', gun: 3, simdi });
+  assert.ok(!('saatlik' in I.ozet({ kok, hesap: 'h', gun: 7, simdi })), 'no hourly series for longer periods');
+  assert.ok(o.saatlik.every(p => Date.parse(p.saat) % SAAT === 0 && p.views >= 0), 'aligned to the full hour');
+  const bas = Math.floor((simdi - GUN) / SAAT) * SAAT;
+  assert.strictEqual(o.saatlik[0].saat, iso(bas)); assert.strictEqual(o.saatlik.length, Math.ceil((simdi - bas) / SAAT));
+  const ara = o.saatlik.find(p => p.saat === iso(T0 - 5 * SAAT));
+  assert.deepStrictEqual([ara.views, ara.takipci], [10, 500 + (-4) + 80], 'one observation per hour: +10 views, followers at the hour end');
+  assert.strictEqual(o3.saatlik.length, Math.ceil((simdi - Math.floor((simdi - 3 * GUN) / SAAT) * SAAT) / SAAT));
+});

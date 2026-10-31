@@ -16,7 +16,7 @@
 // Server: ayarlar/panel.json → "sunucu" (copy panel/ayar-ornek.json). Reached with your own `ssh`; a server video is
 // viewed through GET /api/sunucu-video?yol=videolar/... (scp into kayit/sunucu-onizleme/, at most 5 files).
 const http = require('http'), fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
-const { spawnSync, spawn } = require('child_process');
+const { spawnSync, spawn, execFileSync } = require('child_process');
 
 const arg = n => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : null; };
 const KOK = arg('--kok') ? path.resolve(arg('--kok')) : path.join(__dirname, '..');     // --kok: show another copy of the repo
@@ -385,6 +385,16 @@ function videoKimlik(video) {
   const ilk = Array.isArray(v.satirlar) && v.satirlar[0] && typeof v.satirlar[0].metin === 'string' ? v.satirlar[0].metin : null, e = v.video_ek || {};
   return { metin: ilk, ses: (v.anlaticilar && typeof v.anlaticilar.anlatici === 'string' && v.anlaticilar.anlatici) || null, bolum: e.bolum ?? null, toplam_bolum: e.toplam_bolum ?? null, kapak_baslik: typeof e.kapak_baslik === 'string' ? e.kapak_baslik : null };
 }
+// a video's length from its mp4 when ses/zaman.json is missing (folders with only cikti/*.mp4): ffprobe once per path+mtime
+const mp4Sure = new Map();
+function mp4SureOku(rel) {
+  try {
+    const f = path.resolve(KOK, rel || ''); if (!f.endsWith('.mp4') || !icinde(f, path.join(KOK, 'videolar'))) return null;
+    const imza = f + ':' + fs.statSync(f).mtimeMs; if (mp4Sure.has(imza)) return mp4Sure.get(imza);
+    const d = parseFloat(kanca.mp4Sure(f)), s = Number.isFinite(d) && d > 0 ? +d.toFixed(1) : null;
+    mp4Sure.set(imza, s); return s;
+  } catch { return null; }
+}
 function istatistikCevap(b) {
   const { hesap, gun } = istatistikGovde(b);
   const isler2 = ['paylasilan', 'bekleyen'].flatMap(k => isler(k)).filter(j => (isHesap(j) || HESAP0) === hesap);
@@ -392,6 +402,7 @@ function istatistikCevap(b) {
   const sure = {}, kimlik = {};
   for (const j of isler2) if (j.video && /^videolar\/[\w.-]+$/.test(j.video)) {
     const z = okuJOnbellekli(path.join(KOK, j.video, 'ses', 'zaman.json')); if (z && Number.isFinite(+z.toplam)) sure[j.video] = +(+z.toplam).toFixed(1);
+    else if (!(j.video in sure)) { const d = mp4SureOku(j.mp4); if (d) sure[j.video] = d; }
     const k = videoKimlik(j.video); if (k) kimlik[j.video] = k;
   }
   return IST().ozet({ kok: KOK, hesap, gun, ek: { isler: isler2, diziler, sure, kimlik } });
@@ -503,7 +514,7 @@ function dizilerCevap(kanal) {
   return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null), reddedilen_toplam: Array.isArray(red) ? red.length : 0, furkan_baksin, planli };
 }
 // route -> server hop goes through this object so tests can stub the ssh / scp call
-const kanca = { sunucuda: (...a) => sunucuda(...a), scp: (args, sure) => spawnSync('scp', args, { encoding: 'utf8', timeout: sure }) };
+const kanca = { mp4Sure: f => execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }), sunucuda: (...a) => sunucuda(...a), scp: (args, sure) => spawnSync('scp', args, { encoding: 'utf8', timeout: sure }) };
 const kanalAdi = k => { if (typeof k !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(k)) throw new Error('kanal yok'); return k; };
 // a series has 2-5 episodes (dizi/bol.js MAX_SAYI); an n past this series' own count is refused by dizi.js ("bölüm n yok")
 const MAX_BOLUM = 5;

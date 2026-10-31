@@ -83,3 +83,25 @@ test('GET istatistik: the typed number and the identity card from the video fold
   r = await istek('GET', '/api/istatistik?hesap=kart&gun=14'); v = r.j.videolar.find(x => x.id === 'V1');
   assert.deepStrictEqual([v.takip, v.takip_elle], [40, true]);
 });
+
+test('istatistikCevap: video length falls back to ffprobe of the job mp4 once per path+mtime, only under videolar/', () => {
+  const mp4 = path.join(KOK, 'videolar', 'e1', 'cikti', 'a.mp4');
+  fs.mkdirSync(path.dirname(mp4), { recursive: true }); fs.writeFileSync(mp4, 'x');
+  fs.mkdirSync(path.join(KOK, 'videolar', 'e2', 'ses'), { recursive: true });
+  fs.writeFileSync(path.join(KOK, 'videolar', 'e2', 'ses', 'zaman.json'), JSON.stringify({ toplam: 12.34 }));
+  const yaz = (ad, j) => fs.writeFileSync(path.join(KOK, 'kuyruk', 'paylasilan', ad + '.json'), JSON.stringify({ hesap: 'kart', paylasildi: new Date().toISOString(), ...j }));
+  yaz('f1', { media_id: 'F1', video: 'videolar/e1', mp4: 'videolar/e1/cikti/a.mp4' });
+  yaz('f2', { media_id: 'F2', video: 'videolar/e2', mp4: 'videolar/e1/cikti/a.mp4' });   // zaman.json wins
+  yaz('f3', { media_id: 'F3', video: 'videolar/e3', mp4: '../outside.mp4' });             // escapes videolar/
+  const asil = P.kanca.mp4Sure, cagri = [];
+  P.kanca.mp4Sure = f => { cagri.push(f); return '42.04\n'; };
+  try {
+    const s = () => { const o = P.istatistikCevap({ hesap: 'kart', gun: 7 }); return o; };
+    s(); s();
+    assert.deepStrictEqual(cagri, [mp4], 'probed once, not for zaman.json or the outside path');
+    const t = new Date(Date.now() + 5000); fs.utimesSync(mp4, t, t); s();
+    assert.strictEqual(cagri.length, 2, 'a new mtime probes again');
+    P.kanca.mp4Sure = () => { throw new Error('no ffprobe'); }; fs.utimesSync(mp4, new Date(Date.now() + 9000), new Date(Date.now() + 9000));
+    assert.doesNotThrow(s, 'probe errors are ignored');
+  } finally { P.kanca.mp4Sure = asil; }
+});
