@@ -629,9 +629,9 @@ const sunucuYap = () => http.createServer(async (req, res) => {
 module.exports = { kanca, kuyrukOzet, instagram, takipci, istatistikCevap, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
 if (require.main !== module) return;
 
-  // ozellik: lets the home panel know this copy has the --dizi* flags
+  // ozellik: lets the home panel know which flags this copy has (an older one would not answer them)
 if (process.argv.includes('--ozet')) {
-  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler'] })); process.exit(0); }
+  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler', 'istatistik', 'instagram'] })); process.exit(0); }
   catch (e) { console.error('HATA: ' + e.message); process.exit(1); }
 }
 if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'); zamanDegistir(process.argv[i + 1], process.argv[i + 2]); console.log('Saat değişti.'); process.exit(0); }
