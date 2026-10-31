@@ -239,13 +239,36 @@ async function paralel(isler, n) {
 // said at that second. A key object or event it did not recognise is a heavy fault of that chunk.
 // the words heard around second t (a little before it: the frame shows what was just said)
 const anlarMetni = (Z, t) => Z.kelimeler.filter(k => k.a >= t - 4 && k.a <= t + .5).map(k => k.w).join(' ');
-const korSorunlari = eksikler => (Array.isArray(eksikler) ? eksikler : []).filter(x => x && x.beklenen && x.saniye != null && !isNaN(+x.saniye)).map(x => ({
-  saniye: +(+x.saniye).toFixed(1), agirlik: 'yuksek', kor: true,
-  sorun: `Metnin söylediği "${x.beklenen}" karede tanınmıyor; metni bilmeyen denetçi şunu gördü: ${x.gorulen || '(hiçbir şey)'}`,
-  duzeltme: `"${x.beklenen}" o an büyük, net ve tek bakışta tanınır biçimde görünsün`,
-}));
+const korSorunlari = (eksikler, tonSorunlari) => [
+  ...(Array.isArray(eksikler) ? eksikler : []).filter(x => x && x.beklenen && x.saniye != null && !isNaN(+x.saniye)).map(x => ({
+    saniye: +(+x.saniye).toFixed(1), agirlik: 'yuksek', kor: true,
+    sorun: `Metnin söylediği "${x.beklenen}" karede tanınmıyor; metni bilmeyen denetçi şunu gördü: ${x.gorulen || '(hiçbir şey)'}`,
+    duzeltme: `"${x.beklenen}" o an büyük, net ve tek bakışta tanınır biçimde görünsün`,
+  })),
+  // a serious story drawn with comic exaggeration (seen by the blind reviewer) is a heavy fault too
+  ...(Array.isArray(tonSorunlari) ? tonSorunlari : []).filter(x => x && x.sorun && x.saniye != null && !isNaN(+x.saniye)).map(x => ({
+    saniye: +(+x.saniye).toFixed(1), agirlik: 'yuksek', kor: true,
+    sorun: `Hikâyenin tonuna uymuyor: ${x.sorun}`, duzeltme: 'Komik abartıyı kaldır; sakin renk, sade ifade, yumuşak hareket, saygılı ve dolaylı imge kullan',
+  })),
+];
 
 // the channel's hard scene rules (gorsel_dil.kurallar), put at the top of the scene prompt
+// the story's tone for the scenes (video.json ton): a serious tone gets muted, gentle, respectful pictures. The kit may add
+// its own lines (gorsel_dil.ton_kurallari[ton]); these defaults hold for any channel.
+const TON_VARSAYILAN = [
+  'Bu hikâye komik DEĞİL: saygıyla çiz. Dinleyen kimse dalga geçildiğini hissetmemeli.',
+  'Paletin sakin, soluk tonlarını kullan (aynı çizgi tarzı içinde): parlak domates kırmızısı ve sarı geniş alanlarda yok; gece, gri-mavi, krem.',
+  'Çizgi film abartısı yok: ter damlası, şok çizgileri, fırlayan gözler, yıldızlar, emoji gibi yüzler, zıplayan nesneler, komik tabela ya da yazı yok.',
+  'Hareket yavaş ve yumuşak: zıplama, titreme, sallanma, damga vurma yok; belirme ve kayma yeter.',
+  'Ölüm, hastalık, kaza ya da şiddet hiçbir zaman çıplak gösterilmez: boş sandalye, kapalı kapı, pencere, bir eşya, iki kişinin sessizce oturması gibi dolaylı ve saygılı imgeler.',
+  'Kişinin yüzü acıyı sade bir ifadeyle taşır (hüzünlü kaş, kapalı ağız); gülen ya da alaycı ifade yok.',
+];
+function tonMetni(ton, gd) {
+  if (!['hüzünlü', 'ürkütücü', 'ciddi'].includes(ton)) return 'Bu hikâye komik: kanalın her zamanki canlı dili geçerli (kaynakta olmayan şaka yine eklenmez).';
+  const kit = ((gd || {}).ton_kurallari || {})[ton];
+  return `Bu hikâyenin tonu: **${ton}**.\n` + [...TON_VARSAYILAN, ...(Array.isArray(kit) ? kit : [])].map(x => '- ' + x).join('\n');
+}
+
 const kesinKurallar = gd => (Array.isArray((gd || {}).kurallar) && gd.kurallar.length) ? gd.kurallar.map(k => '- ' + k).join('\n') : '- (kanalın ek kuralı yok)';
 
 // the leading // comment block of a file is its manual
@@ -385,7 +408,7 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
         formul: md('dersler/FORMUL.md'), renkler: ctx.kimlik.renkler || {}, gorsel_dil: gdMetin, kurallar: kesinKurallar(gd),
         karakter: fs.existsSync(kf) ? basYorum(kf) : 'Bu kanalın tekrar eden karakteri yok: karakter null gelir.',
         motor: basYorum(path.join(O.KOK, 'uretim', 'motor.js')), sure: Z.toplam.toFixed(1), marka: (Z.sting[0] || 0).toFixed(2),
-        ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'), kutuphane: Kut.istemMetni(ctx.dir, video.dizi || null),
+        ornek: md('videolar/oxygbio-ornek-formul/sahneler.js'), kutuphane: Kut.istemMetni(ctx.dir, video.dizi || null), ton: tonMetni(video.ton, gd),
       };
       const satirListesi = p => video.satirlar.map((_, i) => satirMetni(i, P.length === 1 || p.satirlar.includes(i))).join('\n');
       const sureler = [];
@@ -429,15 +452,15 @@ async function uret(ctx, fikirId, { onay = false, otomatik = false, onayGerekli 
           const k = await sor(LLM.istem('kare-kor', { sayfalar: sayfaListesi }), { is: 'kare-kor', resimler: sayfalar, model: denetimModeli, efor: 'low' });
           const kareler = (k && Array.isArray(k.kareler) ? k.kareler : []).filter(x => x && x.saniye != null && !isNaN(+x.saniye));
           if (!kareler.length) return [];
-          const m = await sor(LLM.istem('kare-karsilastir', { kareler: kareler.map(x => `- ${(+x.saniye).toFixed(1)} sn | söylenen: "${anlarMetni(Z, +x.saniye)}" | kör denetçinin gördüğü: ${x.goruyorum || '(boş)'}`).join('\n') }),
+          const m = await sor(LLM.istem('kare-karsilastir', { ton: tonMetni(video.ton, gd), kareler: kareler.map(x => `- ${(+x.saniye).toFixed(1)} sn | söylenen: "${anlarMetni(Z, +x.saniye)}" | kör denetçinin gördüğü: ${x.goruyorum || '(boş)'}`).join('\n') }),
             { is: 'kare-karsilastir', model: denetimModeli, efor: 'low' });
-          return korSorunlari(m && m.eksikler);
+          return korSorunlari(m && m.eksikler, m && m.ton_sorunlari);
         };
         let d, kor = [];
         try {
           [d, kor] = await Promise.all([
             sor(LLM.istem('sahne-denetim', {
-              sayfalar: sayfaListesi, gorsel_dil: gdMetin,
+              sayfalar: sayfaListesi, gorsel_dil: gdMetin, ton: tonMetni(video.ton, gd),
               satirlar: video.satirlar.map((s, i) => `${i} [${Z.satirlar[i].bas.toFixed(1)}-${Z.satirlar[i].son.toFixed(1)} sn]: ${s.metin}`).join('\n'),
             }), { is: 'sahne-denetim', resimler: sayfalar, model: denetimModeli, efor: llm.efor_sahne === 'low' ? 'low' : 'medium' }),
             korDenetim().catch(e => { yaz('  Kör denetim yapılamadı: ' + e.message); return []; }),
@@ -669,4 +692,4 @@ function kuyrugaYaz({ video, mp4, aciklama, onayGerekli, neZaman = null, hesap =
   return f;
 }
 
-module.exports = { uret, isHesabi, kodCikar, sahneZamanAsimi, anlarMetni, korSorunlari, sahneAyari, parcala, parcaIstemi, birlestir, sorunDagit, paralel, kesinKurallar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };
+module.exports = { uret, isHesabi, kodCikar, sahneZamanAsimi, anlarMetni, korSorunlari, tonMetni, sahneAyari, parcala, parcaIstemi, birlestir, sorunDagit, paralel, kesinKurallar, sureAyari, kuyrugaYaz, kuyruktaVar, ipuclariniOnar, ifadeCoz, ucretliKontrol, simKontrol, simEsyaOnar, simIpucuOnar, metinMd, dogrulamaSorunlari, bolum, Dur };

@@ -135,3 +135,28 @@ test('top label: marker kept apart from the title, smaller font for long titles,
   assert.match(mk.css, /\.etk-ad\{min-width:0;overflow:hidden;text-overflow:ellipsis\}\.etk-no\{flex:none;padding-left:\.32em\}/);
   assert.doesNotMatch(mk.css, /\.etk\{[^}]*text-overflow/, 'the whole label is never ellipsised');
 });
+
+// ---- story tone (Furkan 31.10): a sad or serious story gets no comic sound, a softer bed and calmer voice settings
+test('tone: serious stories keep only soft card sounds, take the soft bed (or none) and the calmer tts settings', () => {
+  const { dir } = geciciKanal();
+  fs.writeFileSync(path.join(dir, 'muzik', 'yumusak-ton.wav'), 'x');
+  const c = { sfx: [['pop', 1, .5], ['tik', 2, .2], ['yumusak-ton', 3, .3]] };
+  assert.deepStrictEqual(K.kapanisSesleri(c, dir, 'hüzünlü').map(e => path.basename(e[0])), ['yumusak-ton.wav']);
+  assert.deepStrictEqual(K.kapanisSesleri(c, dir, 'komik').map(e => path.basename(e[0])), ['pop.wav', 'tik.wav', 'yumusak-ton.wav']);
+  assert.deepStrictEqual(K.kapanisSesleri(c, dir).length, 3, 'no tone = komik (older videos)');
+  const m = { kapanis_muzigi: 'muzik/neseli.m4a', kapanis_muzigi_ciddi: 'muzik/sakin.m4a' };
+  assert.deepStrictEqual([K.kapanisMuzigi(m, 'komik'), K.kapanisMuzigi(m, 'ciddi'), K.kapanisMuzigi({ kapanis_muzigi: 'x' }, 'ürkütücü'), K.kapanisMuzigi(m, undefined)], ['muzik/neseli.m4a', 'muzik/sakin.m4a', null, 'muzik/neseli.m4a']);
+  const tts = { voice_settings: { stability: 0, similarity_boost: .8 }, ton_ayarlari: { 'hüzünlü': { stability: .5 } } };
+  assert.deepStrictEqual(K.tonSesAyari(tts, 'hüzünlü'), { stability: .5, similarity_boost: .8 });
+  assert.deepStrictEqual(K.tonSesAyari(tts, 'komik'), { stability: 0, similarity_boost: .8 });
+  assert.deepStrictEqual(K.tonSesAyari({}, 'ciddi'), {});
+});
+
+test('tone: the closing card is told the story tone', () => {
+  const { dir, kimlik } = geciciKanal();
+  fs.writeFileSync(path.join(dir, 'kapanis.js'), "module.exports = function ({ at, bas, ton }) { return { html: '<div id=\"kt\">TON ' + ton + '</div>', tl: [], sure: 3 }; };");
+  const video = { ...okuJ(path.join(V01, 'video.json')), anons_rolleri: [], etiket: 'X', bolum: 1, toplam_bolum: 2, ton: 'ciddi' };
+  const T = zaman(video, okuJ(path.join(V01, 'ses', 'kelimeler.json')), { sting: false, kapanis: 3 });
+  assert.match(K.marka(T, kimlik, K.palet(kimlik), { video, kimlikDir: dir }).html, /TON ciddi/);
+  assert.match(K.marka(T, kimlik, K.palet(kimlik), { video: { ...video, ton: undefined }, kimlikDir: dir }).html, /TON komik/);
+});

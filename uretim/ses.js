@@ -8,7 +8,7 @@
 // 02-<rol>.mp3 ... (same numbering and role names as video.json). This script then has nothing to do.
 // To redo one line: delete only that line's file and run again.
 const fs = require('fs'), path = require('path');
-const { videoYukle, anahtar, fail } = require('./cekirdek');
+const { videoYukle, anahtar, fail, tonSesAyari } = require('./cekirdek');
 const SH = require('./ses-harcama');
 
 const { dir, video, kimlik } = videoYukle(process.argv[2]);
@@ -45,7 +45,8 @@ if (!eksik.length) process.exit(0);
   for (const x of eksik) {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${x.ses}?output_format=mp3_44100_128`, {
       method: 'POST', headers: { ...h, 'content-type': 'application/json' },
-      body: JSON.stringify({ text: x.metin, model_id: tts.model, language_code: tts.language_code, voice_settings: tts.voice_settings }),
+      // a sad or serious story gets the kit's calmer settings for its tone (tts.ton_ayarlari, e.g. higher stability)
+      body: JSON.stringify({ text: x.metin, model_id: tts.model, language_code: tts.language_code, voice_settings: tonSesAyari(tts, video.ton) }),
     });
     if (!r.ok) {
       const t = (await r.text()).slice(0, 300);

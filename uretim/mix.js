@@ -12,7 +12,7 @@
 // sound effects (the card's sfx → kanal/<kanal>/muzik/<name>.wav, skipped when missing) play and the video ends with the card.
 const fs = require('fs'), path = require('path');
 const { spawnSync } = require('child_process');
-const { videoYukle, okuJson, sh, sure, fail, KOK, kapanisYukle, kapanisSesleri, palet, at: atS } = require('./cekirdek');
+const { videoYukle, okuJson, sh, sure, fail, KOK, kapanisYukle, kapanisSesleri, kapanisMuzigi, ciddiTon, palet, at: atS } = require('./cekirdek');
 const { hizala } = require('./hizala');
 
 const { dir, video, kimlik, kimlikDir } = videoYukle(process.argv[2]);
@@ -29,8 +29,11 @@ if (STING && !fs.existsSync(sting)) sh('node', [path.join(KOK, 'marka', 'marka-s
 const RISE = kimlik.marka.yukselis || 0.85;
 // the channel's closing card: only its length and music cue are needed here
 const kart = kapanisYukle(kimlik, kimlikDir);
-const muzik = kart && kimlik.marka.kapanis_muzigi ? path.join(kimlikDir, kimlik.marka.kapanis_muzigi) : null;
-if (muzik && !fs.existsSync(muzik)) fail(`kapanış müziği yok: ${muzik} (kimlik.json → marka.kapanis_muzigi)`);
+// the story's tone (video.json ton): a serious one gets no comic sound and a softer bed, or none
+const TON = video.ton || 'komik', muzikAd = kart ? kapanisMuzigi(kimlik.marka, TON) : null;
+const muzik = muzikAd ? path.join(kimlikDir, muzikAd) : null;
+if (muzik && !fs.existsSync(muzik)) fail(`kapanış müziği yok: ${muzik} (kimlik.json → marka.${ciddiTon(TON) ? 'kapanis_muzigi_ciddi' : 'kapanis_muzigi'})`);
+if (kart && ciddiTon(TON) && !muzik) console.log(`Not: ${TON} hikâye; kitte yumuşak kapanış müziği (marka.kapanis_muzigi_ciddi) yok, kartın altında müzik çalmayacak.`);
 
 // announcer "bing-bong" chime (two decaying bells)
 function chime(file) {
@@ -109,10 +112,10 @@ lines.forEach((f, i) => {
     if (STING) {                                  // closing sting after the punchline
       const hit = end + 0.45; ev.push([sting, hit - RISE, 0.55, 'fx']); Z.sting.push(+hit.toFixed(3)); t = hit + 2.4;
     } else if (kart) {                            // channel closing card + its outro music (ends on its own)
-      const bas = end + 0.5, k = kart({ C: palet(kimlik), at: atS, bas, sonraki: null, hesap: kimlik.marka.hesap });
+      const bas = end + 0.5, k = kart({ C: palet(kimlik), at: atS, bas, sonraki: null, hesap: kimlik.marka.hesap, ton: TON });
       const m = k.muzik || { bas: bas - 0.1, ses: 0.7 };
       if (muzik) ev.push([muzik, Math.max(0, m.bas), m.ses, 'fx']);
-      for (const [f, t0, v] of kapanisSesleri(k, kimlikDir)) { ev.push([f, t0, v, 'fx']); kartSfx++; }   // the card's own whoosh/pop/tick
+      for (const [f, t0, v] of kapanisSesleri(k, kimlikDir, TON)) { ev.push([f, t0, v, 'fx']); kartSfx++; }   // the card's own whoosh/pop/tick
       Z.kapanis = +bas.toFixed(3); t = bas + k.sure;
     } else t = end + 1;
   } else t = end + (isA || anons.has(rol(lines[i + 1])) ? 0.35 : 0.22);

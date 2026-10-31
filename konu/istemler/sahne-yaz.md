@@ -11,6 +11,10 @@ Sen dikey video için animasyon yönetmenisin ve SVG çizerisin. Onaylı metnin 
 Kanalın kendi kesin kuralları:
 {{kurallar}}
 
+## Hikâyenin tonu
+
+{{ton}}
+
 {{parca}}
 
 ## Kurallar (uy)
