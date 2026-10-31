@@ -26,14 +26,17 @@ function kuyrukOku(kok) {
 // ---- default collaborators (all injectable)
 // factory so tests can pass a fake paylas module: returns {metrik, yorum_devam, not?}; yorum_devam = comments containing a keyword (tr-lowercase).
 // A failed comments fetch never blocks the measurement: yorum_devam is 0 and `not` says why.
-// Furkan 31.10, one Instagram read per hour: the hourly snapshot (instagram/istatistik.js) is used when it holds this media
-// and is younger than 2 h (numbers and recent comments); only without one is Instagram asked directly.
+// Furkan 31.10, one Instagram read per hour: the snapshot (instagram/istatistik.js) is used when it observed this media
+// less than 2 h ago (numbers and recent comments); only without one is Instagram asked directly. metrik_zaman = the time
+// of the observation used (the run time for a direct read, set by calistir).
 const devamSay = (yorumlar, kelimeler) => { const kl = kelimeler.map(k => String(k).toLocaleLowerCase('tr')); return yorumlar.filter(t => { t = String(t || '').toLocaleLowerCase('tr'); return kl.some(k => t.includes(k)); }).length; };
 const sonucAlYap = (P, I, kok) => async (mediaId, hesap, kelimeler) => {
-  const an = I ? I.medyaSon(kok || ortak.KOK, hesap || 'oxygbio', mediaId, 2 * 3600e3) : null;
+  const an = I ? I.medyaSon(kok || ortak.KOK, hesapAd(hesap), mediaId, 2 * 3600e3) : null;
   if (an) {
     const metrik = {}; for (const k of ['views', 'reach', 'likes', 'comments', 'shares', 'saved', 'total_interactions']) metrik[k] = an[k] ?? null;
-    return { metrik, yorum_devam: Array.isArray(an.yorumlar) && kelimeler && kelimeler.length ? devamSay(an.yorumlar, kelimeler) : 0, kaynak: 'anlik' };
+    // watch time and skip rate only when the snapshot has them (a later phase rates the series with them)
+    for (const k of ['ig_reels_avg_watch_time', 'ig_reels_video_view_total_time', 'reels_skip_rate']) if (an[k] != null) metrik[k] = an[k];
+    return { metrik, yorum_devam: Array.isArray(an.yorumlar) && kelimeler && kelimeler.length ? devamSay(an.yorumlar, kelimeler) : 0, kaynak: 'anlik', ...(an.zaman ? { metrik_zaman: an.zaman } : {}) };
   }
   const metrik = await P.sonuc(mediaId, hesap);
   let yorum_devam = 0, not;
@@ -240,7 +243,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
         if (!b.media_id) { olcemedi('media_id yok, ölçülemedi'); continue; }
         try {
           const r = (await sonucAl(b.media_id, hesap, ayar.yorum_kelimeleri || [])) || {};
-          b.metrik = r.metrik || r; b.yorum_devam = r.yorum_devam ?? 0; sonuc.olculen++;
+          b.metrik = r.metrik || r; b.metrik_zaman = r.metrik_zaman || new Date(simdi).toISOString(); b.yorum_devam = r.yorum_devam ?? 0; sonuc.olculen++;
           if (r.not) notlar.push(`${d.id} bölüm ${b.n}: ${r.not}`);
         } catch (e) { olcemedi(`ölçüm hatası: ${e.message}`); continue; }
         const k = kararVer(d, b.n, diziler, ayar, simdi), son = b.n >= d.bolumler.length;
