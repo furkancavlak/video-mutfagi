@@ -553,11 +553,14 @@ function cizgi(seri, etiket, kap) {
   return `<svg class="ig" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(etiket)}">${izgara}<path d="${alan}" class="ig-alan"/><polyline points="${yol.join(' ')}" class="ig-cizgi"/>${noktalar}${tarihler}</svg>`;
 }
 const istHataVar = () => !!(ISV && ISV.son_hata && (!ISV.son_anlik || ISV.son_hata.zaman >= ISV.son_anlik));
+// how long ago, in the page's words: "az önce", "N dk önce", "N sa önce"
+const kacOnce = t => { const dk = Math.floor(Math.max(0, Date.now() - new Date(t)) / 6e4); return dk < 1 ? 'az önce' : dk < 60 ? `${dk} dk önce` : `${Math.floor(dk / 60)} sa önce`; };
 function istatistikSayfaCiz() {
   const el = $('#s-istatistik'); if (!el) return;
   $$('#ist-donem button').forEach(b => b.classList.toggle('on', +b.dataset.istGun === istGun));
-  const zaman = istVar() ? ISV.son_anlik : IG && IG.zaman;
-  $('#ist-zaman').textContent = zaman ? `son güncelleme: ${saat(zaman)}${ayniGun(zaman, Date.now()) ? '' : ' · ' + gunTarih(zaman)}` : '';
+  const zaman = istVar() ? ISV.son_anlik : IG && IG.zaman, sonVeri = istVar() && ISV.son_veri;
+  $('#ist-zaman').textContent = sonVeri ? `Son veri: ${kacOnce(sonVeri)}` : zaman ? `son güncelleme: ${saat(zaman)}${ayniGun(zaman, Date.now()) ? '' : ' · ' + gunTarih(zaman)}` : '';
+  $('#ist-zaman').title = sonVeri ? tarih(sonVeri) : '';
   if (IG && IG.hesapYok) { $('#ist-icerik').innerHTML = '<div class="liste-bos">Bu kanalın Instagram hesabı tanımlı değil.</div>'; return; }
   if (ISV === null && IG === null) { $('#ist-icerik').innerHTML = `<div class="liste-bos">${yukleniyor('Rakamlar geliyor…')}</div>`; return; }
   const banner = istHataVar() ? `<div class="ist-hata">${ikon('uyari', 16)}<span><b>Hesap şu an veriye kapalı.</b> Son hata (${esc(tarih(ISV.son_hata.zaman))}): ${esc(String(ISV.son_hata.hata).slice(0, 220))}</span></div>`
@@ -604,6 +607,8 @@ function istatistikSayfaCiz() {
   const gSlot = yeter(istVar() ? ISV.slotlar || [] : []);
   const grupHtml = (baslik, L, alt) => `<div class="kart ist-ic"><h3>${esc(baslik)}${alt ? ` <small>${esc(alt)}</small>` : ''}</h3>${L.length ? L.map((g, i) => `<div class="ist-ic-s"><span>${esc(g.ad)}</span><i style="--w:${Math.round(g.ort / L[0].ort * 100)}%" class="${i === 0 ? 'ilk' : ''}"></i><b>${esc(sayi(g.ort))}</b><small>${g.video} video</small></div>`).join('') : '<div class="ince-yazi">Henüz yeterli veri yok (her grupta en az 3 video gerekir).</div>'}</div>`;
   const cik = [gSlot.length > 1 && `En iyi saat ${gSlot[0].ad}`, gKonu.length > 1 && `en iyi konu ${gKonu[0].ad}`, gTon.length > 1 && `en iyi ton ${gTon[0].ad}`].filter(Boolean);
+  // a refresh keeps the reader where they were: page scroll and the table's sideways scroll
+  const kay = { y: window.scrollY, x: ($('#ist-icerik .ist-tablo-sar') || {}).scrollLeft || 0 };
   $('#ist-icerik').innerHTML = `${banner}<div class="sayilar ist-kpi">${kpi}</div>
     <div class="kart ist-grafik-kart"><div class="gk-ust"><b>${etiket}</b><div class="secici" id="ist-grafik-sec"><button data-ist-grafik="views" class="${istGrafik === 'views' ? 'on' : ''}">İzlenme</button><button data-ist-grafik="takipci" class="${istGrafik === 'takipci' ? 'on' : ''}">Takipçi</button></div></div>
       <div id="ist-grafik"></div>${not ? `<div class="ince-yazi">${esc(not)}</div>` : ''}</div>
@@ -612,6 +617,8 @@ function istatistikSayfaCiz() {
     <h2 class="bolum">Ne işe yarıyor?</h2>${cik.length ? `<div class="ist-sonuc">${ikon('ileri', 16)}${esc(cik.join(', ').replace(/^./, c => c.toLocaleUpperCase('tr')))}.</div>` : ''}
     <div class="ist-icgoru">${grupHtml('Konuya göre ortalama izlenme', gKonu)}${grupHtml('Tona göre ortalama izlenme', gTon)}${grupHtml('Saate göre ortalama izlenme', gSlot, istVar() ? '24. saatteki izlenme' : '')}</div>`;
   $('#ist-grafik').innerHTML = cizgi(seri, etiket) || grafikBos;   // drawn after the box exists, at its real width
+  const sar = $('#ist-icerik .ist-tablo-sar'); if (sar) sar.scrollLeft = kay.x;
+  if (window.scrollY !== kay.y) window.scrollTo(0, kay.y);
 }
 // a video's detail: every number and its growth curve (views over hours since posting)
 function istVideoAc(id) {
@@ -628,15 +635,20 @@ function istVideoAc(id) {
 const svOzellik = k => !!(SV && !SV.hata && Array.isArray(SV.ozellik) && SV.ozellik.includes(k));
 const istMakine = k => O && O.sunucu && svOzellik(k) ? '&makine=sunucu' : '';
 const svBekle = () => !!(O && O.sunucu && SV === null);   // in server mode the numbers wait for the server's answer first
-async function istatistikYukle() {
-  const at = kanal, h = kanalHesap(); if (!h) { ISV = { yok: true }; return istatistikSayfaCiz(); }
+// arka: the page's own 60 s refresh; a failed refresh keeps the numbers on screen
+async function istatistikYukle({ arka = false } = {}) {
+  const at = kanal, g = istGun, h = kanalHesap(); if (!h) { ISV = { yok: true }; return istatistikSayfaCiz(); }
   if (svBekle()) return;
-  istatistikYukle.surer = true;
-  try { const r = await api(`istatistik?hesap=${encodeURIComponent(hesapAd(h))}&gun=${istGun}${istMakine('istatistik')}`); if (at === kanal) ISV = r; }
-  catch (e) { if (at === kanal) ISV = { yok: true, hata: e.message }; }   // not there (or failed): the page works on the posts alone
+  istatistikYukle.surer = true; istatistikYukle.t = Date.now();
+  // an answer for another channel or period (changed while it was on the way) is dropped
+  try { const r = await api(`istatistik?hesap=${encodeURIComponent(hesapAd(h))}&gun=${g}${istMakine('istatistik')}`); if (at === kanal && g === istGun) ISV = r; }
+  catch (e) { if (at === kanal && g === istGun && !(arka && istVar())) ISV = { yok: true, hata: e.message }; }   // not there (or failed): the page works on the posts alone
   istatistikYukle.surer = false;
   istatistikSayfaCiz();
 }
+// the open İstatistikler page fetches again every 60 s while the tab is visible (the server observes every 10 min)
+const istAcik = () => !!(anahtar && kanal && O && $('#s-istatistik') && $('#s-istatistik').classList.contains('on'));
+function istatistikTazele() { if (istAcik() && !document.hidden && !istatistikYukle.surer && Date.now() - (istatistikYukle.t || 0) >= 50e3) istatistikYukle({ arka: true }); }
 // the calendar keeps one slim line that points to the page
 function istatistikCiz() {
   const el = $('#ozet-satir'); if (!el) return;
@@ -1224,7 +1236,7 @@ function sekme(ad) {
   if (ileri) gelismisAc(true);
   $('#gelismis-dugme').classList.toggle('on', ileri);
   $$('.sayfa').forEach(s => s.classList.toggle('on', s.id === 's-' + ad));
-  if (ad === 'istatistik' && anahtar && kanal) { istatistikSayfaCiz(); if (ISV === null) istatistikYukle(); }
+  if (ad === 'istatistik' && anahtar && kanal) { istatistikSayfaCiz(); if (ISV === null) istatistikYukle(); else istatistikTazele(); }
   if (ad === 'onaylar' && anahtar && (HV === null || Date.now() - (havuzYukle.t || 0) > 5 * 6e4)) { havuzYukle.t = Date.now(); havuzYukle(); }
   try { sessionStorage.setItem('vm-s', ad); } catch {}
 }
@@ -1318,4 +1330,7 @@ $('#pencere').addEventListener('close', () => { const v = $('#pencere video'); i
 temaYaz();
 try { const s = new URLSearchParams(location.hash.slice(1)).get('s') || sessionStorage.getItem('vm-s'); sekme(s || 'takvim'); } catch { sekme('takvim'); }
 if (!anahtar) $('main').innerHTML = '<div class="liste-bos" style="margin-top:40px">Paneli terminaldeki linkle aç: <b>node panel/panel.js</b></div>';
-else { yukle(); setInterval(() => { if (!document.hidden && !$('#pencere').open) yukle(); }, 60e3); }
+else {
+  yukle(); setInterval(() => { if (!document.hidden && !$('#pencere').open) yukle(); }, 60e3);
+  setInterval(istatistikTazele, 60e3); document.addEventListener('visibilitychange', istatistikTazele);
+}
