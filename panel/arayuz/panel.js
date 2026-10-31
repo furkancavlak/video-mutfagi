@@ -325,6 +325,7 @@ function takvimCiz() {
   $('#takvim').innerHTML = h;
   onayBarCiz();
   acikPencereyiTazele();
+  onaylarCiz();
 }
 // "+N daha": the whole day in one list
 // ---------------- Day detail: a side panel (full screen on a phone) with one large card per video, ‹ › to the next day
@@ -404,13 +405,13 @@ function gunAc(gun) {
 function onayBarCiz() {
   const M = metinBekleyenler(), V = OL.filter(e => e.durum === 'onay' && e.is && e.is.onay_gerekli);
   if (!M.length && !V.length) { $('#onay-bar').innerHTML = takvimKaynak() === null ? '' : `<div class="ob-bos">${ikon('tik', 14)}Bekleyen onay yok ✓</div>`; return; }
-  $('#onay-bar').innerHTML = `<section class="ob kart"><div class="ob-ust"><h2>Onayını bekleyenler</h2><span class="say">${M.length + V.length}</span></div><div class="ob-gruplar">
+  $('#onay-bar').innerHTML = `<section class="ob kart"><div class="ob-ust"><h2>Onayını bekleyenler</h2><span class="say">${M.length + V.length}</span><button class="dugme ince ob-git" data-onaylar-git="">Onaylar sayfasında aç ${ikon('ileri', 14)}</button></div><div class="ob-gruplar">
     ${M.length ? `<div class="ob-grup ob-metin"><h3><i class="nokta-d"></i>Metin onayı <small>${M.length}</small></h3>${M.map(d => `<div class="ob-satir">
       <span class="ob-ikon">${ikon('kalem', 16)}</span><span class="ob-ad"><b>${esc(d.baslik_kisa || d.baslik)}</b><small>${d.konu ? `<i class="nokta-k" style="--k:${konuRenk(d.konu)}"></i>${esc(konuAd(d.konu))} · ` : ''}${esc((d.bolumler || []).length)} bölüm</small></span>
-      <button class="dugme mor" data-metin-onay="${esc(d.id)}">Oku ve onayla</button></div>`).join('')}</div>` : ''}
+      <button class="dugme mor" data-onaylar-git="on-m-${esc(d.id)}">Oku ve onayla</button></div>`).join('')}</div>` : ''}
     ${V.length ? `<div class="ob-grup ob-video"><h3><i class="nokta-d"></i>Video onayı <small>${V.length}</small></h3>${V.map(e => `<div class="ob-satir">
       ${kucukKapak(e)}<span class="ob-ad"><b>${esc(e.baslik)}${e.kisaBolum ? ` · ${esc(e.bolum)}` : ''}</b><small>${e.t ? esc(tarih(e.t, { weekday: 'short' })) : 'Saati yok: onaylayınca ilk boş saate konur'}</small></span>
-      <button class="dugme" data-olay="${OL.indexOf(e)}">${ikon('oynat', 14)}İzle</button><button class="dugme sari" data-onayla="${esc(e.is.id)}" data-makine="${esc(e.makine)}">Onayla</button></div>`).join('')}</div>` : ''}
+      <button class="dugme" data-onaylar-git="on-v-${esc(e.is.id)}">${ikon('oynat', 14)}İzle</button><button class="dugme sari" data-onayla="${esc(e.is.id)}" data-makine="${esc(e.makine)}">Onayla</button></div>`).join('')}</div>` : ''}
   </div></section>`;
 }
 // "+ Yeni" and "Video planla": a ready video of this channel that is not queued yet → the add-to-queue dialog
@@ -680,6 +681,7 @@ async function dizilerYukle() {
   const ayni = () => at === kanal && mk === dzM();   // channel or machine switched while waiting: drop the answer
   try { const r = await api('diziler?kanal=' + encodeURIComponent(at) + (mk === 'sunucu' ? '&makine=sunucu' : '')); if (ayni()) DZ = { ...r, _makine: mk }; } catch (e) { if (ayni()) DZ = { ayar: {}, diziler: [], son_kosu: null, hata: e.message, _makine: mk }; }
   dizilerCiz(); takvimCiz(); istatistikCiz();
+  if ($('#s-onaylar').classList.contains('on') && (HV === null || HV._makine !== dzM())) { havuzYukle.t = Date.now(); havuzYukle(); }   // the pool follows the machine the series came from
 }
 async function dzKaydet(e) {
   e.preventDefault();
@@ -697,6 +699,136 @@ async function dzKarar(d) {
   try { await api('dizi/karar', { kanal, makine: dzM(), id: d.did, n: +d.dn, karar: d.dkarar, neden: kes ? 'Furkan kesti' : 'Furkan devam ettirdi' }); bildir(kes ? (son ? 'Hikâye bitti' : 'Kesildi') : 'Devam edecek'); await dizilerYukle(); }
   catch (err) { bildir(err.message, true); }
 }
+
+
+// ---------------- Onaylar: a calm inbox of everything that waits for Furkan, read and approved in spare moments
+let HV = null;                                     // the story pool answer (GET /api/dizi/havuz) for the selected channel
+const onaySayisi = () => metinBekleyenler().length + OL.filter(e => e.durum === 'onay' && e.is && e.is.onay_gerekli).length + (dzGecerli() ? (DZ.furkan_baksin || []).length : 0);
+const kelimeSay = t => String(t).replace(/\[[^\]]*\]/g, ' ').split(/\s+/).filter(Boolean).length;
+const bosSatir = yazi => `<div class="on-bos">${ikon('tik', 14)}${esc(yazi)}</div>`;
+function metinKart(d) {
+  const url = guvenli(d.kaynak && d.kaynak.url), B = d.bolumler || [];
+  return `<article class="kart on-kart on-metin" id="on-m-${esc(d.id)}" data-mid="${esc(d.id)}">
+    <div class="on-ust"><div class="m-cipler">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}<span class="on-bilgi">${esc(B.length)} bölüm</span>${d.anlatici ? `<span class="on-bilgi">Ses: ${esc(d.anlatici.ad || d.anlatici.ses)}</span>` : ''}</div>
+      ${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Ekşi'de aç</a>` : ''}</div>
+    <h3>${esc(d.baslik_kisa || d.baslik)}</h3>${d.baslik && d.baslik !== d.baslik_kisa ? `<div class="ince-yazi">Kaynak başlık: ${esc(d.baslik)}</div>` : ''}
+    ${d.hassasiyet_notu || (d.ton && d.ton !== 'komik') ? `<div class="mt-hassas"><b>Hassasiyet notu</b>${d.ton_neden ? `<span>Ton: ${esc(d.ton_neden)}</span>` : ''}<span>${esc(d.hassasiyet_notu || 'Bu hikâye komik değil: dalga geçen, hafife alan ya da kişiyi tanıtan bir söz kalmasın.')}</span></div>` : ''}
+    <form class="on-form">${B.map(b => `<label class="on-bolum"><span>Bölüm ${esc(b.n)}<small data-say>${kelimeSay(b.metin || '')} kelime</small></span><textarea name="b${esc(b.n)}" data-ilk="${esc(b.metin || '')}">${esc(b.metin || '')}</textarea></label>`).join('')}
+      <span class="dz-hata" role="alert"></span>
+      <div class="on-dugmeler"><button type="submit" class="dugme buyuk sari">${ikon('tik', 18)}Metni onayla</button><button type="button" class="dugme buyuk tehlike" data-on-reddet>${ikon('carpi', 18)}Hikâyeyi reddet</button></div>
+    </form></article>`;
+}
+function videoKart(e) {
+  const i = OL.indexOf(e), m = e.makine, j = e.is;
+  const video = e.mp4 ? `<video src="${m === 'sunucu' ? sunucuDosya(e.mp4) : dosya(e.mp4)}" ${kapakVar(e.kapak) ? `poster="${kapakUrl(e.kapak)}"` : ''} controls playsinline preload="none"></video>` : `<div class="gp-yok"><span>Video dosyası yok</span></div>`;
+  const notlar = [j.not && `<div class="on-not">${ikon('uyari', 15)}<span><b>Bekletiliyor:</b> ${esc(j.not)}</span></div>`,
+    j.hata && `<div class="on-not kotu">${ikon('uyari', 15)}<span><b>Son deneme hatalı:</b> ${esc(j.hata)}${j.sonraki_deneme ? ` · yeniden denenecek: ${esc(tarih(j.sonraki_deneme))}` : ''}</span></div>`].filter(Boolean).join('');
+  return `<article class="kart on-kart on-video" id="on-v-${esc(j.id)}" data-vi="${i}">
+    <div class="gp-video">${video}</div>
+    <div class="gp-bilgi">
+      <div class="m-cipler">${durumCip('onay')}${e.konu ? `<span class="konu-cip">${esc(e.konu)}</span>` : ''}${m === 'sunucu' ? `<span class="kanal-rozet acik">${esc(makineAd('sunucu'))}</span>` : ''}</div>
+      <h3>${esc(e.baslik)}${e.bolum ? ` <small>${esc(e.bolum)}</small>` : ''}</h3>
+      <div class="m-zaman">${ikon('saat', 15)}${e.t ? esc(new Date(e.t).toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) : 'Saati yok: onaylayınca ilk boş saate konur'}</div>
+      ${notlar}
+      ${e.aciklama ? `<div class="m-altyazi"><span>Açıklama</span>${esc(e.aciklama)}</div>` : ''}
+      <form class="m-saat" hidden><input type="datetime-local" value="${e.t ? yerel(e.t) : yerel(Date.now() + 36e5)}"><button class="dugme sari">Kaydet</button></form>
+      <div class="on-dugmeler"><button class="dugme buyuk sari" data-on-onayla>${ikon('tik', 18)}Onayla</button><button class="dugme buyuk" data-on-saat>${ikon('saat', 18)}Saati değiştir</button><button class="dugme buyuk tehlike" data-on-iptal>${ikon('carpi', 18)}İptal</button></div>
+    </div></article>`;
+}
+function havuzBolum() {
+  if (!kanal) return '';
+  if (HV === null || takvimKaynak() === null) return yukleniyor('Havuz sunucudan geliyor…');
+  if (HV.yok || (!HV.hata && !HV.toplam && !(HV.siradaki || []).length && !(HV.stok || []).length)) return bosSatir('Bu kanalın hikâye havuzu yok');
+  if (HV.hata) return `<div class="on-bos kotu">${esc(HV.hata)}</div>`;
+  const gruplar = [];
+  for (const x of HV.siradaki || []) { let g = gruplar.find(y => y.konu === x.konu); if (!g) gruplar.push(g = { konu: x.konu, L: [] }); g.L.push(x); }
+  const stok = `<div class="on-stok">${(HV.stok || []).map(s => `<span class="on-stok-cip${s.adet < 3 ? ' az' : ''}"><i class="nokta-k" style="--k:${konuRenk(s.konu)}"></i>${esc(konuAd(s.konu))} <b>${esc(s.adet)}</b></span>`).join('')}<span class="ince-yazi">toplam ${esc(HV.toplam || 0)} / hedef ${esc(HV.hedef || '—')}${HV.son_doldurma ? ` · son doldurma ${esc(isNaN(new Date(HV.son_doldurma)) ? String(HV.son_doldurma).slice(0, 16) : gunTarih(HV.son_doldurma))}` : ''}</span></div>`;
+  if (!gruplar.length) return stok + bosSatir('Havuzda sıradaki hikâye yok');
+  return stok + gruplar.map(g => `<div class="on-grup"><h3><i class="nokta-k" style="--k:${konuRenk(g.konu)}"></i>${esc(konuAd(g.konu))}</h3>${g.L.map(x => `<article class="kart on-kart on-havuz" id="on-h-${esc(x.id)}" data-hid="${esc(x.id)}">
+      <div class="on-h-ic"><div class="on-h-ust"><b>${esc(x.baslik || x.id)}</b>${x.oncelik ? '<span class="on-sira">Sıradaki</span>' : ''}</div>
+        ${x.ozet ? `<p class="on-ozet" title="Tamamını görmek için tıkla">${esc(x.ozet)}</p>` : ''}
+        <div class="on-h-alt"><span>${ikon('goz', 13)}${esc(sayi(x.fav))} fav</span>${x.tahmini_bolum ? `<span>~${esc(x.tahmini_bolum)} bölüm</span>` : ''}${x.kelime ? `<span>${esc(sayi(x.kelime))} kelime</span>` : ''}${guvenli(x.link) ? `<a href="${esc(guvenli(x.link))}" target="_blank" rel="noopener">${ikon('dis', 13)}Ekşi'de oku</a>` : ''}</div></div>
+      <div class="on-h-dugme">${x.oncelik ? '' : `<button class="dugme ince" data-on-one>Öne al</button>`}<button class="dugme ince tehlike" data-on-ele>Ele</button></div></article>`).join('')}</div>`).join('');
+}
+function bakBolum() {
+  if (dzGecerli() && !Array.isArray(DZ.furkan_baksin)) return `<div class="on-bos">${ikon('saat', 14)}Bu liste sunucudaki panel güncellenince görünecek.</div>`;
+  const L = dzGecerli() ? DZ.furkan_baksin || [] : [];
+  if (!L.length) return bosSatir('Bakman gereken hikâye yok');
+  const ayrinti = a => { try { const j = JSON.parse(a); return Array.isArray(j) ? j.join(' · ') : String(a); } catch { return String(a || ''); } };
+  return L.map(x => `<article class="kart on-kart on-bak"><div><b>${esc(x.id)}</b><span class="ince-yazi">${x.zaman ? esc(tarih(x.zaman)) : ''}</span></div>
+    <div class="on-not">${ikon('uyari', 15)}<span><b>Hassasiyet denetimi durdurdu:</b> ${esc(ayrinti(x.ayrinti) || x.neden)}</span></div>
+    ${guvenli(x.url) ? `<a class="dugme ince" href="${esc(guvenli(x.url))}" target="_blank" rel="noopener">${ikon('dis', 14)}Ekşi'de oku</a>` : ''}</article>`).join('') + '<div class="ince-yazi on-ipucu">Bunlardan birini yine de kullanmak istersen Claude’a söyle; havuza geri koyar.</div>';
+}
+// redraw a section only when its items changed, never over an edit in progress or a playing video
+const onImza = {};
+function bolumCiz(id, imza, html, koru) {
+  const el = $('#' + id); if (!el || (onImza[id] === imza && el.innerHTML)) return;
+  if (koru && koru(el)) return;
+  onImza[id] = imza; el.innerHTML = html;
+}
+function onaylarCiz() {
+  const n = onaySayisi(); $('#onay-say').textContent = n || ''; $('#onay-say').hidden = !n;
+  if (!$('#s-onaylar')) return;
+  const M = metinBekleyenler(), V = OL.filter(e => e.durum === 'onay' && e.is && e.is.onay_gerekli);
+  $('#on-metin-say').textContent = M.length || ''; $('#on-video-say').textContent = V.length || '';
+  const bak = dzGecerli() ? DZ.furkan_baksin || [] : []; $('#on-bak-say').textContent = bak.length || '';
+  const bekle = takvimKaynak() === null || dzBekle();
+  bolumCiz('on-metin', bekle ? 'y' : M.map(d => d.id).join(','), bekle ? yukleniyor('Hikâyeler sunucudan geliyor…') : M.length ? M.map(metinKart).join('') : bosSatir('Bekleyen metin yok'),
+    el => [...el.querySelectorAll('textarea')].some(t => t.value !== t.dataset.ilk || t === document.activeElement));
+  bolumCiz('on-video', bekle ? 'y' : V.map(e => e.is.id + (e.t ? +e.t : '') + (e.is.not || '') + (e.is.hata || '')).join(','), bekle ? yukleniyor('Sıra sunucudan geliyor…') : V.length ? V.map(videoKart).join('') : bosSatir('Onay bekleyen video yok'),
+    el => [...el.querySelectorAll('video')].some(v => !v.paused) || !!el.querySelector('form.m-saat:not([hidden])'));
+  bolumCiz('on-havuz', JSON.stringify([HV, dzGecerli()]), havuzBolum());
+  bolumCiz('on-bak', bekle ? 'y' : JSON.stringify(bak), bekle ? yukleniyor('Bilgiler geliyor…') : bakBolum());
+}
+async function havuzYukle() {
+  const at = kanal, mk = dzM(); if (!at) return;
+  try { const r = await api('dizi/havuz?kanal=' + encodeURIComponent(at) + (mk === 'sunucu' ? '&makine=sunucu' : '')); if (at === kanal) HV = { ...r, _makine: mk }; }
+  catch (e) { if (at === kanal) HV = /konular|boş/.test(e.message) ? { yok: true, _makine: mk } : { hata: 'Havuz alınamadı: ' + e.message, _makine: mk }; }
+  onaylarCiz();
+}
+// an approved / rejected / struck card leaves the page with a short toast
+async function kartGitsin(kart, is, mesaj) {
+  kart.classList.add('gidiyor'); const dugmeler = kart.querySelectorAll('button'); dugmeler.forEach(b => b.disabled = true);
+  try { await is(); bildir(mesaj); kart.style.height = kart.offsetHeight + 'px'; requestAnimationFrame(() => kart.classList.add('gitti')); setTimeout(() => kart.remove(), 260); return true; }
+  catch (err) { kart.classList.remove('gidiyor'); dugmeler.forEach(b => b.disabled = false); const h = kart.querySelector('.dz-hata'); if (h) h.textContent = err.message; bildir(err.message, true); return false; }
+}
+function onaylarBagla() {
+  const kok = $('#s-onaylar');
+  kok.addEventListener('input', e => { const t = e.target; if (t.tagName !== 'TEXTAREA') return; const s = t.closest('label').querySelector('[data-say]'); s.textContent = `${kelimeSay(t.value)} kelime${t.value !== t.dataset.ilk ? ' · düzeltildi' : ''}`; });
+  kok.addEventListener('submit', async e => {
+    const f = e.target; e.preventDefault();
+    const mk = f.closest('.on-metin'), vk = f.closest('.on-video');
+    if (mk) {
+      const id = mk.dataset.mid, degisen = {};
+      f.querySelectorAll('textarea').forEach(t => { if (t.value !== t.dataset.ilk) degisen[t.name.slice(1)] = t.value; });
+      f.querySelector('.dz-hata').textContent = '';
+      if (await kartGitsin(mk, () => api('dizi/metin', { kanal, makine: dzM(), id, karar: 'onayla', ...(Object.keys(degisen).length ? { metinler: degisen } : {}) }), 'Metin onaylandı ✓ Bölüm 1 hazırlanacak')) { onImza['on-metin'] = null; dizilerYukle(); }
+    } else if (vk) {
+      const ev = OL[+vk.dataset.vi], v = f.querySelector('input').value; if (!v || !ev) return;
+      try { await api('kuyruk/zaman', { id: ev.is.id, makine: ev.makine, zaman: ofsetli(v) }); bildir('Saat değişti'); f.hidden = true; onImza['on-video'] = null; await yukle(); } catch (err) { bildir(err.message, true); }
+    }
+  });
+  kok.addEventListener('click', async e => {
+    const oz = e.target.closest('.on-ozet'); if (oz) { oz.classList.toggle('acik'); return; }
+    const b = e.target.closest('button'); if (!b) return;
+    const d = b.dataset, mk = b.closest('.on-metin'), vk = b.closest('.on-video'), hk = b.closest('.on-havuz');
+    if (d.onReddet !== undefined && mk) {
+      if (!confirm('Bu hikâye reddedilsin mi? Hiçbir bölümü yapılmaz ve bir daha önerilmez.')) return;
+      if (await kartGitsin(mk, () => api('dizi/metin', { kanal, makine: dzM(), id: mk.dataset.mid, karar: 'reddet' }), 'Hikâye reddedildi')) { onImza['on-metin'] = null; dizilerYukle(); }
+    } else if (vk) {
+      const ev = OL[+vk.dataset.vi]; if (!ev) return;
+      if (d.onOnayla !== undefined) { if (await kartGitsin(vk, () => api('kuyruk/onayla', { id: ev.is.id, makine: ev.makine }), 'Onaylandı ✓')) { onImza['on-video'] = null; yukle(); } }
+      else if (d.onSaat !== undefined) { const f = vk.querySelector('form.m-saat'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input').focus(); }
+      else if (d.onIptal !== undefined) { if (confirm('Bu video sıradan çıkarılsın mı? Paylaşılmaz.') && await kartGitsin(vk, () => api('kuyruk/iptal', { id: ev.is.id, makine: ev.makine }), 'Sıradan çıkarıldı')) { onImza['on-video'] = null; yukle(); } }
+    } else if (hk) {
+      const id = hk.dataset.hid;
+      if (d.onEle !== undefined) { if (confirm('Bu hikâye elensin mi? Bir daha kullanılmaz.') && await kartGitsin(hk, () => api('dizi/havuz/ele', { kanal, makine: dzM(), id, neden: 'Furkan eledi' }), 'Elendi')) havuzYukle(); }
+      else if (d.onOne !== undefined) { b.disabled = true; try { await api('dizi/havuz/one', { kanal, makine: dzM(), id }); bildir('Öne alındı: konusunun sıradaki hikâyesi'); onImza['on-havuz'] = null; await havuzYukle(); } catch (err) { b.disabled = false; bildir(err.message, true); } }
+    }
+  });
+}
+// the calendar's approval bar points here
+function onaylaraGit(hedef) { sekme('onaylar'); onaylarCiz(); const el = hedef && document.getElementById(hedef); if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }
 
 // ---------------- Posted videos for the Results page (Instagram first, the queue's own numbers otherwise)
 function gonderiler() {
@@ -847,7 +979,7 @@ async function tkYukle() {
   TK = r; if (O) istatistikCiz();
 }
 function hepsi() { kanalSecCiz(); kanalBlokCiz(); dizilerCiz(); takvimCiz(); istatistikCiz(); bekleyenSeritCiz(); paylasimAyarCiz(); bugunCiz(); fikirlerCiz(); uretimCiz(); siraCiz(); sonuclarCiz(); islerCiz(); }
-const ANA = ['takvim', 'hikayeler', 'ayarlar'], GELISMIS = ['bugun', 'fikirler', 'uretim', 'sira', 'sonuclar'];
+const ANA = ['takvim', 'onaylar', 'hikayeler', 'ayarlar'], GELISMIS = ['bugun', 'fikirler', 'uretim', 'sira', 'sonuclar'];
 function sekme(ad) {
   if (ad === 'diziler') ad = 'hikayeler';
   if (![...ANA, ...GELISMIS].includes(ad)) ad = 'takvim';
@@ -856,6 +988,7 @@ function sekme(ad) {
   if (ileri) gelismisAc(true);
   $('#gelismis-dugme').classList.toggle('on', ileri);
   $$('.sayfa').forEach(s => s.classList.toggle('on', s.id === 's-' + ad));
+  if (ad === 'onaylar' && anahtar && (HV === null || Date.now() - (havuzYukle.t || 0) > 5 * 6e4)) { havuzYukle.t = Date.now(); havuzYukle(); }
   try { sessionStorage.setItem('vm-s', ad); } catch {}
 }
 // dark by default; the cream theme is a per-viewer choice
@@ -875,6 +1008,7 @@ document.addEventListener('click', e => {
   const d = b.dataset;
   if (d.kapat !== undefined) $('#pencere').close();
   else if (d.olay !== undefined) { const x = OL[+d.olay]; if (x) olayAc(x); }
+  else if (d.onaylarGit !== undefined) onaylaraGit(d.onaylarGit);
   else if (d.metinOnay) { const x = DZ && !DZ.hata && DZ.diziler.find(y => y.id === d.metinOnay); if (x) metinAc(x); }
   else if (d.bolum) { const [did, n] = d.bolum.split('|'); bolumAc(did, n); }
   else if (d.durumF) { durumFiltre = d.durumF; takvimCiz(); }
@@ -915,7 +1049,7 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.zaman && t.value) islem('kuyruk/zaman', { id: t.dataset.zaman, makine: t.dataset.makine, zaman: ofsetli(t.value) }, 'Saat değişti');
-  if (t.id === 'kanal-sec') { DZ = null; dzKirli = false; kanal = t.value; try { localStorage.setItem('vm-kanal', kanal); } catch {} IG = null; TK = null; SV = null; AS = {}; yukle(); }
+  if (t.id === 'kanal-sec') { DZ = null; dzKirli = false; kanal = t.value; try { localStorage.setItem('vm-kanal', kanal); } catch {} IG = null; TK = null; SV = null; AS = {}; HV = null; Object.keys(onImza).forEach(k => onImza[k] = null); yukle(); if ($('#s-onaylar').classList.contains('on')) { havuzYukle.t = Date.now(); havuzYukle(); } }
 });
 // the bar chart's hover card
 document.addEventListener('mouseover', e => {
@@ -929,6 +1063,7 @@ document.addEventListener('mouseover', e => {
 });
 $('#fikir-ekle').addEventListener('submit', e => { e.preventDefault(); islem('fikir', { is: 'ekle', kanal, baslik: $('#fe-baslik').value, oncul: $('#fe-oncul').value }, 'Fikir eklendi').then(() => { $('#fikir-ekle').reset(); $('#fikir-ekle').hidden = true; }); });
 $('#dz-ayar').addEventListener('submit', dzKaydet);
+onaylarBagla();
 $('#dz-ayar').addEventListener('input', () => { dzKirli = true; });
 let boyutT; window.addEventListener('resize', () => { clearTimeout(boyutT); boyutT = setTimeout(() => { if (O) istatistikCiz(); }, 200); });
 $('#pencere').addEventListener('close', () => { const v = $('#pencere video'); if (v) v.pause(); });
