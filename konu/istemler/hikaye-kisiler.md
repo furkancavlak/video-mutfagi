@@ -6,6 +6,10 @@ Başlık: {{baslik}}
 
 {{metin}}
 
+## Daha önce çizilmiş kişiler
+
+{{kutuphane}}
+
 ## Ne yapacaksın
 
 - Hikâyede adı geçen ya da olayda rol alan **yetişkin** kişileri listele, en fazla 6 kişi, önemliden önemsize. Çocuklar listeye girmez (ayrı çizilirler).
@@ -16,6 +20,7 @@ Başlık: {{baslik}}
 - `yas`: `genc` | `orta` | `yasli`. Metinden çıkar (öğrenci, emekli, dede, yeni evli…); bilinmiyorsa anlatıcıya yakın yaş.
 - `meslek`: tam olarak şunlardan biri: `ogrenci`, `ofis`, `memur`, `doktor`, `hemsire`, `asker`, `polis`, `ogretmen`, `esnaf`, `isci`, `emekli`, `ev`, `sporcu`, `sanatci`, `diger`. Hikâyede o kişi o an ne giyiyorsa ona en yakın olanı seç (askerlik anısında asker, hastanede doktor; bilinmiyorsa `diger`).
 - `basortusu`: yalnız metin açıkça söylüyorsa ya da kişi bunu güçlü biçimde düşündürüyorsa (ör. köydeki babaanne) `true`; emin değilsen `false`.
+- Yukarıdaki "daha önce çizilmiş kişiler"den biri hikâyede geçiyorsa onu da listele ve `kutuphane` alanına onun kimliğini yaz (ör. `"kutuphane": "ucak_kizi"`); ona yeni görünüm üretilmez. Diğer kişilerde `kutuphane` boş kalır.
 - `ipucu`: metinde geçen görünüm ayrıntısı (madalya, gözlük, sakal, üniforma, beyaz önlük); yoksa boş. Uydurma.
 
 ## Yanıt biçimi
@@ -23,5 +28,5 @@ Başlık: {{baslik}}
 Yalnız şu JSON'u döndür:
 
 ```json
-{"kisiler": [{"kim": "anlatici", "ad": "anlatıcı", "rol": "hikâyeyi anlatan", "cinsiyet": "kadin", "yas": "genc", "meslek": "ofis", "basortusu": false, "ipucu": ""}]}
+{"kisiler": [{"kim": "anlatici", "ad": "anlatıcı", "rol": "hikâyeyi anlatan", "cinsiyet": "kadin", "yas": "genc", "meslek": "ofis", "basortusu": false, "ipucu": "", "kutuphane": ""}]}
 ```

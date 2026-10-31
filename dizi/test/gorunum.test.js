@@ -42,3 +42,14 @@ test('ata: a failing model call still gives the narrator a look; no stil in the 
   assert.deepStrictEqual(await G.ata({ kimlik }, d2, []), []);
   assert.strictEqual(G.anlatici(d2), null);
 });
+
+test('a story\'s library character is marked, gets no invented look and is drawn from the library', async () => {
+  const l = G.temizle([{ kim: 'anlatici' }, { kim: 'kiz', ad: 'uçaktaki kız', kutuphane: 'ucak_kizi' }, { kim: 'gorevli', kutuphane: 'uydurma' }], {}, ['ucak_kizi']);
+  assert.deepStrictEqual(l.map(k => k.kutuphane || null), [null, 'ucak_kizi', null]);
+  const d = { id: 'u', anlatici: { ses: 'E1' }, kisiler: l };
+  await G.ata(ctx, d, [], { stil });
+  assert.strictEqual(d.kisiler[1].gorunum, undefined);
+  assert.ok(d.kisiler[2].gorunum);
+  assert.deepStrictEqual(Object.keys(G.haritasi(d)), ['gorevli']);
+  assert.match(G.istemMetni(d.kisiler), /kutuphane\.ucak_kizi\(/);
+});
