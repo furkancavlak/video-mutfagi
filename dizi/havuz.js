@@ -35,10 +35,11 @@ function bilinenler(kok, kanal, H) {
   return s;
 }
 
-// stories ready to use, in the order the rotation takes them: allowed themes least recently used first, then favourites
+// stories ready to use, in the order the rotation takes them: allowed themes least recently used first, inside a theme
+// the ones Furkan put first (oncelik, the latest mark first), then favourites
 function sirala(H, sira) {
   const i = new Map(sira.map((k, n) => [k, n]));
-  return H.hikayeler.filter(x => x.durum === 'havuzda' && i.has(x.konu)).sort((a, b) => i.get(a.konu) - i.get(b.konu) || (b.fav || 0) - (a.fav || 0));
+  return H.hikayeler.filter(x => x.durum === 'havuzda' && i.has(x.konu)).sort((a, b) => i.get(a.konu) - i.get(b.konu) || String(b.oncelik || '').localeCompare(String(a.oncelik || '')) || (b.fav || 0) - (a.fav || 0));
 }
 const stok = H => { const s = {}; for (const x of H.hikayeler) if (x.durum === 'havuzda') s[x.konu] = (s[x.konu] || 0) + 1; return s; };
 
@@ -133,6 +134,21 @@ function ele(kok, kanal, id, neden = 'elle elendi') {
   } finally { k.birak(); }
 }
 
+// panel "Öne al": this story is next for its theme (the caller validates, this takes the channel lock)
+function oneAl(kok, kanal, id) {
+  if (typeof id !== 'string' || !ID.test(id)) throw new Error('hikâye id geçersiz');
+  const k = D.kilitAl(kok, kanal);
+  if (k.mesaj) throw Object.assign(new Error('Zamanlayıcı şu an çalışıyor, birkaç dakika sonra tekrar dene'), { kod: 409 });
+  try {
+    const H = yukle(kok, kanal), x = H.hikayeler.find(h => h.id === id);
+    if (!x) throw new Error('havuzda böyle bir hikâye yok');
+    if (x.durum !== 'havuzda') throw new Error(`bu hikâye zaten ${x.durum}`);
+    x.oncelik = new Date().toISOString();
+    kaydet(kok, kanal, H);
+    return { ok: true };
+  } finally { k.birak(); }
+}
+
 // panel view: stock per theme (every theme listed) and the next stories in rotation order
 function ozet(ctx, kok = O.KOK, adet = 15) {
   const H = yukle(kok, ctx.kanal), s = stok(H), temalar = tema.konular(ctx);
@@ -141,11 +157,11 @@ function ozet(ctx, kok = O.KOK, adet = 15) {
   return {
     stok: temalar.map(t => ({ konu: t.ad, adet: s[t.ad] || 0 })), toplam: Object.values(s).reduce((x, y) => x + y, 0),
     hedef: ayar(ctx).hedef, son_doldurma: H.son_doldurma || null,
-    siradaki: sirala(H, tumu).slice(0, adet).map(({ id, konu, baslik, link, fav, tarih, kelime, ozet: oz, tahmini_bolum }) => ({ id, konu, baslik, link, fav, tarih, kelime, ozet: oz, tahmini_bolum })),
+    siradaki: sirala(H, tumu).slice(0, adet).map(({ id, konu, baslik, link, fav, tarih, kelime, ozet: oz, tahmini_bolum, oncelik }) => ({ id, konu, baslik, link, fav, tarih, kelime, ozet: oz, tahmini_bolum, ...(oncelik ? { oncelik } : {}) })),
   };
 }
 
-module.exports = { yukle, kaydet, sirala, stok, doldur, ele, ozet, ayar, dosya, birlestir };
+module.exports = { yukle, kaydet, sirala, stok, doldur, ele, oneAl, ozet, ayar, dosya, birlestir };
 
 if (require.main === module) {
   const [alt, kanal, dosya2] = process.argv.slice(2);

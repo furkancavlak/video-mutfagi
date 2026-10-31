@@ -6,7 +6,7 @@
 //   node panel/panel.js [--port 4747] [--acma] [--kok <repo>]
 //   node panel/panel.js --ozet                    print the queue summary as JSON (the panel uses it over SSH)
 //   node panel/panel.js --zaman <is-id> "YYYY-MM-DD HH:MM"
-//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-metin <json>
+//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-metin <json>
 //                                                 the Diziler page on a server: print JSON; on error "HATA: ..." and exit 1 (3 = lock busy, HTTP 409)
 //
 // Listens on 127.0.0.1 only; every API call carries a random key made at start (it is in the printed link).
@@ -85,7 +85,7 @@ function saglik(hesap, hesapYok) {
 // kanal: channel name; only that channel's account is shown (no kanal = every account)
 function kuyrukOzet(kanal) {
   const hesap = kanal ? hesapGuvenli(kanalHesap(kanal)) : null, hesapYok = !!kanal && !hesap, kendi = j => hesapYok ? false : !hesap || isHesap(j) === hesap;
-  const temiz = j => ({ id: j.id, hesap: isHesap(j), mp4: j.mp4, aciklama: j.aciklama, ne_zaman: j.ne_zaman, onay_gerekli: !!j.onay_gerekli, kaynak: j.kaynak, hata: j.son_hata || null, kontrol_et: !!j.kontrol_et, paylasildi: j.paylasildi, link: j.link, sonuc: j.sonuc || null });
+  const temiz = j => ({ id: j.id, hesap: isHesap(j), mp4: j.mp4, aciklama: j.aciklama, ne_zaman: j.ne_zaman, onay_gerekli: !!j.onay_gerekli, kaynak: j.kaynak, hata: j.son_hata || null, not: j.not ? String(j.not).replace(/\s+/g, ' ').trim().slice(0, 300) : null, sonraki_deneme: j.sonraki_deneme || null, kontrol_et: !!j.kontrol_et, paylasildi: j.paylasildi, link: j.link, sonuc: j.sonuc || null });
   const ayar = Object.assign(okuJ(path.join(KUYRUK, 'ayar-ornek.json'), {}), okuJ(path.join(KOK, 'ayarlar', 'kuyruk.json'), {}));
   // the same resolution the queue uses (hesaplar.<hesap> > the series channel's dizi block > global)
   const hs = hesap ? require('../kuyruk/hesap-ayar.js').hesapAyar(ayar, hesap, KOK) : {};
@@ -379,6 +379,13 @@ function havuzCevap(kanal) {
   return require('../dizi/havuz.js').ozet({ kanal, ayar: okuJ(path.join(KOK, 'kanal', kanal, 'konu.json'), {}) || {} }, KOK);
 }
 const havuzEleGovde = b => { if (typeof b.id !== 'string' || !/^eksi-\d{1,12}$/.test(b.id)) throw new Error('hikâye id geçersiz'); return { kanal: kanalAdi(b.kanal), id: b.id, neden: String(b.neden || '').replace(/\s+/g, ' ').trim().slice(0, 200) }; };
+// "Öne al": the story is next for its theme (dizi/havuz.js oneAl takes the lock)
+function havuzOne(b) {
+  const g = havuzEleGovde(b);
+  if (!kanallar().includes(g.kanal)) throw new Error('kanal yok');
+  return require('../dizi/havuz.js').oneAl(KOK, g.kanal, g.id);
+}
+const havuzOneGovde = b => { const { kanal, id } = havuzEleGovde(b); return { kanal, id }; };
 function havuzEle(b) {
   const g = havuzEleGovde(b);
   if (!kanallar().includes(g.kanal)) throw new Error('kanal yok');
@@ -397,7 +404,9 @@ function dizilerCevap(kanal) {
       izin: { devam: !D.kararHata(d, b.n, 'devam'), kes: !D.kararHata(d, b.n, 'kes'), tekrar: !D.tekrarHata(d, b.n) } };   // the same checks the POST routes use
   }) }));
   const red = (okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'reddedilen.json'), {}) || {}).reddedilen;
-  return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null), reddedilen_toplam: Array.isArray(red) ? red.length : 0 };
+  // stories the sensitivity check stopped twice: kept for Furkan to look at (only their safe fields)
+  const furkan_baksin = (Array.isArray(red) ? red : []).filter(x => x && (x.furkan_baksin || x.neden === 'hassasiyet')).map(x => ({ id: x.id, url: x.url || null, neden: x.neden, ayrinti: x.ayrinti || null, zaman: x.zaman || null }));
+  return { ayar, ayar_var: !!konuDizi, diziler, son_kosu: okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'son-kosu.json'), null), reddedilen_toplam: Array.isArray(red) ? red.length : 0, furkan_baksin };
 }
 // route -> server hop goes through this object so tests can stub the ssh / scp call
 const kanca = { sunucuda: (...a) => sunucuda(...a), scp: (args, sure) => spawnSync('scp', args, { encoding: 'utf8', timeout: sure }) };
@@ -529,6 +538,7 @@ async function api(req, u) {
   if (!GET && yol === 'dizi/metin') return sunucu ? sunucuJson('--dizi-metin', diziMetinGovde(b)) : diziMetin(b);
   if (GET && yol === 'dizi/havuz') return sunucu ? sunucuJson('--dizi-havuz', kanalAdi(u.searchParams.get('kanal'))) : havuzCevap(u.searchParams.get('kanal'));
   if (!GET && yol === 'dizi/havuz/ele') return sunucu ? sunucuJson('--dizi-havuz-ele', havuzEleGovde(b)) : havuzEle(b);
+  if (!GET && yol === 'dizi/havuz/one') return sunucu ? sunucuJson('--dizi-havuz-one', havuzOneGovde(b)) : havuzOne(b);
   if (!GET && yol === 'is') return isBaslat(b.tur, b);
   // ideas
   if (!GET && yol === 'fikir') {
@@ -599,7 +609,7 @@ if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'
 
 // Diziler on a server: the panel on the home PC calls these over ssh (same functions as the local routes)
 const jsonArg = s => { let j; try { j = JSON.parse(s); } catch { throw new Error('bozuk istek'); } if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('bozuk istek'); return j; };
-for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))]]) {
+for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))], ['--dizi-havuz-one', s => havuzOne(jsonArg(s))]]) {
   if (!process.argv.includes(bayrak)) continue;
   let cikti;
   try { cikti = JSON.stringify(fn(arg(bayrak))); } catch (e) { console.error('HATA: ' + e.message); process.exit(e.kod === 409 ? 3 : 1); }
