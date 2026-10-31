@@ -194,7 +194,29 @@ function senkronla(diziler, kuyruk, notlar) {
   }
 }
 
-async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi, kuru = false, kok } = {}) {
+// shadow planner (dizi/reyting.js + dizi/planla.js): reads the account's observations (60 days) and registry, writes
+// kayit/dizi/<kanal>/reyting.json, plan.json and plan-gecmis.json (bench state) atomically
+function golgePlan({ kok, kanal, hesap, diziler, kuyruk, ayar, simdi }) {
+  const IST = require('../instagram/istatistik'), { reyting } = require('./reyting'), { planYap } = require('./planla');
+  const h = hesapAd(hesap), t = new Date(simdi).getTime(), D = path.join(kok, 'kayit', 'dizi', kanal);
+  const gozlem = IST.gozlemler(h, { kok, gun: 60, simdi: t });
+  const kayit = ortak.okuJson(path.join(kok, 'kayit', 'istatistik', h, 'medya.json'), {}) || {};
+  // video length per media (watch ratio diagnostic): the episode's ses/zaman.json
+  const sure = {};
+  for (const j of kuyruk.paylasilan) if (j.media_id && j.video && /^videolar\/[\w.-]+$/.test(j.video)) {
+    try { const z = ortak.okuJson(path.join(kok, j.video, 'ses', 'zaman.json'), null); if (z && Number.isFinite(+z.toplam)) sure[String(j.media_id)] = +z.toplam; } catch (e) { }
+  }
+  const R = reyting({ gozlem, kayit, diziler, sure, simdi: t });
+  let gecmis = null; try { gecmis = ortak.okuJson(path.join(D, 'plan-gecmis.json'), null); } catch (e) { }
+  const isler = kuyruk.bekleyen.filter(j => hesapAd(j.hesap) === h);
+  const { plan, gecmis: G } = planYap({ diziler, reyting: R, isler, ayar, simdi: t, gecmis });
+  ortak.yazJson(path.join(D, 'reyting.json'), R);
+  ortak.yazJson(path.join(D, 'plan.json'), plan);
+  ortak.yazJson(path.join(D, 'plan-gecmis.json'), G);
+  return { reyting: R, plan };
+}
+
+async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi, kuru = false, kok, planlayici } = {}) {
   kok = kok || ctx.kok || ortak.KOK;
   const sonuc = { olculen: 0, kararlar: [], uretilecek: [], yeniler: 0, reddedilen: 0, notlar: [] };
   const notlar = sonuc.notlar, ayar = (ctx.ayar && ctx.ayar.dizi) || {}, hesap = (ctx.kimlik && ctx.kimlik.hesap) || null;
@@ -266,6 +288,15 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       }
     }
     kaydetSon();
+
+    // 2b. SHADOW: rating + slot plan for the panel only (konu.json dizi.planlayici: 'golge' default | 'kapali'). Nothing in
+    // this run reads them; a planner error is a note, never a failed run.
+    // TODO(aktif mod): an 'aktif' value would apply plan.slotlar (dizi.saat / queue times in uret-bolum.js) and the bench
+    // decisions here, replacing kararVer's cut; not implemented.
+    if (!kuru && (ayar.planlayici ?? 'golge') !== 'kapali') {
+      try { (planlayici || golgePlan)({ kok, kanal: ctx.kanal, hesap, diziler, kuyruk, ayar, simdi }); }
+      catch (e) { notlar.push(`planlayıcı (deneme modu) hatası: ${e.message}`); }
+    }
 
     // 3. fill the day
     const bugun = gunIst(simdi);
@@ -359,7 +390,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
   finally { kilit.birak(); sonKosu(); }
 }
 
-module.exports = { calistir, sonucAlYap, uretilecekler, senkronla, yeniDiziYap, sirayaKoy, siraliAdaylar };
+module.exports = { calistir, golgePlan, sonucAlYap, uretilecekler, senkronla, yeniDiziYap, sirayaKoy, siraliAdaylar };
 
 if (require.main === module) {
   const kanal = process.argv[2], kuru = process.argv.includes('--kuru');
