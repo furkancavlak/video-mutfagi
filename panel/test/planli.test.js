@@ -20,10 +20,10 @@ test('a posted previous episode: the next one is planned at the series hour, its
   assert.deepStrictEqual({ ...L[0] }, { planli: true, dizi_id: 'd1', baslik: 'Kisa', n: 2, toplam: 3, ton: 'hüzünlü', konu: 'aile', slot: yerel(2, 10), karar: yerel(2, 7) });
 });
 
-test('a previous episode still waiting: the next one goes to the next series hour after its slot, no decision yet', { skip: !yardimci && 'dizi.js helpers not present' }, () => {
+test('a previous episode still waiting: the next one goes to the next series hour after its slot, decision 3 h before it', { skip: !yardimci && 'dizi.js helpers not present' }, () => {
   const bek = [{ id: 'j1', video: 'videolar/v1', ne_zaman: yerel(2, 10), onay_gerekli: true }];
   const L = P.planliBolumler([dizi([{ n: 1, durum: 'onay-bekliyor', video: 'videolar/v1' }, { n: 2, durum: 'metin' }])], AYAR, bek, SIMDI);
-  assert.strictEqual(L.length, 1); assert.strictEqual(L[0].n, 2); assert.strictEqual(L[0].slot, yerel(3, 10)); assert.strictEqual(L[0].karar, null);
+  assert.strictEqual(L.length, 1); assert.strictEqual(L[0].n, 2); assert.strictEqual(L[0].slot, yerel(3, 10)); assert.strictEqual(L[0].karar, yerel(3, 7));
 });
 
 test('an episode that already has a video or a queue job is never planned again', { skip: !yardimci && 'dizi.js helpers not present' }, () => {

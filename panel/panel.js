@@ -433,7 +433,7 @@ function havuzEle(b) {
 // A first episode (nothing before it), a cut, finished or text-waiting series get none. bek: queue jobs (bekleyen).
 function planliBolumler(diziler, ayar, bek, simdi = Date.now()) {
   const D = DiziDepo(); if (typeof D.hedefSlot !== 'function' || typeof D.olcumZamani !== 'function') return [];
-  ayar = ayar || {}; const out = [];
+  ayar = ayar || {}; const out = [], dolu = (bek || []).map(j => Date.parse(j.ne_zaman || '')).filter(Number.isFinite);
   for (const d of diziler || []) {
     if (!d || d.durum !== 'aktif' || D.metinOnay(d) === 'bekliyor' || D.metinOnay(d) === 'reddedildi') continue;
     const B = [...(d.bolumler || [])].sort((a, b) => a.n - b.n);
@@ -444,10 +444,15 @@ function planliBolumler(diziler, ayar, bek, simdi = Date.now()) {
     let slot, karar = null;
     if (once.paylasildi && (once.durum === 'yayinda' || once.durum === 'olculdu')) { slot = D.hedefSlot(once, ayar, d); karar = D.olcumZamani(once, ayar, d); }
     else if (once.durum === 'onay-bekliyor' || once.durum === 'sirada') {
+      // the previous episode is due at its job's time: the same gap and decision rule as after a real post
       const j = (bek || []).find(x => once.video && x.video === once.video), t0 = j && j.ne_zaman ? Date.parse(j.ne_zaman) : simdi;
-      slot = D.sonrakiSlotSaati(Math.max(t0, simdi) + 60e3, saat);
+      const sanki = { paylasildi: new Date(Math.max(t0, simdi)).toISOString() };
+      slot = D.hedefSlot(sanki, ayar, d); karar = D.olcumZamani(sanki, ayar, d);
     } else continue;
     if (!Number.isFinite(slot)) continue;
+    // one video per slot: a time held by a queued job or an earlier plan moves to the next free configured hour
+    for (let k = 0; k < 40 && dolu.some(t => Math.abs(t - slot) < 30 * 60e3); k++) slot = D.sonrakiSlotSaati(slot + 60e3, ayar.saatler || saat);
+    dolu.push(slot);
     out.push({ planli: true, dizi_id: d.id, baslik: d.baslik_kisa || d.baslik, n: b.n, toplam: B.length, ton: d.ton || null, konu: d.konu || null,
       slot: new Date(slot).toISOString(), karar: Number.isFinite(karar) ? new Date(karar).toISOString() : null });
   }
