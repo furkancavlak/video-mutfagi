@@ -54,5 +54,5 @@ test('--ozet tells the home panel which server flags this copy knows', () => {
   const { spawnSync } = require('child_process');
   const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'panel.js'), '--kok', KOK, '--ozet'], { encoding: 'utf8', timeout: 20e3 });
   assert.strictEqual(r.status, 0, r.stderr);
-  assert.deepStrictEqual(JSON.parse(r.stdout).ozellik, ['diziler', 'istatistik', 'instagram']);
+  assert.deepStrictEqual(JSON.parse(r.stdout).ozellik, ['diziler', 'istatistik', 'instagram', 'tesekkur']);
 });

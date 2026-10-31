@@ -6,7 +6,7 @@
 //   node panel/panel.js [--port 4747] [--acma] [--kok <repo>]
 //   node panel/panel.js --ozet                    print the queue summary as JSON (the panel uses it over SSH)
 //   node panel/panel.js --zaman <is-id> "YYYY-MM-DD HH:MM"
-//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-metin <json> | --istatistik <json> | --instagram <json> | --takipci <json>
+//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-tesekkur <json> | --dizi-metin <json> | --istatistik <json> | --instagram <json> | --takipci <json>
 //                                                 the Diziler page on a server: print JSON; on error "HATA: ..." and exit 1 (3 = lock busy, HTTP 409)
 //
 // Listens on 127.0.0.1 only; every API call carries a random key made at start (it is in the printed link).
@@ -455,6 +455,25 @@ function diziKararGovde(b) {
   if (!['devam', 'kes'].includes(b.karar)) throw new Error('karar devam ya da kes olmalı');
   return { kanal: kanalAdi(b.kanal), id: diziId(b.id), n: bolumNo(b.n), karar: b.karar, neden: String(b.neden || '').replace(/\s+/g, ' ').trim().slice(0, 200) };
 }
+// a story's thanks list (dizi.tesekkur): usernames split on newlines, commas or spaces, cleaned exactly as the closing
+// card reads them (uretim/cekirdek.js tesekkurListesi: no leading @, [\w.]{1,30}, unique), at most 300
+function diziTesekkurGovde(b) {
+  const ham = typeof b.isimler === 'string' ? b.isimler.split(/[\s,]+/) : Array.isArray(b.isimler) && b.isimler.every(x => typeof x === 'string') ? b.isimler : null;
+  if (!ham) throw new Error('isimler bir yazı ya da yazı listesi olmalı');
+  const isimler = require('../uretim/cekirdek.js').tesekkurListesi({ tesekkur: ham }).slice(0, 300);
+  return { kanal: kanalAdi(b.kanal), id: diziId(b.id), isimler };
+}
+function diziTesekkur(b) {
+  const g = diziTesekkurGovde(b);
+  if (!kanallar().includes(g.kanal)) throw new Error('kanal yok');
+  return kilitli(g.kanal, D => {
+    const veri = D.yukle(KOK, g.kanal), d = (veri.diziler || []).find(x => x.id === g.id);
+    if (!d) throw new Error('böyle bir dizi yok');
+    d.tesekkur = g.isimler;
+    D.kaydet(KOK, g.kanal, veri);
+    return { ok: true, tesekkur: d.tesekkur };
+  });
+}
 const diziTekrarGovde = b => ({ kanal: kanalAdi(b.kanal), id: diziId(b.id), n: bolumNo(b.n) });
 const diziAyarGovde = b => ({ kanal: kanalAdi(b.kanal), ayar: diziAyarTemiz(b.ayar) });
 const sunucuJson = (bayrak, deger) => JSON.parse(kanca.sunucuda(`panel/panel.js ${bayrak} ${q(typeof deger === 'string' ? deger : JSON.stringify(deger))}`, 20e3));
@@ -571,6 +590,7 @@ async function api(req, u) {
   if (GET && yol === 'diziler') return sunucu ? sunucuJson('--diziler', kanalAdi(u.searchParams.get('kanal'))) : dizilerCevap(u.searchParams.get('kanal'));
   if (!GET && yol === 'dizi/karar') return sunucu ? sunucuJson('--dizi-karar', diziKararGovde(b)) : diziKarar(b);
   if (!GET && yol === 'dizi/tekrar') return sunucu ? sunucuJson('--dizi-tekrar', diziTekrarGovde(b)) : diziTekrar(b);
+  if (!GET && yol === 'dizi/tesekkur') return sunucu ? sunucuJson('--dizi-tesekkur', diziTesekkurGovde(b)) : diziTesekkur(b);
   if (!GET && yol === 'dizi/ayar') return sunucu ? sunucuJson('--dizi-ayar', diziAyarGovde(b)) : diziAyarYaz(b);
   if (!GET && yol === 'dizi/metin') return sunucu ? sunucuJson('--dizi-metin', diziMetinGovde(b)) : diziMetin(b);
   if (GET && yol === 'dizi/havuz') return sunucu ? sunucuJson('--dizi-havuz', kanalAdi(u.searchParams.get('kanal'))) : havuzCevap(u.searchParams.get('kanal'));
@@ -639,14 +659,14 @@ if (require.main !== module) return;
 
   // ozellik: lets the home panel know which flags this copy has (an older one would not answer them)
 if (process.argv.includes('--ozet')) {
-  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler', 'istatistik', 'instagram'] })); process.exit(0); }
+  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler', 'istatistik', 'instagram', 'tesekkur'] })); process.exit(0); }
   catch (e) { console.error('HATA: ' + e.message); process.exit(1); }
 }
 if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'); zamanDegistir(process.argv[i + 1], process.argv[i + 2]); console.log('Saat değişti.'); process.exit(0); }
 
 // Diziler on a server: the panel on the home PC calls these over ssh (same functions as the local routes)
 const jsonArg = s => { let j; try { j = JSON.parse(s); } catch { throw new Error('bozuk istek'); } if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('bozuk istek'); return j; };
-for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--istatistik', s => istatistikCevap(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))], ['--dizi-havuz-one', s => havuzOne(jsonArg(s))]]) {
+for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-tesekkur', s => diziTesekkur(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--istatistik', s => istatistikCevap(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))], ['--dizi-havuz-one', s => havuzOne(jsonArg(s))]]) {
   if (!process.argv.includes(bayrak)) continue;
   let cikti;
   try { cikti = JSON.stringify(fn(arg(bayrak))); } catch (e) { console.error('HATA: ' + e.message); process.exit(e.kod === 409 ? 3 : 1); }
