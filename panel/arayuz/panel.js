@@ -557,7 +557,8 @@ const istHataVar = () => !!(ISV && ISV.son_hata && (!ISV.son_anlik || ISV.son_ha
 const kacOnce = t => { const dk = Math.floor(Math.max(0, Date.now() - new Date(t)) / 6e4); return dk < 1 ? 'az önce' : dk < 60 ? `${dk} dk önce` : `${Math.floor(dk / 60)} sa önce`; };
 function istatistikSayfaCiz() {
   const el = $('#s-istatistik'); if (!el) return;
-  $$('#ist-donem button').forEach(b => b.classList.toggle('on', +b.dataset.istGun === istGun));
+  $('#ist-donem button').forEach(b => b.classList.toggle('on', +b.dataset.istGun === istGun || (b.dataset.istGun === 'ozel' && ![1, 3, 7, 15, 28, 90].includes(istGun))));
+  { const oz = $('#ist-ozel'); if (oz) oz.textContent = [1, 3, 7, 15, 28, 90].includes(istGun) ? 'Özel' : `Özel: ${istGun} gün`; }
   const zaman = istVar() ? ISV.son_anlik : IG && IG.zaman, sonVeri = istVar() && ISV.son_veri;
   $('#ist-zaman').textContent = sonVeri ? `Son veri: ${kacOnce(sonVeri)}` : zaman ? `son güncelleme: ${saat(zaman)}${ayniGun(zaman, Date.now()) ? '' : ' · ' + gunTarih(zaman)}` : '';
   $('#ist-zaman').title = sonVeri ? tarih(sonVeri) : '';
@@ -576,7 +577,7 @@ function istatistikSayfaCiz() {
     kart('Takipçi kazancı', kd ? kd.takipci_kazanilan : null, ko ? ko.takipci_kazanilan : null, n => (n > 0 ? '+' : '') + sayi(n), (kd && kd.takipci_kazanilan != null ? 'Dönem başından bu yana' : 'Saatlik ölçüm birikince görünür') + (ISV && ISV.takipci != null ? ` · şu an ${sayi(ISV.takipci)}` : TK && TK.takipci != null ? ` · şu an ${sayi(TK.takipci)}` : '')),
     kart('Ortalama izlenme süresi', kd ? kd.ort_izleme_sn : null, ko ? ko.ort_izleme_sn : null, sureYaz, kd && kd.ort_izleme_sn != null ? 'Bu dönemin videolarında' : 'Instagram bu sayıyı vermedi ya da ölçüm yok'),
     kart('Etkileşim oranı', kd ? (kd.etkilesim_orani != null ? kd.etkilesim_orani * 100 : null) : etkOran(bu), ko ? (ko.etkilesim_orani != null ? ko.etkilesim_orani * 100 : null) : etkOran(once), oranYaz, 'Beğeni + yorum + kayıt + paylaşım ÷ izlenme'),
-    kart('Paylaşılan video', kd ? kd.video_sayisi : bu.length, ko ? ko.video_sayisi : once.length, null, `Son ${istGun} gün`),
+    kart('Paylaşılan video', kd ? kd.video_sayisi : bu.length, ko ? ko.video_sayisi : once.length, null, istGun === 1 ? 'Son 24 saat' : `Son ${istGun} gün`),
   ].join('');
   // daily series: the snapshots' own; without them, views by posting day (said so)
   const gunler = []; for (let i = istGun - 1; i >= 0; i--) gunler.push(gunBas(simdi - i * gun));
@@ -1265,7 +1266,12 @@ document.addEventListener('click', e => {
   else if (d.hikayeAc) hikayeDetayAc(d.hikayeAc);
   else if (d.metinOnay) { const x = DZ && !DZ.hata && DZ.diziler.find(y => y.id === d.metinOnay); if (x) metinAc(x); }
   else if (d.bolum) { const [did, n] = d.bolum.split('|'); bolumAc(did, n); }
-  else if (d.istGun) { istGun = +d.istGun; ISV = null; istatistikSayfaCiz(); istatistikYukle(); }
+  else if (d.istGun) {
+    // Özel: any day count 1-365 (the server clamps the same way)
+    let g = +d.istGun;
+    if (d.istGun === 'ozel') { const c = prompt('Son kaç günün istatistiği? (1-365)', String(istGun)); g = Math.round(+c); if (!c || !(g >= 1 && g <= 365)) return; }
+    istGun = g; ISV = null; istatistikSayfaCiz(); istatistikYukle();
+  }
   else if (d.istGrafik) { istGrafik = d.istGrafik; istatistikSayfaCiz(); }
   else if (d.istSira) { istSira = { k: d.istSira, yon: istSira.k === d.istSira ? -istSira.yon : (d.istSira === 'baslik' ? 1 : -1) }; istatistikSayfaCiz(); }
   else if (d.tkGorunum) { if (d.tkGorunum !== tkGorunum) { tkGorunum = d.tkGorunum; ayKaydir = 0; try { localStorage.setItem('vm-takvim', tkGorunum); } catch {} takvimCiz(); } }

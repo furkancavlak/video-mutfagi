@@ -33,7 +33,7 @@ const CANLANMA_KAT = 3, CANLANMA_EN_AZ = 1;
 const HIZLI_YAS = 72 * SAAT, HIZLI_SURE = 48 * SAAT;
 const LISTE_GUN = 60, LISTE_SAYFA = 10, LISTE_LIMIT = 50;
 const DESTEKSIZ_SURE = 24 * SAAT;
-const METRIKLER = ['views', 'reach', 'likes', 'comments', 'saved', 'shares', 'total_interactions', 'ig_reels_avg_watch_time', 'ig_reels_video_view_total_time', 'reels_skip_rate', 'crossposted_views', 'facebook_views'];
+const METRIKLER = ['views', 'reach', 'likes', 'comments', 'saved', 'shares', 'total_interactions', 'ig_reels_avg_watch_time', 'ig_reels_video_view_total_time', 'reels_skip_rate'];   // crossposted_views / facebook_views: Graph answers 'Fatal' (-1) for this account (31.10)
 const HESAP_METRIK = ['reach', 'profile_views', 'views', 'accounts_engaged'];
 const YORUM_SAAT = 72, YORUM_EN_FAZLA = 50;
 const ID = /^[\w.-]+$/;
@@ -107,7 +107,7 @@ function canlandi(noktalar) {
 
 // ---------------------------------------------------------------- Graph errors
 const insightDeger = m => { const v = (m.values && m.values[0] ? m.values[0].value : m.total_value && m.total_value.value) ?? null; return v != null && Number.isFinite(+v) ? +v : null; };
-const hataKodu = e => { const m = /\(kod (\d+)\)\s*$/.exec(String((e && e.message) || e)); return m ? +m[1] : null; };
+const hataKodu = e => { const m = /\(kod (-?\d+)\)\s*$/.exec(String((e && e.message) || e)); return m ? +m[1] : null; };
 const GECICI_KOD = new Set([1, 2, 4, 17, 32, 341, 613]);   // Graph's own "try again later" codes
 // only a Graph answer about the metric itself (code 100 that names a metric, e.g. "metric[3] must be one of" or "does not
 // support the reels_skip_rate metric") means unsupported. Network drops, 5xx, rate limits, token errors and code 100 for
@@ -213,12 +213,21 @@ async function anlikIc({ hesap, kok, P, simdi, D }) {
     if (sor.length) {
       try { al(await P.graph('GET', `/${id}/insights`, { metric: sor.join(','), access_token: tok }), sor); }
       catch (e) {
-        if (desteksizMi(e)) {
-          // one unsupported metric fails the whole call: ask one by one and remember what Graph refuses
+        if (desteksizMi(e) || hataKodu(e) === -1) {
+          // one unsupported metric fails the whole call (code 100, or a bare "Fatal" -1 seen live for some metrics):
+          // ask one by one and remember what Graph refuses (retried after 24 h)
+          const fatal = [];
           for (const m of sor) {
             try { al(await P.graph('GET', `/${id}/insights`, { metric: m, access_token: tok }), [m]); }
-            catch (e2) { if (desteksizMi(e2)) { reddet(k.tur, m, e2); yok[m] = 'desteklenmiyor'; } else { yok[m] = 'hata'; hata = gizle(e2.message || e2); } }
+            catch (e2) {
+              if (desteksizMi(e2)) { reddet(k.tur, m, e2); yok[m] = 'desteklenmiyor'; }
+              else if (hataKodu(e2) === -1) fatal.push([m, e2]);
+              else { yok[m] = 'hata'; hata = gizle(e2.message || e2); }
+            }
           }
+          // -1 on only some metrics: those are refused; -1 on every metric is an outage, not a verdict on them
+          const hepsi = fatal.length === sor.length;
+          for (const [m, e2] of fatal) { if (hepsi) { yok[m] = 'hata'; hata = gizle(e2.message || e2); } else { reddet(k.tur, m, e2); yok[m] = 'desteklenmiyor'; } }
         } else { for (const m of sor) yok[m] = 'hata'; hata = gizle(e.message || e); }
       }
     }
@@ -287,7 +296,7 @@ const oran = (a, b) => (a == null || !b ? null : +(a / b).toFixed(4));
 // ek: { isler: queue jobs (paylasilan, with media_id/video/ne_zaman/paylasildi), diziler: series stores of this account,
 //       sure: video folder -> seconds }
 function ozet({ kok = KOK0, hesap, gun = 28, simdi = Date.now(), ek = {} } = {}) {
-  gun = [7, 28, 90].includes(+gun) ? +gun : 28;
+  gun = Number.isInteger(+gun) && +gun >= 1 && +gun <= 365 ? +gun : 28;   // presets 1/3/7/15/28/90 or a custom day count
   const bas = simdi - gun * GUN, onceBas = simdi - 2 * gun * GUN;
   const hepsi = anliklar(kok, hesap, onceBas - 2 * GUN, simdi), iyi = hepsi.filter(x => !x.hata);
   const gz = ayliklar(kok, hesap, 'gozlem-', onceBas - 2 * GUN, simdi), hs = ayliklar(kok, hesap, 'hesap-', onceBas - 2 * GUN, simdi);
