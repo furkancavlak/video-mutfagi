@@ -42,3 +42,9 @@ Test: `node --test "dizi/test/*.test.js"`
 - Bekleyen dizi aktif dizi sınırına sayılmaz; aynı anda en fazla 2 hikâye metin onayı bekler, daha fazlası açılmaz.
 - Panel: `POST /api/dizi/metin {kanal, id, karar: 'onayla'|'reddet', metinler?: {n: metin}}` (kilitli). Düzeltilen metinde yalnız özet kuralı yeniden denetlenir (tek cümle, en fazla 15 kelime). `reddet`: dizi `kesildi` ("metin reddedildi"), hikâye `reddedilen.json`'a. Liste API'si `metin_onay`'ı ve bekleyen dizilerin metinlerini verir. Sunucu: `--dizi-metin`.
 - Bu özellikten önceki diziler (alan yok) `onaylandi` sayılır; `calistir` ilk koşuda alanı açıkça yazar.
+
+## Ton (dizi/ton.js)
+
+- Bölme hikâyenin tonunu etiketler: `komik | hüzünlü | ürkütücü | ciddi` (`ton`, `ton_neden`; komik değilse `hassasiyet_notu`). Komik olmayanda şakacı ses etiketi bölmede biçim hatasıdır; hassasiyet denetimi (`hikaye-hassasiyet.md`) alay, mağduru suçlama, gereksiz ayrıntı ve kimlik ele veren ayrıntıyı arar: bir kez yeniden yazılır, ikinci takılmada `hassasiyet` (reddedilen.json'da `furkan_baksin`).
+- Üretim tonu izler: `video.json → ton`; ses `tts.ton_ayarlari[ton]`; kapanışta komik efekt yok, müzik `marka.kapanis_muzigi_ciddi` ya da hiç; sahne istemi ve denetçiler ton bölümünü alır (`gorsel_dil.ton_kurallari`); açıklamada 👀 ve #komik yalnız komikte.
+- Etiketten önce bölünen diziler: `konu.json → dizi.ton_atamalari {id: ton}` ya da komik (calistir ilk koşuda yazar).
