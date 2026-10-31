@@ -309,6 +309,13 @@ dialog.gun-panel #pencere-ic{height:100%;padding:0;gap:0}
 .tk-satir .tk-sayilar{margin:0}
 .tk-bas{margin-bottom:16px}
 .kn{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--body);color:var(--ink-3)}
+.taze-not{margin-left:10px;font:600 12px var(--body);color:var(--ink-3);opacity:.75;animation:taze-nabiz 1.6s ease-in-out infinite}
+.taze-not[hidden]{display:none}
+@keyframes taze-nabiz{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.taze-not{animation:none}}
+/* space kept for the parts that arrive later, so the page does not jump while it loads */
+#takvim:empty{min-height:420px}
+#ozet-satir:empty{min-height:46px}
 .kn.kotu{color:var(--bad-t)}
 .kn .ik{flex:none}
 /* "Onayını bekleyenler": what waits for Furkan, above the calendar */
