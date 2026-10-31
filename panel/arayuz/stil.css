@@ -430,6 +430,17 @@ dialog{width:min(880px,94vw);margin:auto}
 .dz-son{padding:10px 16px;margin-bottom:14px}
 .dz-son summary{cursor:pointer;color:var(--ink-2);font-size:14px}
 .dz-son-ic{padding-top:8px;display:flex;flex-direction:column;gap:4px}
+/* shadow planner: rating badge, trend chip, speed column, the 48 h plan */
+.ry-rozet,.ry-trend{display:inline-block;font:700 10.5px/1 var(--body);padding:4px 7px;border-radius:6px;background:var(--slate-soft);color:var(--ink-2);white-space:nowrap}
+.ry-rozet.iyi,.ry-trend{background:var(--herb-soft);color:var(--ok-t)}.ry-rozet.kotu{background:var(--tomato-soft);color:var(--bad-t)}
+.ry-rozet small{font-weight:600;opacity:.75;margin-left:3px}
+.ry-hiz{font-weight:700}
+.dz-plan-tablo{width:100%;border-collapse:collapse;font-size:13px;min-width:520px}
+.dz-plan-tablo th{text-align:left;font:700 11px var(--body);letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);padding:6px 8px;border-bottom:1px solid var(--line)}
+.dz-plan-tablo td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.dz-plan-tablo tr:last-child td{border-bottom:0}
+.dz-plan-tablo .fark td:nth-child(2){color:var(--honey)}
+.dz-plan-kararlar{margin:8px 0 0;padding-left:18px;font-size:13px;color:var(--ink-2)}
 .dz-notlar{margin:4px 0 6px 18px;font-size:13.5px;color:var(--ink-2)}
 .hk{padding:18px 20px}
 .hk-ust{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
