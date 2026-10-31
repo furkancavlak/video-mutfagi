@@ -12,6 +12,8 @@ const MIN_KAYNAK = 250, MIN_SAYI = 2, MAX_SAYI = 5;
 const OZET_KELIME = 25, OZET_CUMLE = 2;              // hard limit for the recap; the prompt asks for 1 sentence, 15 words
 const BOLUM_KELIME = 140;                            // ~1 minute of narration: only used to suggest an episode count
 const BURAK = { ses: 'l5wXOpZHEQpKhuIrBiCN', ad: 'Burak' };
+// episode 1 must open on the story's situation (Furkan 31.10, the 3-J lesson): an eventless intro sends the split back
+const OLAYSIZ = /(hikâyem|hikayem|anım|anim) var|anlatacağım|anlatacagim|nereden başla|nereden basla|yıllar önceydi|yillar onceydi|tahmin edemezsiniz|hayatımın (hatası|en)/;
 
 const temiz = m => String(m || '').replace(/\[[^\]]*\]/g, ' ').replace(/[ \t]+/g, ' ').trim();
 const say = m => temiz(m).split(/\s+/).filter(Boolean).length;
@@ -49,7 +51,11 @@ function bicimHatalari(o) {
     const n = i + 1, m = b && typeof b.metin === 'string' ? b.metin.trim() : '';
     if (!m) { h.push(`Bölüm ${n} boş`); return; }
     const acilis = /^önceki bölüm/.test(temiz(m).toLocaleLowerCase('tr'));
-    if (n === 1) { if (acilis) h.push('Bölüm 1 "Önceki bölümde…" ile açılmaz'); return; }
+    if (n === 1) {
+      if (acilis) h.push('Bölüm 1 "Önceki bölümde…" ile açılmaz');
+      else if (OLAYSIZ.test(temiz(cumleler(temiz(m))[0]).toLocaleLowerCase('tr'))) h.push('Bölüm 1 olaysız bir girişle açılıyor; ilk cümle kim + başına gelen durum olmalı (açılış formülü)');
+      return;
+    }
     if (!acilis) { h.push(`Bölüm ${n} "Önceki bölümde…" cümlesiyle açılmıyor`); return; }
     const p = paragraflar(m);
     if (p.length < 2) { h.push(`Bölüm ${n}: "Önceki bölümde…" özeti ayrı bir paragraf değil (özetten sonra boş satır bırak)`); return; }

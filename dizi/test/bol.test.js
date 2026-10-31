@@ -201,3 +201,10 @@ test('sesSec: among voices of the right gender and age, one that lists the tone 
   assert.strictEqual(sesSec({ cinsiyet: 'erkek', yas: 'genc' }, roster, 'komik').ad, 'Neşeli');
   assert.strictEqual(sesSec({ cinsiyet: 'erkek', yas: 'genc' }, roster, 'ürkütücü').ad, 'Neşeli', 'no voice lists it: the first of the right gender and age');
 });
+
+test('bicimHatalari: episode 1 opening on an eventless intro is sent back (opening formula)', () => {
+  const { bicimHatalari } = require('../bol');
+  const o = m => ({ ton: { deger: 'komik' }, bolumler: [{ metin: m }, { metin: 'Önceki bölümde bir şey oldu.\n\nDevamı.' }] });
+  assert.ok(bicimHatalari(o('Hâlâ hatırladıkça gülümsediğim bir hikâyem var. Uçaktaydım.')).some(h => /olaysız/.test(h)));
+  assert.ok(!bicimHatalari(o('Tanımadığım bir numara beni 3-J velileri grubuna ekledi. Çocuğum yok.')).some(h => /olaysız/.test(h)));
+});
