@@ -150,8 +150,13 @@ const tonSesAyari = (tts, ton) => ({ ...((tts || {}).voice_settings || {}), ...(
 const tesekkurListesi = video => [...new Set((Array.isArray(video.tesekkur) ? video.tesekkur : []).map(x => String(x || '').trim().replace(/^@+/, '')).filter(x => /^[\w.]{1,30}$/.test(x)))];
 // the closing bed: marka.kapanis_muzigi for komik, marka.kapanis_muzigi_ciddi (or nothing) for a serious tone
 const kapanisMuzigi = (marka, ton) => (ciddiTon(ton) ? (marka || {}).kapanis_muzigi_ciddi : (marka || {}).kapanis_muzigi) || null;
-// the thanks outro's own bed (marka.tesekkur_muzigi / _ciddi), looped to the card's length; falls back to the closing bed
-const tesekkurMuzigi = (marka, ton) => (ciddiTon(ton) ? (marka || {}).tesekkur_muzigi_ciddi : (marka || {}).tesekkur_muzigi) || null;
+// the thanks outro's own bed, looped to the card's length; falls back to the closing bed. marka.tesekkur_muzigi is a file,
+// or one file per tone ({ komik, hüzünlü, ürkütücü, ciddi }; a missing tone takes komik for komik, else any calm one)
+function tesekkurMuzigi(marka, ton) {
+  const m = (marka || {}).tesekkur_muzigi;
+  if (m && typeof m === 'object') return m[ton] || (ciddiTon(ton) ? m.ciddi || m['hüzünlü'] || m['ürkütücü'] : m.komik) || null;
+  return (ciddiTon(ton) ? (marka || {}).tesekkur_muzigi_ciddi : m) || null;
+}
 
 // The card's sound effects ({sfx: [[name, time, volume]]}) as mix inputs: kanal/<kanal>/muzik/<name>.wav. A name that is
 // not a plain word or has no file is skipped, a non-numeric volume plays at 1 (the card still plays, just without that sound).
