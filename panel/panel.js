@@ -331,7 +331,7 @@ function asamalar(kanal) {
 const yzYolu = k => { try { return require(path.join(KOK, 'konu', 'llm.js')).yolSec((okuJ(path.join(KOK, 'kanal', k, 'konu.json'), {}) || {}).llm || {}); } catch { return null; } };
 
 // ---------- series ("Diziler"): kayit/dizi/<kanal>/diziler.json + konu.json → dizi. The channel is checked against kanal/ first.
-const DIZI_KEYS = ['esik_oran', 'bekle_saat', 'gunluk_hedef', 'onay_donemi', 'onay_gunluk', 'saatler', 'ilk_dizi_sayisi', 'yorum_min', 'yorum_kelimeleri'];
+const DIZI_KEYS = ['esik_oran', 'bekle_saat', 'olcum_once_saat', 'gunluk_hedef', 'onay_donemi', 'onay_gunluk', 'saatler', 'ilk_dizi_sayisi', 'yorum_min', 'yorum_kelimeleri'];
 const sayiAralik = (v, ad, a, b, tam) => { if (typeof v !== 'number' || !Number.isFinite(v) || v < a || v > b || (tam && !Number.isInteger(v))) throw new Error(`${ad} ${a} ile ${b} arasında ${tam ? 'bir tam sayı ' : 'bir sayı '}olmalı`); return v; };
 function diziAyarTemiz(a) {
   if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error('ayarlar anlaşılmadı');
@@ -340,6 +340,7 @@ function diziAyarTemiz(a) {
     if (!DIZI_KEYS.includes(k)) throw new Error(`bilinmeyen ayar: ${k}`);
     if (k === 'esik_oran') o[k] = sayiAralik(v, 'Eşik oranı', 0.1, 1);
     else if (k === 'bekle_saat') o[k] = sayiAralik(v, 'Bekleme süresi (saat)', 6, 72);
+    else if (k === 'olcum_once_saat') o[k] = sayiAralik(v, 'Sıradaki bölümden kaç saat önce bakılsın', 1, 12);
     else if (k === 'gunluk_hedef') o[k] = sayiAralik(v, 'Günlük bölüm sayısı', 1, 5, true);
     else if (k === 'onay_gunluk') o[k] = sayiAralik(v, 'Onay döneminde günlük bölüm sayısı', 1, 5, true);
     else if (k === 'ilk_dizi_sayisi') o[k] = sayiAralik(v, 'Kesilmeyecek ilk hikâye sayısı', 0, 50, true);

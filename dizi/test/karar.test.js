@@ -17,7 +17,7 @@ test('posted 10 h ago waits for the 20 h mark', () => {
   const d = dizi('a', 'aktif', [1000]);
   const r = kararVer(d, 1, gecmis(), AYAR, saatSonra(10));
   assert.strictEqual(r.karar, 'bekle');
-  assert.match(r.neden, /20 saat/);
+  assert.match(r.neden, /ölçüm zamanı gelmedi \(10 saat var\)/);
 });
 
 test('missing views at 25 h waits, never cuts', () => {
@@ -256,4 +256,16 @@ test('tonGoc: a series without a tone gets the kit assignment or komik; a set to
   assert.strictEqual(tonGoc(v, { b: 'ciddi', d: 'olmayan' }), 3);
   assert.deepStrictEqual(v.diziler.map(d => d.ton), ['komik', 'ciddi', 'ürkütücü', 'komik']);
   assert.strictEqual(tonGoc(v), 0);
+});
+
+test('olcumZamani: olcum_once_saat before the next slot at least bolum_arasi_saat after the post; old rule without it', () => {
+  const { olcumZamani } = require('../dizi');
+  const ayar = { olcum_once_saat: 3, bolum_arasi_saat: 20, saatler: ['10:00', '15:00', '20:00'] };
+  const yerel = (g, h, m = 0) => new Date(2026, 10, g, h, m).getTime();
+  // posted 1 Nov 10:00 -> next slot 2 Nov 10:00 (first >= 06:00 next day) -> measured 07:00
+  assert.strictEqual(olcumZamani({ paylasildi: new Date(yerel(1, 10)).toISOString() }, ayar), yerel(2, 7));
+  // posted 23:57 -> +20 h = 19:57 -> 20:00 slot -> measured 17:00
+  assert.strictEqual(olcumZamani({ paylasildi: new Date(yerel(1, 23, 57)).toISOString() }, ayar), yerel(2, 17));
+  // no olcum_once_saat: paylasildi + bekle_saat
+  assert.strictEqual(olcumZamani({ paylasildi: new Date(yerel(1, 10)).toISOString() }, { bekle_saat: 16 }), yerel(2, 2));
 });
