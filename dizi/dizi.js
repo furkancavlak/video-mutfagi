@@ -142,19 +142,31 @@ function sonrakiSlotSaati(t0, saatler) {
   }
   return t0;
 }
-function olcumZamani(b, ayar = {}) {
+// A series keeps its own hour (Furkan 31.10: "ilk seferinde kaçta başladıysa o saatte devam etsin"): dizi.saat, set when
+// its first episode is produced (a configured hour no other active series holds); its next episode goes out at that hour.
+const SAAT = /^([01]\d|2[0-3]):[0-5]\d$/;
+const diziSaati = dz => (dz && SAAT.test(String(dz.saat || ''))) ? [dz.saat] : null;
+// the next episode's slot after episode b: the series' own hour (or the configured hours) at least bolum_arasi_saat later
+const hedefSlot = (b, ayar = {}, dz = null) => sonrakiSlotSaati(new Date(b.paylasildi).getTime() + (ayar.bolum_arasi_saat ?? 20) * 3600e3, diziSaati(dz) || ayar.saatler);
+function olcumZamani(b, ayar = {}, dz = null) {
   const p = new Date(b.paylasildi).getTime();
   if (!(ayar.olcum_once_saat > 0)) return p + (ayar.bekle_saat || 0) * 3600e3;
-  const slot = sonrakiSlotSaati(p + (ayar.bolum_arasi_saat ?? 20) * 3600e3, ayar.saatler);
-  return Math.max(p + 6 * 3600e3, slot - ayar.olcum_once_saat * 3600e3);   // never on fewer than 6 hours of data
+  return Math.max(p + 6 * 3600e3, hedefSlot(b, ayar, dz) - ayar.olcum_once_saat * 3600e3);   // never on fewer than 6 hours of data
 }
-const olcumGecen = (b, ayar, simdi) => (new Date(simdi).getTime() - olcumZamani(b, ayar)) / 3600e3;
+const olcumGecen = (b, ayar, simdi, dz = null) => (new Date(simdi).getTime() - olcumZamani(b, ayar, dz)) / 3600e3;
+// an hour for a new series: the first configured one no other active series holds, else the least used
+function bosSaat(diziler, ayar = {}, haric = null) {
+  const ss = (ayar.saatler || []).filter(s => SAAT.test(s));
+  if (!ss.length) return null;
+  const say = s => (diziler || []).filter(x => x && x !== haric && x.durum === 'aktif' && x.saat === s).length;
+  return ss.slice().sort((a, b) => say(a) - say(b) || ss.indexOf(a) - ss.indexOf(b))[0];
+}
 
 function kararVer(dizi, n, tumDiziler, ayar, simdi) {
   const b = bul(dizi, n);
   if (!b) throw new Error(`bölüm ${n} yok`);
   if (b.elle) return { karar: b.karar, neden: b.karar_neden };
-  const kalan = -olcumGecen(b, ayar, simdi);
+  const kalan = -olcumGecen(b, ayar, simdi, dizi);
   if (kalan > 0) return { karar: 'bekle', neden: `ölçüm zamanı gelmedi (${Math.ceil(kalan)} saat var)` };
   const v = views(b);
   if (v === null) return { karar: 'bekle', neden: 'izlenme sayısı henüz yok' };
@@ -211,4 +223,4 @@ function kilitAl(kok, kanal) {
   return { mesaj: 'kilit: kilit dosyası alınamadı' };
 }
 
-module.exports = { olcumZamani, olcumGecen, sonrakiSlotSaati, yukle, kaydet, kararVer, elleKarar, kilitAl, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi, tonGoc };
+module.exports = { olcumZamani, olcumGecen, sonrakiSlotSaati, hedefSlot, bosSaat, yukle, kaydet, kararVer, elleKarar, kilitAl, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi, tonGoc };

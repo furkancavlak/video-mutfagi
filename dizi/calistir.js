@@ -228,7 +228,7 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       for (const b of (d.bolumler || []).slice().sort((x, y) => x.n - y.n)) {
         if (b.durum !== 'yayinda' || !b.paylasildi) continue;
         // gecen = hours since the measurement became due (olcum_once_saat before the next slot, or the old bekle_saat)
-        const gecen = olcumGecen(b, ayar, simdi);
+        const gecen = olcumGecen(b, ayar, simdi, d);
         if (gecen < 0) continue;
         // `elle` only overrides the decision (kararVer), never the measurement: the next episode needs this one's views
         if (kuru) { notlar.push(`ölçülecek: ${d.id} bölüm ${b.n}`); sonuc.olculen++; continue; }

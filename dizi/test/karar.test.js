@@ -269,3 +269,15 @@ test('olcumZamani: olcum_once_saat before the next slot at least bolum_arasi_saa
   // no olcum_once_saat: paylasildi + bekle_saat
   assert.strictEqual(olcumZamani({ paylasildi: new Date(yerel(1, 10)).toISOString() }, { bekle_saat: 16 }), yerel(2, 2));
 });
+
+test('a series keeps its own hour: next episode at dizi.saat at least bolum_arasi_saat later; a new series gets a free hour', () => {
+  const { olcumZamani, hedefSlot, bosSaat } = require('../dizi');
+  const ayar = { olcum_once_saat: 3, bolum_arasi_saat: 12, saatler: ['10:00', '15:00', '20:00'] };
+  const yerel = (g, h, m = 0) => new Date(2026, 10, g, h, m).getTime();
+  const b = { paylasildi: new Date(yerel(1, 15, 16)).toISOString() };
+  assert.strictEqual(hedefSlot(b, ayar, { saat: '10:00' }), yerel(2, 10));
+  assert.strictEqual(olcumZamani(b, ayar, { saat: '10:00' }), yerel(2, 7));
+  const D = [{ durum: 'aktif', saat: '10:00' }, { durum: 'aktif', saat: '20:00' }, { durum: 'bitti', saat: '15:00' }];
+  assert.strictEqual(bosSaat(D, ayar), '15:00');
+  assert.strictEqual(bosSaat([...D, { durum: 'aktif', saat: '15:00' }], ayar), '10:00');
+});
