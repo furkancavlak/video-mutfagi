@@ -6,7 +6,7 @@
 // plan = { zaman, golge: true, gecici, slotlar: [{saat, atanan: {dizi, bolum} | null, kilitli, neden, kuyrukta}], kararlar: [{tur, dizi, neden}] }
 // Rules, in priority order:
 //   1. a slot holding a queued job less than 3 h away is locked; later queued jobs are tentative (kuyrukta) and may move
-//   2. continuity: a running series gets a slot before its gap passes 30 h, as early as feasible (>= 10 h between episodes)
+//   2. continuity: a running series gets a slot before its gap passes dizi.azami_ara_saat (default 40 h), as early as feasible (>= 10 h between episodes)
 //   3. trend: the trending series takes tomorrow's first free slot (>= 10 h after its last post), unless that breaks rule 2
 //   4. the other slots by posterior mean (mu; diagnostics break ties); a benched series only when canlanan or alone
 //   5. running series <= slots per day; a new approved stock story starts only then, at most one a day while gecici
@@ -14,7 +14,7 @@
 //   7. a series whose last episode is posted leaves the planner
 const D = require('./dizi');
 
-const SAAT = 3600e3, UFUK = 48 * SAAT, KILIT = 3 * SAAT, MIN_ARA = 10 * SAAT, MAX_ARA = 30 * SAAT, YEDEK_ARA = 6 * SAAT, YEDEK_P = 0.9;
+const SAAT = 3600e3, UFUK = 48 * SAAT, KILIT = 3 * SAAT, MIN_ARA = 10 * SAAT, AZAMI_ARA = 40, YEDEK_ARA = 6 * SAAT, YEDEK_P = 0.9;
 const SAAT_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const iso = t => new Date(t).toISOString();
 const gunAnahtar = t => { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };   // local day, like dizi.sonrakiSlotSaati
@@ -59,6 +59,10 @@ const veriImzasi = (reyting, id) => Object.entries((reyting && reyting.bolumler)
 
 function planYap({ diziler = [], reyting = null, isler = [], ayar = {}, simdi = Date.now(), gecmis = null } = {}) {
   simdi = +new Date(simdi);
+  // the longest gap between two episodes of a running series (konu.json → dizi.azami_ara_saat, panel setting; Furkan 01.11:
+  // "süreklilik kuralını bir tık esnetebiliriz" — 40 h lets an evening episode continue the morning after next)
+  const araSaat = Number.isFinite(+ayar.azami_ara_saat) && +ayar.azami_ara_saat >= 16 && +ayar.azami_ara_saat <= 96 ? +ayar.azami_ara_saat : AZAMI_ARA;
+  const MAX_ARA = araSaat * SAAT;
   const RY = reyting || { diziler: {}, bolumler: {}, canlanan: [], gecici: true };
   const gecici = RY.gecici !== false;
   const slotlar = slotSaatleri(ayar, simdi).map(t => ({ t, atanan: null, kilitli: false, neden: null, kuyrukta: null }));
@@ -124,8 +128,8 @@ function planYap({ diziler = [], reyting = null, isler = [], ayar = {}, simdi = 
       if (!acil) break;
       const sinir = acil.son + MAX_ARA, sl = slotlar.find(x => bos(x) && uygun(acil, x.t)), ara = sl ? Math.round((sl.t - acil.son) / SAAT) : null;
       if (!sl) { kacan.push(acil.d.id); tamam.add(acil); continue; }
-      if (sl.t > sinir) { kacan.push(acil.d.id); ata(sl, acil, `süreklilik: 30 saat sınırı aşılıyor, ilk boş slot (${ara} saat)`); tamam.add(acil); continue; }
-      ata(sl, acil, `süreklilik: önceki bölümden ${ara} saat sonra (sınır 30)`); tamam.add(acil);
+      if (sl.t > sinir) { kacan.push(acil.d.id); ata(sl, acil, `süreklilik: ${araSaat} saat sınırı aşılıyor, ilk boş slot (${ara} saat)`); tamam.add(acil); continue; }
+      ata(sl, acil, `süreklilik: önceki bölümden ${ara} saat sonra (sınır ${araSaat})`); tamam.add(acil);
     }
     return kacan;
   };
@@ -143,11 +147,11 @@ function planYap({ diziler = [], reyting = null, isler = [], ayar = {}, simdi = 
       // its episodes before tomorrow keep the continuity rule
       ata(sl, trendS, `trend: yarının ilk boş slotu (R ${Math.round(trendS.R)}, hızlanıyor)`);
       const r = sureklilik();
-      if (r.length > bazKacan) { geriYukle(once); kacan = sureklilik(); kararlar.push({ tur: 'isaret', dizi: trendS.d.id, neden: 'trend öne alınamadı: başka bir dizinin 30 saat sınırını bozuyor' }); }
+      if (r.length > bazKacan) { geriYukle(once); kacan = sureklilik(); kararlar.push({ tur: 'isaret', dizi: trendS.d.id, neden: `trend öne alınamadı: başka bir dizinin ${araSaat} saat sınırını bozuyor` }); }
       else { kacan = r; kararlar.push({ tur: 'trend-one-al', dizi: trendS.d.id, neden: `hızlanıyor ve en iyi olma olasılığı en yüksek: ${new Date(sl.t).toISOString()} slotuna alındı` }); }
     } else kacan = sureklilik();
   } else kacan = sureklilik();
-  for (const id of kacan) kararlar.push({ tur: 'isaret', dizi: id, neden: 'süreklilik: 30 saat içinde boş slot yok' });
+  for (const id of kacan) kararlar.push({ tur: 'isaret', dizi: id, neden: `süreklilik: ${araSaat} saat içinde boş slot yok` });
 
   // 4./5. the other free slots by posterior mean; new stock stories when capacity allows
   const yeniGun = new Map();
@@ -185,4 +189,4 @@ function planYap({ diziler = [], reyting = null, isler = [], ayar = {}, simdi = 
 }
 const planla = a => planYap(a).plan;
 
-module.exports = { planla, planYap, gecmisGuncelle, slotSaatleri, isBolum, MIN_ARA, MAX_ARA };
+module.exports = { planla, planYap, gecmisGuncelle, slotSaatleri, isBolum, MIN_ARA, AZAMI_ARA };

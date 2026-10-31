@@ -139,3 +139,12 @@ test('a queued job off the slot grid keeps its own fixed slot and is never plann
   assert.strictEqual(s.kilitli, true); assert.deepStrictEqual(s.atanan, { dizi: 'a', bolum: 1 });
   assert.strictEqual(p.slotlar.filter(x => x.atanan && x.atanan.dizi === 'a' && x.atanan.bolum === 1).length, 1);
 });
+
+test('azami_ara_saat: the continuity limit is a setting (default 40 h)', () => {
+  const d = dizi('a', [yerel(19, 20)], 2);   // posted 19th 20:00; 20th 10:00 is 14 h later, 21st 10:00 is 38 h later
+  const p40 = P.planla({ diziler: [d], reyting: ry({ a: {} }), isler: [], ayar: AYAR, simdi: SIMDI });
+  const p20 = P.planla({ diziler: [d], reyting: ry({ a: {} }), isler: [], ayar: { ...AYAR, azami_ara_saat: 20 }, simdi: SIMDI });
+  const n = p => (p.slotlar.find(x => x.atanan && x.atanan.dizi === 'a') || {}).neden || '';
+  assert.match(n(p20), /sınır 20|20 saat/);
+  assert.ok(!/sınır 30/.test(n(p40)));
+});
