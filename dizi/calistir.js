@@ -1,7 +1,7 @@
 // Hourly series scheduler run: sync posted episodes from the queue, measure, decide continue/cut, fill the day, ask for due episodes.
 //   node dizi/calistir.js <kanal> [--kuru]      (--kuru = plan only: no writes, no production, no network)
 const fs = require('fs'), path = require('path');
-const { yukle, kaydet, kararVer, kilitAl, metinOnay, metinOnayGoc, tonGoc, olcumGecen } = require('./dizi');
+const { yukle, kaydet, kararVer, kilitAl, kosuKilitAl, diziKilitAl, metinOnay, metinOnayGoc, tonGoc, olcumGecen } = require('./dizi');
 const ortak = require('../konu/ortak');
 
 // MAX_BOLME: stories split per run (new series + the split-ahead text stock, konu.json dizi.metin_stok); a run stays short
@@ -21,6 +21,31 @@ function kuyrukOku(kok) {
     for (const f of ad) { try { out[k].push({ id: f.replace(/\.json$/, ''), ...JSON.parse(fs.readFileSync(path.join(d, f), 'utf8').replace(/^﻿/, '')) }); } catch (e) { } }
   }
   return out;
+}
+
+// ---- locks: the run holds .kosu-kilit throughout; the channel lock only for short writes (a panel write takes milliseconds,
+// so a busy channel lock is waited out here instead of failing the run)
+const KISA_BEKLE = 30e3;
+async function kisaKilit(kok, kanal, bekle = KISA_BEKLE) {
+  const son = Date.now() + bekle;
+  for (;;) {
+    const k = kilitAl(kok, kanal);
+    if (!k.mesaj) return k;
+    if (Date.now() > son) throw new Error(k.mesaj);
+    await new Promise(r => setTimeout(r, 100));
+  }
+}
+// production results onto the fresh series: only the fields production changed (once -> sonra), per episode for bolumler
+const esit = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function alanAktar(hedef, once, sonra, atla) {
+  for (const k of new Set([...Object.keys(once), ...Object.keys(sonra)])) {
+    if (k === atla || esit(once[k], sonra[k])) continue;
+    if (k in sonra) hedef[k] = sonra[k]; else delete hedef[k];
+  }
+}
+function uretimAktar(d, once, sonra) {
+  alanAktar(d, once, sonra, 'bolumler');
+  for (const sb of sonra.bolumler || []) { const db = bul(d, sb.n); if (db) alanAktar(db, bul(once, sb.n) || {}, sb); }
 }
 
 // ---- default collaborators (all injectable)
@@ -78,21 +103,28 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
   entryGetir = entryGetir || (no => require('../konu/kaynaklar/eksi').entryGetir(no));
   const tema = require('./tema');
   let aday = null;
-  return async (ctx, { simdi, diziler, kok, sonuc }) => {
+  // kilitle(fn): runs fn under the channel lock (calistir passes it; this runs without the lock around the LLM calls)
+  return async (ctx, { simdi, diziler, kok, sonuc, kilitle = async fn => fn() }) => {
     kok = kok || ctx.kok || ortak.KOK;
     const not = m => { if (sonuc) sonuc.notlar.push(m); };
     const f = redDosya(kok, ctx.kanal);
     let red; try { red = ortak.okuJson(f, { reddedilen: [] }); } catch (e) { red = { reddedilen: [] }; not(`reddedilen.json okunamadı, baştan yazılacak: ${e.message}`); }
     if (!Array.isArray(red.reddedilen)) red.reddedilen = [];
     const kullanilan = new Set([...(diziler || []).flatMap(d => [d.id, d.kaynak && d.kaynak.id]).filter(Boolean), ...red.reddedilen.map(x => x.id)]);
-    const reddet = (h, r) => {
+    const reddet = async (h, r) => {
       const ayrinti = r && r.ayrinti != null ? String(typeof r.ayrinti === 'string' ? r.ayrinti : JSON.stringify(r.ayrinti)).slice(0, 300) : undefined;
       // a serious story that kept reading mocking or identifying is kept for Furkan to look at, not just dropped
       const hassas = r && r.neden === 'hassasiyet';
-      red.reddedilen.push({ kaynak: h.tur || null, id: h.id, neden: (r && r.neden) || 'bölünemedi', ...(ayrinti ? { ayrinti } : {}), ...(hassas ? { furkan_baksin: true, url: h.url || null } : {}), zaman: new Date(simdi).toISOString() });
+      const kayit = { kaynak: h.tur || null, id: h.id, neden: (r && r.neden) || 'bölünemedi', ...(ayrinti ? { ayrinti } : {}), ...(hassas ? { furkan_baksin: true, url: h.url || null } : {}), zaman: new Date(simdi).toISOString() };
+      red.reddedilen.push(kayit);
       if (hassas) not(`${h.id}: hassasiyet denetimi iki kez takıldı, Furkan'a bırakıldı (${h.url || ''})`);
       kullanilan.add(h.id);
-      ortak.yazJson(f, red);
+      // appended to the file as it is now (the panel's text reject writes it too)
+      await kilitle(() => {
+        let T; try { T = ortak.okuJson(f, { reddedilen: [] }); } catch (e) { T = { reddedilen: [] }; }
+        if (!Array.isArray(T.reddedilen)) T.reddedilen = [];
+        T.reddedilen.push(kayit); ortak.yazJson(f, T);
+      });
       if (sonuc) sonuc.reddedilen = (sonuc.reddedilen || 0) + 1;
     };
     // with text approval on (konu.json → dizi.metin_onayi, default true) the new series waits for Furkan before any voice
@@ -103,9 +135,10 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
     // 1. the weekly pool
     if (temalar.length) {
       const H = havuz.yukle(kok, ctx.kanal), esik = havuz.ayar(ctx).azaldi;
-      const kaydetH = () => havuz.kaydet(kok, ctx.kanal, H);
+      // a pool change is merged into the file as it is now (the panel's Ele / Öne al write it too)
+      const kaydetH = (x, alan) => { Object.assign(x, alan); return kilitle(() => { const T = havuz.yukle(kok, ctx.kanal), y = (T.hikayeler || []).find(z => z.id === x.id); if (y) { Object.assign(y, alan); havuz.kaydet(kok, ctx.kanal, T); } }); };
       for (const x of havuz.sirala(H, sira)) {
-        if (kullanilan.has(x.id)) { Object.assign(x, { durum: 'kullanildi' }); kaydetH(); continue; }
+        if (kullanilan.has(x.id)) { await kaydetH(x, { durum: 'kullanildi' }); continue; }
         let h;
         // the pool may carry the entry text (filled on a machine Ekşi does not block): no fetch needed
         if (x.metin) h = { id: x.id, tur: 'eksi', url: x.link, baslik: x.baslik, metin: x.metin, puan: x.fav, dil: 'tr' };
@@ -117,13 +150,13 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
           // Ekşi is blocking us: stop for this run instead of trying the whole pool
           if (/HTTP (403|429|503)/.test(e.message)) break;
           // only a real 404 drops the story; a changed or challenge page must not empty the pool
-          if (/HTTP 404/.test(e.message)) { Object.assign(x, { durum: 'elendi', neden: 'entry artık yok' }); kaydetH(); }
+          if (/HTTP 404/.test(e.message)) await kaydetH(x, { durum: 'elendi', neden: 'entry artık yok' });
           continue;
         }
         const r = await bol.bol(ctx, h, {});
-        if (r && r.ok) { Object.assign(x, { durum: 'kullanildi', kullanildi: new Date(simdi).toISOString() }); kaydetH(); return yeni(h, r, x.konu); }
-        Object.assign(x, { durum: 'elendi', neden: (r && r.neden) || 'bölünemedi' }); kaydetH();
-        reddet(h, r);
+        if (r && r.ok) { await kaydetH(x, { durum: 'kullanildi', kullanildi: new Date(simdi).toISOString() }); return yeni(h, r, x.konu); }
+        await kaydetH(x, { durum: 'elendi', neden: (r && r.neden) || 'bölünemedi' });
+        await reddet(h, r);
       }
       const kalan = H.hikayeler.filter(x => x.durum === 'havuzda').length;
       not(`havuz azaldı: ${kalan} hikâye kaldı${sira.length ? ', bugün kullanılabilecek temada hikâye yok: canlı aramaya geçildi' : ''} (node dizi/havuz.js doldur ${ctx.kanal})`);
@@ -140,7 +173,7 @@ function yeniDiziYap({ kaynak, bol, havuz, entryGetir } = {}) {
       if (kullanilan.has(h.id)) continue;
       const r = await bol.bol(ctx, h, {});
       if (r && r.ok) return yeni(h, r, h.konu);
-      reddet(h, r);
+      await reddet(h, r);
     }
     return null;
   };
@@ -220,15 +253,25 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
   kok = kok || ctx.kok || ortak.KOK;
   const sonuc = { olculen: 0, kararlar: [], uretilecek: [], yeniler: 0, reddedilen: 0, notlar: [] };
   const notlar = sonuc.notlar, ayar = (ctx.ayar && ctx.ayar.dizi) || {}, hesap = (ctx.kimlik && ctx.kimlik.hesap) || null;
-  const kilit = kuru ? { birak() { } } : kilitAl(kok, ctx.kanal);
+  const bos = { birak() { } };
+  const kosu = kuru ? bos : kosuKilitAl(kok, ctx.kanal);
+  let kilit = kosu.mesaj || kuru ? bos : kilitAl(kok, ctx.kanal);
   // last run for the panel; written on every non-dry exit, also when the run throws or the lock refused it
   const sonKosu = () => { if (kuru) return; try { ortak.yazJson(path.join(kok, 'kayit', 'dizi', ctx.kanal, 'son-kosu.json'), { zaman: new Date(simdi).toISOString(), notlar: sonuc.notlar, kararlar: sonuc.kararlar, uretilecek: sonuc.uretilecek, reddedilen: sonuc.reddedilen }); } catch (e) { } };
-  if (kilit.mesaj) { notlar.push(kilit.mesaj); sonKosu(); return sonuc; }
+  if (kosu.mesaj || kilit.mesaj) { if (!kosu.mesaj) kosu.birak(); notlar.push(kosu.mesaj || kilit.mesaj); sonKosu(); return sonuc; }
   try {
     let veri = yukle(kok, ctx.kanal);
     if (kuru) veri = JSON.parse(JSON.stringify(veri));
-    const diziler = veri.diziler, kuyruk = kuyrukOku(kok);
+    let diziler = veri.diziler;
+    const kuyruk = kuyrukOku(kok);
     const kaydetSon = () => { if (!kuru) kaydet(kok, ctx.kanal, veri); };
+    // after step 2 the channel lock is only taken around short writes; yaz reloads diziler.json first, so panel edits
+    // made meanwhile survive (veri/diziler then point at the fresh data)
+    const kilitle = async fn => { if (kuru) return fn(); const k = await kisaKilit(kok, ctx.kanal); try { return fn(); } finally { k.birak(); } };
+    const yaz = fn => kilitle(() => {
+      if (!kuru) { veri = yukle(kok, ctx.kanal); if (!Array.isArray(veri.diziler)) veri.diziler = []; diziler = veri.diziler; }
+      const r = fn(); kaydetSon(); return r;
+    });
 
     // 0. series from before the text approval feature count as approved (written explicitly once)
     const goc = metinOnayGoc(veri);
@@ -298,6 +341,8 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       catch (e) { notlar.push(`planlayıcı (deneme modu) hatası: ${e.message}`); }
     }
 
+    kilit.birak(); kilit = bos;
+
     // 3. fill the day
     const bugun = gunIst(simdi);
     const due = uretilecekler(diziler);
@@ -321,15 +366,18 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     const onayliStok = d => d.durum === 'aktif' && d.stok === true && metinOnay(d) === 'onaylandi';
     let sayi = sayilan.size, aktif = diziler.filter(d => d.durum === 'aktif' && !d.stok && !metinBekliyor(d)).length, bolme = 0;
     const eksik = Math.max(0, Math.min((hedef || 0) - sayi, MAX_AKTIF - aktif));
-    const yeniBol = async () => {
+    // the split (LLM) runs without the channel lock; the new series (after hazirla) is appended to the fresh data
+    const yeniBol = async hazirla => {
       try { yeniDizi = yeniDizi || yeniDiziYap(); } catch (e) { notlar.push(eksikModul(e)); yeniDizi = null; return null; }
       let d;
-      try { d = await yeniDizi(ctx, { simdi, diziler, kok, sonuc }); } catch (e) { notlar.push(`yeni dizi hatası: ${e.message}`); return null; }
+      try { d = await yeniDizi(ctx, { simdi, diziler, kok, sonuc, kilitle }); } catch (e) { notlar.push(`yeni dizi hatası: ${e.message}`); return null; }
       if (!d) { notlar.push('yeni dizi için uygun hikâye bulunamadı'); return null; }
-      if (d.id && !diziler.some(x => x.id === d.id)) diziler.push(d);
-      bolme++; sonuc.yeniler++; kaydetSon();
+      if (hazirla) hazirla(d);
+      await yaz(() => { if (d.id && !diziler.some(x => x.id === d.id)) diziler.push(d); });
+      bolme++; sonuc.yeniler++;
       return d;
     };
+    const basla = d => { delete d.stok; d.baslama = new Date(simdi).toISOString(); };
     if (kuru) {
       sonuc.yeniler = eksik;
       if (eksik) notlar.push(`yeni dizi planlanan: ${eksik}`);
@@ -338,13 +386,13 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       // 3a. today's new series: an approved stock story starts; none approved -> one is split now and waits for its text
       for (let i = 0; i < eksik; i++) {
         if (metinOnayi) {
-          const d = diziler.filter(onayliStok).sort((a, b) => Date.parse(a.olusturma || 0) - Date.parse(b.olusturma || 0))[0];
-          if (d) { delete d.stok; d.baslama = new Date(simdi).toISOString(); sayi++; aktif++; notlar.push(`${d.id}: onaylı metinden başladı`); kaydetSon(); continue; }
+          const id = await yaz(() => { const d = diziler.filter(onayliStok).sort((a, b) => Date.parse(a.olusturma || 0) - Date.parse(b.olusturma || 0))[0]; if (d) basla(d); return d && d.id; });
+          if (id) { sayi++; aktif++; notlar.push(`${id}: onaylı metinden başladı`); continue; }
           if (diziler.filter(metinBekliyor).length >= Math.max(stokHedef, 1)) { notlar.push('onaylı metin yok: yeni hikâye açılmadı (Metin onayı bekleyenlere bak)'); break; }
-          const y = await yeniBol();
+          const y = await yeniBol(y => { if (metinOnay(y) !== 'bekliyor') basla(y); });   // already approved: it starts now
           if (!y) break;
           if (metinOnay(y) === 'bekliyor') { notlar.push(`${y.id}: onaylı metin yoktu, bölündü; metin onayı bekliyor`); break; }
-          delete y.stok; y.baslama = new Date(simdi).toISOString(); sayi++; aktif++;   // already approved: it starts now
+          sayi++; aktif++;
           continue;
         }
         const d = await yeniBol();
@@ -353,9 +401,9 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
       }
       // 3b. keep metin_stok stories split and waiting for text approval (at most MAX_BOLME splits per run, theme rotation)
       if (metinOnayi) while (bolme < MAX_BOLME && diziler.filter(metinBekliyor).length < stokHedef) {
-        const d = await yeniBol();
+        // stock never starts on its own: 3a starts it when a slot is free
+        const d = await yeniBol(d => { if (metinOnay(d) !== 'bekliyor') d.stok = true; });
         if (!d) break;
-        if (metinOnay(d) !== 'bekliyor') d.stok = true;   // stock never starts on its own: 3a starts it when a slot is free
         notlar.push(`${d.id}: metin stokuna eklendi${d.konu ? ' (' + d.konu + ')' : ''}; metin onayı bekliyor`);
       }
     }
@@ -367,27 +415,42 @@ async function calistir(ctx, { simdi = new Date(), sonucAl, uretBolum, yeniDizi,
     if (liste.length && !uretBolum) {
       try { uretBolum = require('./uret-bolum').uretBolum; } catch (e) { notlar.push(eksikModul(e)); }
     }
+    // per episode: (a) under the channel lock, re-check it is still due, take the series lock and mark it uretimde;
+    // (b) produce on a working copy without the channel lock (30-40 min; the panel edits other series meanwhile);
+    // (c) under the channel lock again, the fields production changed go onto the freshly loaded series
     if (uretBolum) for (const u of liste) {
-      const d = diziler.find(x => x.id === u.id), b = bul(d, u.n);
-      // the episode's video folder already has a waiting or posted job (e.g. a run died after queueing): adopt it
-      const j = isBul(kuyrukOku(kok), `videolar/${ctx.kanal}-${d.id}-b${u.n}`);
-      if (j) { benimse(b, j); notlar.push(`${u.id} bölüm ${u.n}: kuyrukta işi var (${j.id}), yeniden üretilmedi`); kaydetSon(); continue; }
+      let dk = null;
+      const on = await yaz(() => {
+        const d = diziler.find(x => x.id === u.id), b = d && bul(d, u.n);
+        if (!b || !uretilecekler([d]).some(x => x.n === u.n)) return { not: 'artık üretilecek değil (elle değişti), atlandı' };
+        // the episode's video folder already has a waiting or posted job (e.g. a run died after queueing): adopt it
+        const j = isBul(kuyrukOku(kok), `videolar/${ctx.kanal}-${d.id}-b${u.n}`);
+        if (j) { benimse(b, j); return { not: `kuyrukta işi var (${j.id}), yeniden üretilmedi` }; }
+        const k = diziKilitAl(kok, ctx.kanal, d.id);
+        if (k.mesaj) return { not: `dizi meşgul, atlandı (${k.mesaj})` };
+        dk = k; b.durum = 'uretimde';
+        return null;
+      });
+      if (on) { notlar.push(`${u.id} bölüm ${u.n}: ${on.not}`); continue; }
       try {
-        // dizi.oto_onay: Furkan let this story go out without the video approval (31.10: Veli finali)
-        const r = await uretBolum(ctx, d, u.n, { onayGerekli: onayDonemi && d.oto_onay !== true, kok, diziler });
-        // uretBolum contract: returns {durum, dir?, mp4?}; the state is written whatever the episode's current one
-        if (r && r.durum) b.durum = r.durum === 'butce-bekliyor' ? 'uretimde' : r.durum;
-        // the panel shows this chip; it clears as soon as production gets past the budget gate
-        if (r && r.durum === 'butce-bekliyor') b.bekleme = 'butce'; else delete b.bekleme;
-        // a budget stop keeps the episode due (uretimde without a video), so it is resumed next run
-        if (r && r.durum !== 'butce-bekliyor' && (r.dir || r.mp4) && !b.video) b.video = r.dir || r.mp4;
-        if (r && r.durum === 'butce-bekliyor') notlar.push(`${u.id} bölüm ${u.n}: bütçe bekliyor${r.neden ? ': ' + r.neden : ''}`);
-      } catch (e) { notlar.push(`${u.id} bölüm ${u.n}: üretim hatası: ${e.message}`); }
-      kaydetSon();
+        const kopya = JSON.parse(JSON.stringify(diziler)), d = kopya.find(x => x.id === u.id), once = JSON.parse(JSON.stringify(d)), b = bul(d, u.n);
+        try {
+          // dizi.oto_onay: Furkan let this story go out without the video approval (31.10: Veli finali)
+          const r = await uretBolum(ctx, d, u.n, { onayGerekli: onayDonemi && d.oto_onay !== true, kok, diziler: kopya });
+          // uretBolum contract: returns {durum, dir?, mp4?}; the state is written whatever the episode's current one
+          if (r && r.durum) b.durum = r.durum === 'butce-bekliyor' ? 'uretimde' : r.durum;
+          // the panel shows this chip; it clears as soon as production gets past the budget gate
+          if (r && r.durum === 'butce-bekliyor') b.bekleme = 'butce'; else delete b.bekleme;
+          // a budget stop keeps the episode due (uretimde without a video), so it is resumed next run
+          if (r && r.durum !== 'butce-bekliyor' && (r.dir || r.mp4) && !b.video) b.video = r.dir || r.mp4;
+          if (r && r.durum === 'butce-bekliyor') notlar.push(`${u.id} bölüm ${u.n}: bütçe bekliyor${r.neden ? ': ' + r.neden : ''}`);
+        } catch (e) { notlar.push(`${u.id} bölüm ${u.n}: üretim hatası: ${e.message}`); }
+        await yaz(() => { const t = diziler.find(x => x.id === u.id); if (t) uretimAktar(t, once, d); else notlar.push(`${u.id}: üretim sırasında dizi kayboldu, sonuç yazılmadı`); });
+      } finally { dk.birak(); }
     }
     return sonuc;
   } catch (e) { notlar.push(`çalışma hatası: ${e.message}`); throw e; }
-  finally { kilit.birak(); sonKosu(); }
+  finally { kilit.birak(); kosu.birak(); sonKosu(); }
 }
 
 module.exports = { calistir, golgePlan, sonucAlYap, uretilecekler, senkronla, yeniDiziYap, sirayaKoy, siraliAdaylar };

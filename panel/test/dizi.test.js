@@ -127,6 +127,21 @@ test('a running scheduler holds the lock: 409, nothing is written', async () => 
   assert.ok(!fs.existsSync(kilit), 'the panel releases its own lock');
 });
 
+test('a series in production (.kilit-<id>) refuses writes to it only; other series go through', async () => {
+  sifirla();
+  const kilit = path.join(KOK, 'kayit', 'dizi', 'kanal_a', '.kilit-d3');
+  fs.writeFileSync(kilit, JSON.stringify({ pid: process.pid, zaman: new Date().toISOString() }));
+  try {
+    const r = await istek('POST', '/api/dizi/tekrar', { kanal: 'kanal_a', id: 'd3', n: 1 });
+    assert.equal(r.kod, 409); assert.equal(r.j.hata, 'Bu hikâyenin bölümü şu an üretiliyor; birkaç dakika sonra tekrar dene.');
+    assert.equal(diziOku('d3').bolumler[0].durum, 'kontrol_et');
+    assert.equal((await karar('d1', 1, 'kes')).kod, 200);
+    assert.equal(diziOku('d1').durum, 'kesildi');
+    assert.ok(fs.existsSync(kilit), 'the series lock is not the panel\'s to remove');
+  } finally { fs.unlinkSync(kilit); }
+  assert.equal((await istek('POST', '/api/dizi/tekrar', { kanal: 'kanal_a', id: 'd3', n: 1 })).kod, 200);
+});
+
 test('POST /api/dizi/ayar: out-of-range values are 400 with a Turkish message and write nothing', async () => {
   const once = fs.readFileSync(path.join(KOK, 'kanal/kanal_a/konu.json'), 'utf8');
   const kotu = [{ esik_oran: 2 }, { esik_oran: 0.05 }, { esik_oran: '0.5' }, { bekle_saat: 5 }, { bekle_saat: 73 }, { gunluk_hedef: 0 }, { gunluk_hedef: 6 }, { gunluk_hedef: 2.5 },
