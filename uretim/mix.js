@@ -12,7 +12,7 @@
 // sound effects (the card's sfx → kanal/<kanal>/muzik/<name>.wav, skipped when missing) play and the video ends with the card.
 const fs = require('fs'), path = require('path');
 const { spawnSync } = require('child_process');
-const { videoYukle, okuJson, sh, sure, fail, KOK, kapanisYukle, kapanisSesleri, kapanisMuzigi, ciddiTon, palet, at: atS } = require('./cekirdek');
+const { videoYukle, okuJson, sh, sure, fail, KOK, kapanisYukle, kapanisSesleri, kapanisMuzigi, tesekkurMuzigi, tesekkurListesi, ciddiTon, palet, at: atS } = require('./cekirdek');
 const { hizala } = require('./hizala');
 
 const { dir, video, kimlik, kimlikDir } = videoYukle(process.argv[2]);
@@ -112,9 +112,13 @@ lines.forEach((f, i) => {
     if (STING) {                                  // closing sting after the punchline
       const hit = end + 0.45; ev.push([sting, hit - RISE, 0.55, 'fx']); Z.sting.push(+hit.toFixed(3)); t = hit + 2.4;
     } else if (kart) {                            // channel closing card + its outro music (ends on its own)
-      const bas = end + 0.5, k = kart({ C: palet(kimlik), at: atS, bas, sonraki: null, hesap: kimlik.marka.hesap, ton: TON });
+      // a series' last episode thanks its commenters (video.json → tesekkur); earlier episodes get the plain card
+      const sonBolum = !video.toplam_bolum || +video.bolum >= +video.toplam_bolum;
+      const bas = end + 0.5, k = kart({ C: palet(kimlik), at: atS, bas, sonraki: null, hesap: kimlik.marka.hesap, ton: TON, tesekkur: sonBolum ? tesekkurListesi(video) : [] });
       const m = k.muzik || { bas: bas - 0.1, ses: 0.7 };
-      if (muzik) ev.push([muzik, Math.max(0, m.bas), m.ses, 'fx']);
+      const tm = k.tesekkur && tesekkurMuzigi(kimlik.marka, TON), tmYol = tm ? path.join(kimlikDir, tm) : null;
+      if (tmYol && fs.existsSync(tmYol)) ev.push([tmYol, Math.max(0, m.bas), m.ses, 'fx', { dongu: k.sure + 0.1 }]);   // looped, faded out at the end
+      else if (muzik) ev.push([muzik, Math.max(0, m.bas), m.ses, 'fx']);
       for (const [f, t0, v] of kapanisSesleri(k, kimlikDir, TON)) { ev.push([f, t0, v, 'fx']); kartSfx++; }   // the card's own whoosh/pop/tick
       Z.kapanis = +bas.toFixed(3); t = bas + k.sure;
     } else t = end + 1;
@@ -123,10 +127,10 @@ lines.forEach((f, i) => {
 Z.toplam = +t.toFixed(3);
 
 // narration is the sidechain key, so the sting tail ducks under the voice
-const inputs = ev.flatMap(e => ['-i', e[0]]);
+const inputs = ev.flatMap(e => e[4] && e[4].dongu ? ['-stream_loop', '-1', '-i', e[0]] : ['-i', e[0]]);
 const voiceIdx = ev.map((e, i) => (e[3] === 'ses' ? i : -1)).filter(i => i >= 0);
 const fxIdx = ev.map((e, i) => (e[3] === 'fx' ? i : -1)).filter(i => i >= 0);
-let g = ev.map((e, i) => `[${i}:a]aresample=${SR},aformat=channel_layouts=stereo,volume=${e[2]},adelay=${Math.round(e[1] * 1000)}|${Math.round(e[1] * 1000)},apad=whole_dur=${Z.toplam}[e${i}]`).join(';');
+let g = ev.map((e, i) => `[${i}:a]aresample=${SR},aformat=channel_layouts=stereo,${e[4] && e[4].dongu ? `atrim=0:${e[4].dongu.toFixed(2)},afade=t=out:st=${Math.max(0, e[4].dongu - 1.5).toFixed(2)}:d=1.5,` : ''}volume=${e[2]},adelay=${Math.round(e[1] * 1000)}|${Math.round(e[1] * 1000)},apad=whole_dur=${Z.toplam}[e${i}]`).join(';');
 if (fxIdx.length) {
   g += `;${voiceIdx.map(i => `[e${i}]`).join('')}amix=inputs=${voiceIdx.length}:normalize=0,asplit[v][vk]`;
   g += `;${fxIdx.map(i => `[e${i}]`).join('')}amix=inputs=${fxIdx.length}:normalize=0[fx]`;
