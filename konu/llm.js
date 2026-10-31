@@ -23,11 +23,11 @@ function claudeBul() {
   if (process.platform === 'win32') {
     adaylar.push(path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'));
     adaylar.push(path.join(os.homedir(), '.local', 'bin', 'claude.exe'));
-    const w = spawnSync('where', ['claude'], { encoding: 'utf8' });
+    const w = spawnSync('where', ['claude'], { encoding: 'utf8', windowsHide: true });
     if (w.status === 0) adaylar.push(...w.stdout.split(/\r?\n/).filter(l => /\.exe$/i.test(l.trim())).map(l => l.trim()));
   } else {
     adaylar.push(path.join(os.homedir(), '.local', 'bin', 'claude'), '/usr/local/bin/claude', '/opt/homebrew/bin/claude');
-    const w = spawnSync('sh', ['-c', 'command -v claude'], { encoding: 'utf8' });
+    const w = spawnSync('sh', ['-c', 'command -v claude'], { encoding: 'utf8', windowsHide: true });
     if (w.status === 0) adaylar.push(w.stdout.trim());
   }
   claudeYolu = adaylar.find(a => a && fs.existsSync(a)) || null;

@@ -9,7 +9,7 @@ const W = 1080, H = 1920, FPS = 30;
 
 const fail = msg => { console.error('\nHATA: ' + msg + '\n'); process.exit(1); };
 const okuJson = (f, ne) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { fail(`${ne || f} okunamadı (${e.code === 'ENOENT' ? 'dosya yok' : e.message}): ${f}`); } };
-const sh = (cmd, args, opt = {}) => execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], ...opt }).toString();
+const sh = (cmd, args, opt = {}) => execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, ...opt }).toString();
 const sure = f => +sh('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]);
 
 // A video folder holds video.json; it points at the channel identity (kimlik.json).
@@ -287,7 +287,7 @@ window.__timelines = window.__timelines || {}; window.__timelines['root'] = tl;
 function hf(args, cwd) {
   const bin = path.join(KOK, 'node_modules', 'hyperframes', 'bin', 'hyperframes.mjs');
   if (!fs.existsSync(bin)) fail('hyperframes bulunamadı. Repo klasöründe `npm install` çalıştır.');
-  const r = spawnSync(process.execPath, [bin, ...args], { cwd, stdio: 'inherit' });
+  const r = spawnSync(process.execPath, [bin, ...args], { cwd, stdio: 'inherit', windowsHide: true });
   if (r.status !== 0) fail('hyperframes ' + args[0] + ' başarısız oldu (çıktı yukarıda).');
 }
 // Stills at given seconds for a quick look before a full render.

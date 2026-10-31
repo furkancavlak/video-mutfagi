@@ -19,11 +19,42 @@ const ofsetli = v => { const d = new Date(v); if (!v || isNaN(d)) return v; cons
 const yzNot = k => { const y = O && O.yz ? O.yz[k || kanal || kanalAd0()] : null; return y === 'api' ? 'Anthropic API ile, kullandıkça ücretli' : y === 'claude-cli' ? 'ücretsiz, Claude aboneliğiyle' : 'yapay zekâ bağlı değil'; };
 const kalan = t => { const ms = new Date(t) - Date.now(); if (ms < 0) return 'geçti'; const g = Math.floor(ms / 864e5), s = Math.floor(ms % 864e5 / 36e5), d = Math.floor(ms % 36e5 / 6e4); return g ? `${g} gün ${s} sa` : s ? `${s} sa ${d} dk` : `${d} dk`; };
 
+// reads in flight show a quiet "güncelleniyor…" (after 300 ms, so a fast answer never flickers)
+let okuSurer = 0;
+const tazeNot = () => { clearTimeout(tazeNot.t); tazeNot.t = setTimeout(() => { const el = $('#taze-not'); if (el) el.hidden = !okuSurer; }, okuSurer ? 300 : 0); };
 async function api(yol, govde) {
-  const r = await fetch('/api/' + yol, { method: govde ? 'POST' : 'GET', headers: { 'X-Panel': anahtar, 'Content-Type': 'application/json' }, body: govde ? JSON.stringify(govde) : undefined });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.hata || 'istek başarısız');
-  return j;
+  if (!govde) { okuSurer++; tazeNot(); }
+  try {
+    const r = await fetch('/api/' + yol, { method: govde ? 'POST' : 'GET', headers: { 'X-Panel': anahtar, 'Content-Type': 'application/json' }, body: govde ? JSON.stringify(govde) : undefined });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.hata || 'istek başarısız');
+    return j;
+  } finally { if (!govde) { okuSurer--; tazeNot(); } }
+}
+// ---------------- Last good answers per channel in localStorage: an open draws from them at once, then refreshes.
+// ayniVeri(): a fresh answer that says the same as what is on screen redraws nothing (the cache mark _eski is ignored).
+const ONB_EN_FAZLA = 2e6;
+const onbAnahtar = k => 'vm-onb1:' + k;
+const imza = v => JSON.stringify(v, (k, x) => k === '_eski' ? undefined : x);
+const ayniVeri = (a, b) => a != null && imza(a) === imza(b);
+function onbYaz() {   // debounced; only clean answers, and only while O belongs to the selected channel
+  clearTimeout(onbYaz.t);
+  onbYaz.t = setTimeout(() => {
+    if (!kanal || !O || O._k !== kanal) return;
+    const temiz = x => x && !x.hata && !x._eski ? x : null;
+    const c = { t: Date.now(), O, F, U, D, J, AS, SV: temiz(SV), DZ: temiz(DZ), IG: temiz(IG), TK: temiz(TK), ISV: istGun === 7 && ISV && !ISV.yok ? temiz(ISV) : null };
+    try { const s = JSON.stringify(c); if (s.length <= ONB_EN_FAZLA) localStorage.setItem(onbAnahtar(kanal), s); } catch {}
+  }, 500);
+}
+// true when the page was drawn from the cache; cached IG/TK/ISV carry _eski so their loaders fetch them again
+function onbYukle() {
+  let c = null; try { c = JSON.parse(localStorage.getItem(onbAnahtar(kanal)) || 'null'); } catch {}
+  if (!c || !c.O || !Array.isArray(c.O.kanallar) || !c.O.kanallar.some(k => k.ad === kanal)) return false;
+  ({ O, F, U, D, J } = c); O._k = kanal; AS = c.AS || {};
+  SV = c.SV || null; DZ = c.DZ || null;
+  const eski = x => x ? { ...x, _eski: true } : null;
+  IG = eski(c.IG); TK = eski(c.TK); if (istGun === 7) ISV = eski(c.ISV);
+  return true;
 }
 function bildir(yazi, kotu) { const b = $('#bildirim'); b.textContent = yazi; b.className = 'bildirim on' + (kotu ? ' kotu' : ''); clearTimeout(bildir.t); bildir.t = setTimeout(() => b.className = 'bildirim', 3500); }
 
@@ -208,6 +239,11 @@ const kanalRozet = (uzun) => kanal ? `<span class="kanal-rozet" title="${esc(kan
 // a still only when this computer has one: the stage marks know each folder; unknown folders are tried only in local mode
 const kapakVar = v => !!v && (AS[v] ? AS[v].kapak !== false : takvimKaynak() !== 'sunucu');
 const kapakUrl = v => `/api/kapak?v=${encodeURIComponent(v)}&k=${encodeURIComponent(anahtar)}`;
+// the episode cover (kapak_jpg + kapak_imza from the queue job or the episode, on the machine that answered) wins;
+// otherwise the old still. A server cover comes through a small local copy (GET /api/sunucu-kapak).
+const kapakJ = (m, ...xs) => { for (const x of xs) if (x && x.kapak_jpg && x.kapak_imza) return { yol: x.kapak_jpg, imza: x.kapak_imza, m: m === 'sunucu' ? 'sunucu' : 'yerel' }; return null; };
+const kapakSrc = e => !e ? null : e.kapakJ ? (e.kapakJ.m === 'sunucu' ? `/api/sunucu-kapak?yol=${encodeURIComponent(e.kapakJ.yol)}&i=${encodeURIComponent(e.kapakJ.imza)}&k=${encodeURIComponent(anahtar)}` : kapakUrl(klasor(e.kapakJ.yol)))
+  : kapakVar(e.kapak) ? kapakUrl(e.kapak) : null;
 const klasor = p => { const m = String(p || '').replace(/\\/g, '/').match(/^videolar\/[^/]+/); return m ? m[0] : null; };
 const saat = t => new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 const gunBas = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d; };
@@ -235,7 +271,7 @@ function olaylar() {
     const views = o.ig && o.ig.views != null ? o.ig.views : o.is && o.is.sonuc && o.is.sonuc.views != null ? o.is.sonuc.views : ep ? bolumIzlenme(ep.b) : null;
     const kl = (ep && (AS[bolumKlasor(ep.d, ep.b)] ? bolumKlasor(ep.d, ep.b) : klasor(ep.b.video))) || (o.is && klasor(o.is.mp4)) || null;
     const isMp4 = o.is && klasor(o.is.mp4) ? String(o.is.mp4).replace(/\\/g, '/') : null;
-    const e = { ...o, views, mp4: yerelMi ? (ep && ep.b.mp4) || isMp4 : isMp4 || (ep && ep.b.mp4) || null, kapak: kl,
+    const e = { ...o, views, mp4: yerelMi ? (ep && ep.b.mp4) || isMp4 : isMp4 || (ep && ep.b.mp4) || null, kapak: kl, kapakJ: kapakJ(o.makine, ep && ep.b, o.is),
       baslik: o.baslik || (ep ? (ep.d.baslik_kisa || ep.d.baslik) : o.is ? isAd(o.is) : o.ig ? o.ig.baslik : 'Video'),
       bolum: ep ? `Bölüm ${ep.b.n}/${(ep.d.bolumler || []).length}` : '', kisaBolum: ep ? `${ep.b.n}/${(ep.d.bolumler || []).length}` : '', konu: (ep && ep.d.konu) || null,
       aciklama: (o.is && o.is.aciklama) || (o.ig && o.ig.aciklama) || '', link: guvenli((o.ig && o.ig.link) || (o.is && o.is.link) || (ep && ep.b.link)) };
@@ -281,7 +317,7 @@ const KONU_YEDEK = ['#F472B6', '#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#2DD
 const konuRenk = k => { const a = String(k || '').toLocaleLowerCase('tr'); if (KONU_RENK[a]) return KONU_RENK[a]; let h = 0; for (const c of a) h = (h * 31 + c.charCodeAt(0)) >>> 0; return KONU_YEDEK[h % KONU_YEDEK.length]; };
 const konuAd = k => String(k || '').replace(/^./, c => c.toLocaleUpperCase('tr'));
 const DURUM_SATIR = { planli: 'Planlı', paylasildi: 'Paylaşıldı', sirada: 'Sırada', onay: 'Onay bekliyor', sorun: 'Sorun var', hazirlaniyor: 'Hazırlanıyor', metin: 'Metin onayı bekliyor' };
-const kucukKapak = e => `<span class="sat-kapak"${e.konu ? ` style="--k:${konuRenk(e.konu)}"` : ''}>${kapakVar(e.kapak) ? `<img src="${kapakUrl(e.kapak)}" alt="" loading="lazy" onerror="this.remove()">` : ''}${ikon(e.mp4 || e.link ? 'oynat' : DURUM[e.durum].ikon, 12)}</span>`;
+const kucukKapak = e => `<span class="sat-kapak"${e.konu ? ` style="--k:${konuRenk(e.konu)}"` : ''}>${kapakSrc(e) ? `<img src="${kapakSrc(e)}" alt="" loading="lazy" onerror="this.remove()">` : ''}${ikon(e.mp4 || e.link ? 'oynat' : DURUM[e.durum].ikon, 12)}</span>`;
 // one video = one compact row: small still, time, one-line title, status dot + word
 function satir(e, genis) {
   if (e.planli) return `<button class="sat sat-planli" data-hikaye-ac="${esc(e.plan.dizi_id)}" title="${esc(planEtiket(e))}"><span class="sat-ic"><span class="sat-ust"><b>${esc(saat(e.t))}</b></span><span class="sat-ad">${esc(e.baslik)} <small>${esc(e.kisaBolum)}</small></span><span class="sat-durum">${esc(e.karar ? `Planlı · karar ${saat(e.karar)}` : 'Planlı')}</span></span></button>`;
@@ -317,7 +353,7 @@ function haftaKart(e) {
   if (e.planli) return planliKart(e);
   const i = OL.indexOf(e), zaman = e.t ? saat(e.t) : e.durum === 'hazirlaniyor' ? 'bugün' : 'saat yok';
   return `<button class="hk-k d-${e.durum}" data-olay="${i}">
-    <span class="hk-k-kapak"${e.konu ? ` style="--k:${konuRenk(e.konu)}"` : ''}>${kapakVar(e.kapak) ? `<img src="${kapakUrl(e.kapak)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<span class="hk-k-yer">${esc(e.baslik)}</span>${e.mp4 || e.link ? `<span class="gkk-oynat">${ikon('oynat', 13)}</span>` : ''}</span>
+    <span class="hk-k-kapak"${e.konu ? ` style="--k:${konuRenk(e.konu)}"` : ''}>${kapakSrc(e) ? `<img src="${kapakSrc(e)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<span class="hk-k-yer">${esc(e.baslik)}</span>${e.mp4 || e.link ? `<span class="gkk-oynat">${ikon('oynat', 13)}</span>` : ''}</span>
     <span class="hk-k-ic"><b class="hk-k-saat">${esc(zaman)}</b>
       <span class="hk-k-ad">${esc(e.baslik)}</span>
       <span class="hk-k-alt">${e.bolum ? `<span>${esc(e.bolum)}</span>` : ''}${e.konu ? `<span class="konu-cip" style="--k:${konuRenk(e.konu)}">${esc(e.konu)}</span>` : ''}</span>
@@ -413,8 +449,8 @@ function gunKart(e) {
     <div class="gp-dugmeler"><button class="dugme" data-hikaye-ac="${esc(e.plan.dizi_id)}">Hikâyeyi aç</button></div></div></article>`;
   const i = OL.indexOf(e), ep = e.ep, iz = ep ? ep.b.izin || {} : {}, bek = e.tur === 'bekleyen', m = e.makine;
   const ig = e.ig || (e.is && e.is.sonuc) || (ep && ep.b.metrik) || null, ht = ep ? hikayeToplam(ep.d) : null;
-  const video = e.mp4 ? `<video src="${m === 'sunucu' ? sunucuDosya(e.mp4) : dosya(e.mp4)}" ${kapakVar(e.kapak) ? `poster="${kapakUrl(e.kapak)}"` : ''} controls playsinline preload="none"></video>`
-    : `<div class="gp-yok">${kapakVar(e.kapak) ? `<img src="${kapakUrl(e.kapak)}" alt="">` : ''}<span>${e.link ? `<a href="${esc(e.link)}" target="_blank" rel="noopener">${ikon('oynat', 16)}Instagram’da izle</a>` : e.durum === 'hazirlaniyor' ? 'Video hazırlanıyor…' : 'Video bu bilgisayarda yok.'}</span></div>`;
+  const video = e.mp4 ? `<video src="${m === 'sunucu' ? sunucuDosya(e.mp4) : dosya(e.mp4)}" ${kapakSrc(e) ? `poster="${kapakSrc(e)}"` : ''} controls playsinline preload="none"></video>`
+    : `<div class="gp-yok">${kapakSrc(e) ? `<img src="${kapakSrc(e)}" alt="">` : ''}<span>${e.link ? `<a href="${esc(e.link)}" target="_blank" rel="noopener">${ikon('oynat', 16)}Instagram’da izle</a>` : e.durum === 'hazirlaniyor' ? 'Video hazırlanıyor…' : 'Video bu bilgisayarda yok.'}</span></div>`;
   const karar = ep && ep.b.karar && ep.b.karar !== 'bekle' ? `<b>${ep.b.karar === 'kes' ? 'Kes' : 'Devam'}${ep.b.elle ? ' (sen)' : ''}</b>${ep.b.karar_neden ? ': ' + esc(ep.b.karar_neden) : ''}` : ep && ep.b.karar_neden ? esc(ep.b.karar_neden) : '';
   const rakam = rakamBlok(e, ig);
   const d = [];
@@ -514,7 +550,7 @@ function icerikler() {
   if (istVar()) return (ISV.videolar || []).map(v => {
     const s = v.son || {}, et = ['likes', 'comments', 'saved', 'shares'].every(k => s[k] == null) ? null : ['likes', 'comments', 'saved', 'shares'].reduce((a, k) => a + (s[k] || 0), 0);
     return { id: v.id, t: v.yayin ? new Date(v.yayin) : null, baslik: v.dizi ? v.dizi.baslik : v.baslik || 'Video', bolum: v.dizi ? `Bölüm ${v.dizi.n}/${v.dizi.toplam}` : '', konu: v.konu || null, ton: v.ton || null,
-      kapak: v.video ? klasor(v.video) : null, link: guvenli(v.link), slot: v.slot || null, views: s.views ?? null, reach: s.reach ?? null, likes: s.likes ?? null, comments: s.comments ?? null, saved: s.saved ?? null, shares: s.shares ?? null, etk: et,
+      kapak: v.video ? klasor(v.video) : null, kapakJ: v.video ? kapakJ(dzM(), (bolumler().find(x => klasor(x.b.video) === klasor(v.video)) || {}).b) : null, link: guvenli(v.link), slot: v.slot || null, views: s.views ?? null, reach: s.reach ?? null, likes: s.likes ?? null, comments: s.comments ?? null, saved: s.saved ?? null, shares: s.shares ?? null, etk: et,
       s1: v.v1s ?? null, s24: v.v24s ?? null, s48: v.v48s ?? null, hiz: hizDeger(v.id), oran: v.izlenme_orani != null ? v.izlenme_orani * 100 : null, sure: s.ort_izleme_sn ?? null, uzunluk: v.sure_sn ?? null,
       takip: v.takip ?? null, takipElle: !!v.takip_elle, takipTahmini: v.takip_tahmini ?? null, takipSira: v.takip_elle ? v.takip : v.takip_tahmini ?? null, acilis: v.acilis || null,
       egri: (v.egri || []).map(([z, n]) => ({ t: new Date(z), v: n })) };
@@ -524,7 +560,7 @@ function icerikler() {
     const ep = B.find(x => (x.b.media_id && x.b.media_id === g.id) || (g.link && x.b.link === g.link)) || null;
     const et = ['likes', 'comments', 'saved', 'shares'].every(k => g[k] == null) ? null : ['likes', 'comments', 'saved', 'shares'].reduce((a, k) => a + (g[k] || 0), 0);
     return { id: g.id, t: new Date(g.zaman), baslik: ep ? (ep.d.baslik_kisa || ep.d.baslik) : g.baslik || 'Video', bolum: ep ? `Bölüm ${ep.b.n}/${(ep.d.bolumler || []).length}` : '',
-      konu: ep ? ep.d.konu || null : null, ton: ep ? ep.d.ton || null : null, kapak: ep ? (AS[bolumKlasor(ep.d, ep.b)] ? bolumKlasor(ep.d, ep.b) : klasor(ep.b.video)) : null, link: guvenli(g.link), slot: null,
+      konu: ep ? ep.d.konu || null : null, ton: ep ? ep.d.ton || null : null, kapak: ep ? (AS[bolumKlasor(ep.d, ep.b)] ? bolumKlasor(ep.d, ep.b) : klasor(ep.b.video)) : null, kapakJ: ep ? kapakJ(dzM(), ep.b) : null, link: guvenli(g.link), slot: null,
       views: g.views ?? null, reach: g.reach ?? null, likes: g.likes ?? null, comments: g.comments ?? null, saved: g.saved ?? null, shares: g.shares ?? null, etk: et,
       s1: null, s24: null, s48: null, hiz: hizDeger(g.id), oran: null, sure: null, uzunluk: null, takip: null, takipElle: false, takipTahmini: null, takipSira: null, acilis: null, egri: [] };
   });
@@ -655,7 +691,7 @@ function istatistikSayfaCiz() {
   const kol = [['baslik', 'Video'], ['t', 'Tarih'], ['views', 'İzlenme'], ['s24', '24 saat'], ['hiz', 'Hız'], ['oran', 'Ort. izlenme %'], ['likes', 'Beğeni'], ['comments', 'Yorum'], ['saved', 'Kayıt'], ['shares', 'Paylaşım'], ['takipSira', 'Takip']];
   const hucre = v => v == null ? '<span class="gri">—</span>' : esc(sayi(Math.round(v)));
   const tablo = sirali.length ? `<div class="ist-tablo-sar"><table class="ist-tablo"><thead><tr>${kol.map(([k2, a]) => `<th data-ist-sira="${k2}" class="${S.k === k2 ? 'on' : ''}${k2 === 'baslik' ? ' sol' : ''}">${a}${S.k === k2 ? (S.yon > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead><tbody>
-    ${sirali.map(x => `<tr data-ist-video="${esc(x.id)}"><td class="sol"><span class="ist-v">${kucukKapak({ kapak: x.kapak, konu: x.konu, mp4: null, link: x.link, durum: 'paylasildi' })}<span><b>${esc(x.baslik)}</b>${x.bolum ? `<small>${esc(x.bolum)}</small>` : ''}</span></span></td>
+    ${sirali.map(x => `<tr data-ist-video="${esc(x.id)}"><td class="sol"><span class="ist-v">${kucukKapak({ kapak: x.kapak, kapakJ: x.kapakJ, konu: x.konu, mp4: null, link: x.link, durum: 'paylasildi' })}<span><b>${esc(x.baslik)}</b>${x.bolum ? `<small>${esc(x.bolum)}</small>` : ''}</span></span></td>
       <td>${esc(x.t.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }))} <small>${esc(saat(x.t))}</small></td><td><b>${hucre(x.views)}</b></td><td>${hucre(x.s24)}</td><td>${hizHucre(x.hiz)}</td><td>${x.oran == null ? '<span class="gri">—</span>' : '%' + esc(Math.round(x.oran))}</td>
       <td>${hucre(x.likes)}</td><td>${hucre(x.comments)}</td><td>${hucre(x.saved)}</td><td>${hucre(x.shares)}</td>${takipHucre(x)}</tr>`).join('')}</tbody></table></div>` : '<div class="liste-bos">Bu dönemde paylaşılan video yok.</div>';
   // series: episode bars with the change between episodes and the decision
@@ -723,10 +759,13 @@ async function istatistikYukle({ arka = false } = {}) {
   const at = kanal, g = istGun, h = kanalHesap(); if (!h) { ISV = { yok: true }; return istatistikSayfaCiz(); }
   if (svBekle()) return;
   istatistikYukle.surer = true; istatistikYukle.t = Date.now();
+  const isv0 = ISV;
   // an answer for another channel or period (changed while it was on the way) is dropped
   try { const r = await api(`istatistik?hesap=${encodeURIComponent(hesapAd(h))}&gun=${g}${istMakine('istatistik')}`); if (at === kanal && g === istGun) ISV = r; }
   catch (e) { if (at === kanal && g === istGun && !(arka && istVar())) ISV = { yok: true, hata: e.message }; }   // not there (or failed): the page works on the posts alone
   istatistikYukle.surer = false;
+  if (ayniVeri(isv0, ISV)) return;   // a refresh that says the same: the page stays as it is
+  onbYaz();
   istatistikSayfaCiz();
 }
 // the open İstatistikler page fetches again every 60 s while the tab is visible (the server observes every 10 min)
@@ -750,8 +789,8 @@ const bolumIzlenme = b => { const g = igGonderiler().find(x => (b.media_id && x.
 function olayAc(e) {
   if (e.tur === 'metin') return metinAc(e.dizi);
   const ep = e.ep, iz = ep ? ep.b.izin || {} : {}, bek = e.tur === 'bekleyen', m = e.makine;
-  const video = e.mp4 ? `<video id="p-video" src="${m === 'sunucu' ? sunucuDosya(e.mp4) : dosya(e.mp4)}" ${kapakVar(e.kapak) ? `poster="${kapakUrl(e.kapak)}"` : ''} controls playsinline preload="metadata"></video>${m === 'sunucu' ? '<div class="ince-yazi">Video sunucudan alınıyor, büyükse biraz sürer…</div>' : ''}`
-    : `<div class="m-yok">${kapakVar(e.kapak) ? `<img src="${kapakUrl(e.kapak)}" alt="">` : ''}<span>${e.link ? 'Video bu bilgisayarda yok.<br>Instagram’da izleyebilirsin.' : e.durum === 'hazirlaniyor' ? 'Video hazırlanıyor…' : 'Video bu bilgisayarda yok.'}</span></div>`;
+  const video = e.mp4 ? `<video id="p-video" src="${m === 'sunucu' ? sunucuDosya(e.mp4) : dosya(e.mp4)}" ${kapakSrc(e) ? `poster="${kapakSrc(e)}"` : ''} controls playsinline preload="metadata"></video>${m === 'sunucu' ? '<div class="ince-yazi">Video sunucudan alınıyor, büyükse biraz sürer…</div>' : ''}`
+    : `<div class="m-yok">${kapakSrc(e) ? `<img src="${kapakSrc(e)}" alt="">` : ''}<span>${e.link ? 'Video bu bilgisayarda yok.<br>Instagram’da izleyebilirsin.' : e.durum === 'hazirlaniyor' ? 'Video hazırlanıyor…' : 'Video bu bilgisayarda yok.'}</span></div>`;
   const zaman = e.t ? new Date(e.t).toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : bek ? 'Saati yok: onaylayınca ilk boş saate konur' : '';
   const ig = e.ig || (e.is && e.is.sonuc) || (ep && ep.b.metrik) || null;
   olayAc.anahtar = olayAnahtar(e); olayAc.imza = olayImza(e) + igBekle() + dzBekle();
@@ -825,7 +864,7 @@ function bolumAc(did, n) {
   const e = olaylar().find(x => x.ep && x.ep.b === ep.b);
   if (e) return olayAc(e);
   const d = bolumDurum(ep.b, ep.d), kl = AS[bolumKlasor(ep.d, ep.b)] ? bolumKlasor(ep.d, ep.b) : klasor(ep.b.video);
-  const e0 = { tur: 'bolum', makine: dzM(), ep, t: ep.b.paylasildi ? new Date(ep.b.paylasildi) : null, durum: d, views: bolumIzlenme(ep.b), mp4: ep.b.mp4 || null, kapak: dzM() === 'yerel' ? kl : null,
+  const e0 = { tur: 'bolum', makine: dzM(), ep, t: ep.b.paylasildi ? new Date(ep.b.paylasildi) : null, durum: d, views: bolumIzlenme(ep.b), mp4: ep.b.mp4 || null, kapak: dzM() === 'yerel' ? kl : null, kapakJ: kapakJ(dzM(), ep.b),
     baslik: ep.d.baslik_kisa || ep.d.baslik, bolum: `Bölüm ${ep.b.n}/${ep.d.bolumler.length}`, konu: ep.d.konu || null, aciklama: '', link: guvenli(ep.b.link),
     not: d === 'bekliyor' ? 'Bu bölümün metni hazır. Sırası gelince video yapılır.' : d === 'kesildi' ? 'Hikâye kesildiği için bu bölüm yapılmayacak.' : d === 'hazirlaniyor' ? 'Video hazırlanıyor. Bitince onayına gelir.' : '' };
   e0.asama = e0.kapak && d !== 'paylasildi' ? asamaListe(e0.kapak, e0) : null;
@@ -941,8 +980,9 @@ function paylasimAyarCiz() {
 async function dizilerYukle() {
   const at = kanal, mk = dzM(); if (!at) return;
   const ayni = () => at === kanal && mk === dzM();   // channel or machine switched while waiting: drop the answer
+  const dz0 = DZ;
   try { const r = await api('diziler?kanal=' + encodeURIComponent(at) + (mk === 'sunucu' ? '&makine=sunucu' : '')); if (ayni()) DZ = { ...r, _makine: mk }; } catch (e) { if (ayni()) DZ = { ayar: {}, diziler: [], son_kosu: null, hata: e.message, _makine: mk }; }
-  dizilerCiz(); takvimCiz(); istatistikCiz();
+  if (!ayniVeri(dz0, DZ)) { onbYaz(); dizilerCiz(); takvimCiz(); istatistikCiz(); }   // the same answer again: nothing to redraw
   if ($('#s-onaylar').classList.contains('on') && (HV === null || HV._makine !== dzM())) { havuzYukle.t = Date.now(); havuzYukle(); }   // the pool follows the machine the series came from
 }
 async function dzKaydet(e) {
@@ -1104,7 +1144,7 @@ function onAc(anahtarId) {
   } else if (tur === 'v') {
     const e = onVideolar().find(x => x.is.id === id), j = e.is, m = e.makine;
     baslik = e.baslik + (e.bolum ? ' · ' + e.bolum : '');
-    govde = `<div class="on-v-modal"><div class="gp-video">${e.mp4 ? `<video src="${m === 'sunucu' ? sunucuDosya(e.mp4) : dosya(e.mp4)}" ${kapakVar(e.kapak) ? `poster="${kapakUrl(e.kapak)}"` : ''} controls playsinline preload="metadata"></video>` : '<div class="gp-yok"><span>Video dosyası yok</span></div>'}</div>
+    govde = `<div class="on-v-modal"><div class="gp-video">${e.mp4 ? `<video src="${m === 'sunucu' ? sunucuDosya(e.mp4) : dosya(e.mp4)}" ${kapakSrc(e) ? `poster="${kapakSrc(e)}"` : ''} controls playsinline preload="metadata"></video>` : '<div class="gp-yok"><span>Video dosyası yok</span></div>'}</div>
       <div class="gp-bilgi"><div class="m-cipler">${durumCip('onay')}${e.konu ? `<span class="konu-cip">${esc(e.konu)}</span>` : ''}${m === 'sunucu' ? `<span class="kanal-rozet acik">${esc(makineAd('sunucu'))}</span>` : ''}</div>
         <div class="m-zaman">${ikon('saat', 15)}${e.t ? esc(new Date(e.t).toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) : 'Saati yok: onaylayınca ilk boş saate konur'}</div>
         ${j.not ? `<div class="on-not">${ikon('uyari', 15)}<span><b>Bekletiliyor:</b> ${esc(j.not)}</span></div>` : ''}${j.hata ? `<div class="on-not kotu">${ikon('uyari', 15)}<span><b>Son deneme hatalı:</b> ${esc(j.hata)}${j.sonraki_deneme ? ` · yeniden denenecek: ${esc(tarih(j.sonraki_deneme))}` : ''}</span></div>` : ''}
@@ -1294,22 +1334,40 @@ function krediOnayGoster(ad) {
 let yukleNo = 0;
 async function yukle() {
   const no = ++yukleNo;                           // a slower, older load must not overwrite a newer channel's data
+  // a fresh open (or a channel switch) draws the last good answers at once; the fresh ones below replace them
+  const onb = !!kanal && (!O || O._k !== kanal) && onbYukle();
+  if (onb) { if (O.sunucu && !makineElle) makine = 'sunucu'; hepsi(); }
+  const once = onb ? [O, F, U, D, J, AS] : null;
   try {
     [O, F, U, D, J] = await Promise.all([api('ozet' + kq()), api('fikirler'), api('uretim'), api('dersler'), api('isler')]);
     if (O.kanalYok || !O.kanallar.some(k => k.ad === kanal)) {            // first start or a saved channel that is gone: default, forget it, load once more
       if (O.kanalYok) { try { localStorage.removeItem('vm-kanal'); } catch {} }
       kanal = kanalAd0(); if (kanal) O = await api('ozet' + kq());
     }
-    const as = await api('asamalar' + kq()).catch(() => null);
+    O._k = kanal;
+    if (kanal) { try { localStorage.setItem('vm-kanal', kanal); } catch {} }   // the next open knows which cache to draw
+    const as =await api('asamalar' + kq()).catch(() => null);
     if (no !== yukleNo) return;
     if (as) AS = as;
   } catch (e) { if (no !== yukleNo) return; $('main').innerHTML = `<div class="liste-bos" style="margin-top:40px">${esc(e.message)}</div>`; return; }
   if (O.sunucu && !makineElle) makine = 'sunucu';   // the server is the source of truth
-  hepsi();
+  if (!ayniVeri(once, [O, F, U, D, J, AS])) hepsi();
+  onbYaz();
   dizilerYukle();
-  if (O.sunucu) api('sunucu' + kq()).then(s => { if (no === yukleNo) SV = s; }).catch(e => { if (no === yukleNo) SV = { hata: 'Sunucuya ulaşılamadı: ' + e.message }; }).finally(() => { if (no === yukleNo) { hepsi(); if (makine === 'sunucu') dizilerYukle(); if (IG === null) igYukle(); if (TK === null) tkYukle(); if (ISV === null && $('#s-istatistik').classList.contains('on')) istatistikYukle(); } });
-  if (IG === null) igYukle();
-  if (TK === null) tkYukle();
+  if (O.sunucu) {
+    const sv0 = SV;
+    api('sunucu' + kq()).then(s => { if (no === yukleNo) SV = s; }).catch(e => { if (no === yukleNo) SV = { hata: 'Sunucuya ulaşılamadı: ' + e.message }; }).finally(() => {
+      if (no !== yukleNo) return;
+      if (!ayniVeri(sv0, SV)) hepsi();
+      onbYaz();
+      if (makine === 'sunucu') dizilerYukle();
+      if (IG === null || IG._eski) igYukle();
+      if (TK === null || TK._eski) tkYukle();
+      if ((ISV === null || ISV._eski) && $('#s-istatistik').classList.contains('on')) istatistikYukle();
+    });
+  }
+  if (IG === null || IG._eski) igYukle();
+  if (TK === null || TK._eski) tkYukle();
   if (J.some(x => x.durum === 'calisiyor')) islerYukle();
 }
 async function igYukle(yenile) {
@@ -1319,7 +1377,8 @@ async function igYukle(yenile) {
   let r;
   try { r = await api('instagram?hesap=' + encodeURIComponent(hesapAd(h)) + (yenile ? '&yenile=1' : '') + istMakine('instagram')); } catch (e) { r = { bagli: false, gonderiler: [] }; if (yenile) bildir(e.message, true); }
   if (at !== kanal) return;                       // the channel changed while the numbers were coming
-  IG = r; if (O) hepsi();
+  const ig0 = IG; IG = r; onbYaz();
+  if (O && !ayniVeri(ig0, r)) hepsi();
 }
 async function tkYukle() {
   const at = kanal, h = kanalHesap();
@@ -1327,7 +1386,8 @@ async function tkYukle() {
   if (svBekle()) return;
   let r; try { r = await api('takipci?hesap=' + encodeURIComponent(hesapAd(h)) + istMakine('instagram')); } catch { r = { bagli: true, takipci: null }; }
   if (at !== kanal) return;
-  TK = r; if (O) istatistikCiz();
+  const tk0 = TK; TK = r; onbYaz();
+  if (O && !ayniVeri(tk0, r)) istatistikCiz();
 }
 function hepsi() { kanalSecCiz(); kanalBlokCiz(); dizilerCiz(); takvimCiz(); istatistikCiz(); bekleyenSeritCiz(); paylasimAyarCiz(); bugunCiz(); fikirlerCiz(); uretimCiz(); siraCiz(); sonuclarCiz(); islerCiz(); }
 const ANA = ['takvim', 'onaylar', 'istatistik', 'hikayeler', 'ayarlar'], GELISMIS = ['bugun', 'fikirler', 'uretim', 'sira', 'sonuclar'];

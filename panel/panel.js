@@ -15,6 +15,7 @@
 // and runs only after its own approval click, up to that price.
 // Server: ayarlar/panel.json → "sunucu" (copy panel/ayar-ornek.json). Reached with your own `ssh`; a server video is
 // viewed through GET /api/sunucu-video?yol=videolar/... (scp into kayit/sunucu-onizleme/, at most 5 files).
+// Server reads are cached for 45 s (writes empty the cache); episode covers become small copies in kayit/kapak-kucuk/.
 const http = require('http'), fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
 const { spawnSync, spawn, execFileSync } = require('child_process');
 
@@ -43,7 +44,7 @@ const isler = alt => {
   return fs.readdirSync(d).filter(f => f.endsWith('.json')).map(f => ({ id: f.replace(/\.json$/, ''), ...okuJ(path.join(d, f), {}) }));
 };
 const nodeCalistir = (betik, args, sure = 120e3) => {
-  const r = spawnSync(process.execPath, [betik, ...args], { cwd: KOK, encoding: 'utf8', timeout: sure });
+  const r = spawnSync(process.execPath, [betik, ...args], { cwd: KOK, encoding: 'utf8', timeout: sure, windowsHide: true });
   const cikti = ((r.stdout || '') + (r.stderr || '')).trim();
   if (r.status !== 0) throw new Error(cikti.replace(/^[\s\S]*HATA:\s*/m, '').slice(0, 400) || 'komut başarısız');
   return cikti;
@@ -74,7 +75,7 @@ const igPaylas = () => { try { return require(path.join(KOK, 'instagram', 'payla
 function saglik(hesap, hesapYok) {
   const kendi = j => !hesap || isHesap(j) === hesap;
   const d = okuJ(path.join(KUYRUK, 'durum.json')), uyari = [];
-  const z = spawnSync(process.execPath, [KUYRUK_JS, 'zamanlayici', 'durum'], { cwd: KOK, encoding: 'utf8' }).stdout || '';
+  const z = spawnSync(process.execPath, [KUYRUK_JS, 'zamanlayici', 'durum'], { cwd: KOK, encoding: 'utf8', windowsHide: true }).stdout || '';
   const zamanlayici = /kurulu\./i.test(z) && !/DEĞİL/.test(z);
   const PZ = igPaylas(), ig = hesapYok ? null : PZ ? PZ.readAyar(hesap === HESAP0 ? undefined : hesap) : (hesap && hesap !== HESAP0 ? null : okuJ(path.join(os.homedir(), '.video-mutfagi', 'instagram.json')));
   const igGun = ig ? Math.max(0, Math.round(60 - (Date.now() - new Date(ig.yenilendi || ig.kaydedildi)) / 864e5)) : null;
@@ -93,7 +94,7 @@ function saglik(hesap, hesapYok) {
 // kanal: channel name; only that channel's account is shown (no kanal = every account)
 function kuyrukOzet(kanal) {
   const hesap = kanal ? hesapGuvenli(kanalHesap(kanal)) : null, hesapYok = !!kanal && !hesap, kendi = j => hesapYok ? false : !hesap || isHesap(j) === hesap;
-  const temiz = j => ({ id: j.id, hesap: isHesap(j), mp4: j.mp4, aciklama: j.aciklama, ne_zaman: j.ne_zaman, onay_gerekli: !!j.onay_gerekli, kaynak: j.kaynak, hata: j.son_hata || null, not: j.not ? String(j.not).replace(/\s+/g, ' ').trim().slice(0, 300) : null, sonraki_deneme: j.sonraki_deneme || null, kontrol_et: !!j.kontrol_et, paylasildi: j.paylasildi, link: j.link, sonuc: j.sonuc || null });
+  const temiz = j => ({ id: j.id, hesap: isHesap(j), mp4: j.mp4, aciklama: j.aciklama, ne_zaman: j.ne_zaman, onay_gerekli: !!j.onay_gerekli, kaynak: j.kaynak, hata: j.son_hata || null, not: j.not ? String(j.not).replace(/\s+/g, ' ').trim().slice(0, 300) : null, sonraki_deneme: j.sonraki_deneme || null, kontrol_et: !!j.kontrol_et, paylasildi: j.paylasildi, link: j.link, sonuc: j.sonuc || null, ...kapakAlan(j.kapak || j.video || j.mp4) });
   const ayar = Object.assign(okuJ(path.join(KUYRUK, 'ayar-ornek.json'), {}), okuJ(path.join(KOK, 'ayarlar', 'kuyruk.json'), {}));
   // the same resolution the queue uses (hesaplar.<hesap> > the series channel's dizi block > global)
   const hs = hesap ? require('../kuyruk/hesap-ayar.js').hesapAyar(ayar, hesap, KOK) : {};
@@ -116,14 +117,42 @@ function zamanDegistir(id, zaman) {
 // ---------- the server, through the user's own ssh (keys/agent are ssh's business, the panel stores no password)
 const sunucuAyar = () => (okuJ(path.join(KOK, 'ayarlar', 'panel.json'), {}) || {}).sunucu || null;
 const q = s => `'${String(s).replace(/'/g, `'\\''`)}'`;
+// async: the first open fires several server calls at once; spawnSync used to run them (and every other request) one by one
 function sunucuda(komut, sure = 60e3) {
-  const S = sunucuAyar(); if (!S) throw new Error('Sunucu tanımlı değil (ayarlar/panel.json).');
+  const S = sunucuAyar(); if (!S) return Promise.reject(new Error('Sunucu tanımlı değil (ayarlar/panel.json).'));
   const ic = `cd ${q(S.kok)} && ${S.node ? q(S.node) : 'node'} ${komut}`;
-  const r = spawnSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', S.ssh, `${S.on_ek ? S.on_ek + ' ' : ''}bash -lc ${q(ic)}`], { encoding: 'utf8', timeout: sure });
-  if (r.error) throw new Error('ssh çalışmadı: ' + r.error.message);
-  if (r.status !== 0) throw Object.assign(new Error(((r.stderr || '') + (r.stdout || '')).trim().replace(/^[\s\S]*HATA:\s*/m, '').slice(0, 300) || 'sunucu komutu başarısız'), r.status === 3 ? { kod: 409 } : {});   // exit 3 = the series lock is busy
-  return r.stdout;
+  return new Promise((ok, red) => {
+    let out = '', err = '', son = false;
+    const c = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', S.ssh, `${S.on_ek ? S.on_ek + ' ' : ''}bash -lc ${q(ic)}`], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const t = setTimeout(() => c.kill(), sure);
+    c.stdout.setEncoding('utf8'); c.stderr.setEncoding('utf8');
+    c.stdout.on('data', d => { out += d; }); c.stderr.on('data', d => { err += d; });
+    c.on('error', e => { clearTimeout(t); if (!son) { son = true; red(new Error('ssh çalışmadı: ' + e.message)); } });
+    c.on('close', kod => {
+      clearTimeout(t); if (son) return; son = true;
+      if (kod === 0) return ok(out);
+      red(Object.assign(new Error((err + out).trim().replace(/^[\s\S]*HATA:\s*/m, '').slice(0, 300) || (kod === null ? 'sunucu zaman aşımı' : 'sunucu komutu başarısız')), kod === 3 ? { kod: 409 } : {}));   // exit 3 = the series lock is busy
+    });
+  });
 }
+// ---------- server answers: kept in memory for SUNUCU_TTL, and identical calls in flight share one ssh run.
+// Any write to the server drops the whole cache (a decision touches diziler, ozet and istatistik at once; writes are rare).
+// nesil: a read that started before a write is never stored after it.
+const SUNUCU_TTL = 45e3, SB = { harita: new Map(), nesil: 0, tasima: null };
+function sunucuOku(komut, sure, taze) {
+  if (SB.tasima !== kanca.sunucuda) { SB.harita.clear(); SB.tasima = kanca.sunucuda; }   // a new transport (tests) starts clean
+  const h = SB.harita, simdi = Date.now(), o = h.get(komut);
+  if (o && (o.bekliyor || (!taze && simdi - o.t < SUNUCU_TTL))) return o.p;
+  for (const [k, x] of h) if (!x.bekliyor && simdi - x.t >= SUNUCU_TTL) h.delete(k);
+  const nesil = SB.nesil, kayit = { t: simdi, bekliyor: true };
+  kayit.p = Promise.resolve().then(() => kanca.sunucuda(komut, sure));
+  h.set(komut, kayit);
+  kayit.p.then(() => { if (h.get(komut) !== kayit) return; if (nesil !== SB.nesil) h.delete(komut); else { kayit.bekliyor = false; kayit.t = Date.now(); } },
+    () => { if (h.get(komut) === kayit) h.delete(komut); });   // a failure is never cached
+  return kayit.p;
+}
+const sunucuBosalt = () => { SB.nesil++; SB.harita.clear(); };
+function sunucuYaz(komut, sure) { sunucuBosalt(); return Promise.resolve().then(() => kanca.sunucuda(komut, sure)).finally(sunucuBosalt); }
 // account for a queue add: a named channel must have one (never falls back to oxygbio); without a channel the old `hesap` field is used
 function ekleHesap(b) {
   const x = hesapGuvenli(b.kanal ? kanalHesap(String(b.kanal)) : hesapTemiz(b.hesap));
@@ -136,12 +165,12 @@ function sunucuyaEkle({ mp4, aciklama, zaman, onay_gerekli, hesap, kanal }) {
   const yerel = path.resolve(KOK, mp4 || '');
   if (!icinde(yerel, path.join(KOK, 'videolar')) || !fs.existsSync(yerel)) throw new Error('video bulunamadı');
   const ad = path.basename(yerel).replace(/[^\w.-]/g, '-'), gecici = `/tmp/vm-${crypto.randomBytes(6).toString('hex')}.mp4`;
-  const up = spawnSync('scp', ['-q', '-o', 'BatchMode=yes', yerel, `${S.ssh}:${gecici}`], { encoding: 'utf8', timeout: 600e3 });
+  const up = spawnSync('scp', ['-q', '-o', 'BatchMode=yes', yerel, `${S.ssh}:${gecici}`], { encoding: 'utf8', timeout: 600e3, windowsHide: true });
   if (up.status !== 0) throw new Error('video sunucuya gönderilemedi: ' + (up.stderr || '').trim().slice(0, 200));
   const b64 = Buffer.from(String(aciklama || ''), 'utf8').toString('base64');
   const hedef = `videolar/_gelen/${ad}`;
   const ic = `cd ${q(S.kok)} && mkdir -p videolar/_gelen && cp ${gecici} ${q(hedef)} && ${S.node ? q(S.node) : 'node'} kuyruk/kuyruk.js ekle ${q(hedef)} --aciklama "$(echo ${b64} | base64 -d)"${zaman ? ' --zaman ' + q(zamanMetni(zaman)) : ''}${onay_gerekli ? ' --onay-gerekli' : ''}${hesapEk ? ' --hesap ' + q(hesapEk) : ''}`;
-  const r = spawnSync('ssh', ['-o', 'BatchMode=yes', S.ssh, `chmod 644 ${gecici}; ${S.on_ek ? S.on_ek + ' ' : ''}bash -lc ${q(ic)}; s=$?; rm -f ${gecici}; exit $s`], { encoding: 'utf8', timeout: 120e3 });
+  const r = spawnSync('ssh', ['-o', 'BatchMode=yes', S.ssh, `chmod 644 ${gecici}; ${S.on_ek ? S.on_ek + ' ' : ''}bash -lc ${q(ic)}; s=$?; rm -f ${gecici}; exit $s`], { encoding: 'utf8', timeout: 120e3, windowsHide: true });
   if (r.status !== 0) throw new Error(((r.stderr || '') + (r.stdout || '')).trim().slice(0, 300));
   return r.stdout.trim();
 }
@@ -299,10 +328,67 @@ async function takipci(hesap, P) {
   return j;
 }
 
-// a calendar tile's still: the first saved frame of a video folder (videolar/<ad> only), else its end card
+// ---------- episode covers: videolar/<ad>/cikti/<ad>-kapak.jpg (konu/uret.js kapakAdimi). Only that exact shape is accepted.
+const KAPAK_RE = /^videolar\/([\w.-]+)\/cikti\/([\w.-]+)-kapak\.jpg$/;
+function kapakJpgYolu(y) {
+  const m = KAPAK_RE.exec(String(y || ''));
+  if (!m || m[1] !== m[2] || /^\.+$/.test(m[1])) throw new Error('kapak yolu geçersiz');
+  return m[0];
+}
+const kapakImza = st => `${Math.round(st.mtimeMs)}-${st.size}`;   // a redrawn cover gets a new key
+// the API fields for a video folder whose cover exists on this machine: { kapak_jpg, kapak_imza }, else nothing
+function kapakAlan(v) {
+  const m = /^videolar\/([\w.-]+)/.exec(String(v || '').replace(/\\/g, '/'));
+  if (!m || /^\.+$/.test(m[1])) return {};
+  const rel = `videolar/${m[1]}/cikti/${m[1]}-kapak.jpg`;
+  try { const st = fs.statSync(path.join(KOK, rel)); return st.isFile() ? { kapak_jpg: rel, kapak_imza: kapakImza(st) } : {}; } catch { return {}; }
+}
+// small copies (216x384) of covers, from this machine or the server: kayit/kapak-kucuk/<sha1(yol|imza)>-<ad>.jpg,
+// at most KUCUK_EN_FAZLA files (oldest dropped); at most 4 fetches at once, identical ones share a run
+const KUCUK = path.join(KAYIT, 'kapak-kucuk'), KUCUK_EN_FAZLA = 300, KUCUK_AD = /^[0-9a-f]{12}-[\w.-]+-kapak\.jpg$/;   // temp files (.ham.jpg/.k.jpg) never match
+const kucukAd = (yol, imza) => crypto.createHash('sha1').update(yol + '|' + imza).digest('hex').slice(0, 12) + '-' + path.basename(yol);
+const kucukSurer = new Map(), kucukSira = [];
+let kucukAktif = 0;
+const kucukSlot = () => new Promise(ok => { if (kucukAktif < 4) { kucukAktif++; ok(); } else kucukSira.push(ok); });
+const kucukBirak = () => { const n = kucukSira.shift(); if (n) n(); else kucukAktif--; };
+// al(hedef) copies the full cover to hedef (local copy or scp); the result is downscaled, or kept as is without ffmpeg
+function kucukKapak(yol, imza, al) {
+  const f = path.join(KUCUK, kucukAd(yol, imza));
+  if (fs.existsSync(f)) return Promise.resolve(f);
+  if (kucukSurer.has(f)) return kucukSurer.get(f);
+  const p = (async () => {
+    await kucukSlot();
+    const ham = f + '.ham.jpg', kucuk = f + '.k.jpg';
+    try {
+      fs.mkdirSync(KUCUK, { recursive: true });
+      await al(ham);
+      if (!fs.existsSync(ham)) throw new Error('kapak alınamadı');
+      const k = await kanca.ffmpeg(['-y', '-v', 'error', '-i', ham, '-vf', 'scale=216:384:force_original_aspect_ratio=increase,crop=216:384', '-q:v', '5', kucuk], 20e3);
+      fs.renameSync(k === 0 && fs.existsSync(kucuk) ? kucuk : ham, f);
+      const L = fs.readdirSync(KUCUK).filter(x => KUCUK_AD.test(x)).map(x => ({ x, t: fs.statSync(path.join(KUCUK, x)).mtimeMs })).sort((a, b) => b.t - a.t);
+      for (const { x } of L.slice(KUCUK_EN_FAZLA)) if (path.join(KUCUK, x) !== f) fs.rmSync(path.join(KUCUK, x), { force: true });
+      return f;
+    } finally { fs.rmSync(ham, { force: true }); fs.rmSync(kucuk, { force: true }); kucukSurer.delete(f); kucukBirak(); }
+  })();
+  kucukSurer.set(f, p);
+  return p;
+}
+// the server's cover: imza comes from the server's own API answer (kapak_imza), so no extra ssh is needed to key it
+function sunucuKapak(yol, imza) {
+  const y = kapakJpgYolu(yol), i = String(imza || '');
+  if (!/^\d{1,16}-\d{1,12}$/.test(i)) throw new Error('kapak imzası geçersiz');
+  const S = sunucuAyar(); if (!S) throw new Error('Sunucu tanımlı değil (ayarlar/panel.json).');
+  return kucukKapak(y, i, async hedef => {
+    const r = await kanca.scp(['-q', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${S.ssh}:${String(S.kok).replace(/\/+$/, '')}/${y}`, hedef], 60e3);
+    if (!r || r.status !== 0) { fs.rmSync(hedef, { force: true }); throw new Error('kapak sunucudan alınamadı: ' + String((r && r.stderr) || '').trim().slice(0, 200)); }
+  });
+}
+// a calendar tile's still (videolar/<ad> only): the episode cover, else the first saved frame, else the end card
 function kapakYolu(v) {
   const d = path.resolve(KOK, String(v || '')), c = path.join(d, 'cikti');
   if (path.dirname(d) !== path.join(KOK, 'videolar') || !fs.existsSync(c) || !fs.statSync(c).isDirectory()) return null;
+  const jpg = path.join(c, path.basename(d) + '-kapak.jpg');
+  if (fs.existsSync(jpg)) return jpg;
   for (const k of fs.readdirSync(c).filter(x => /^kareler-/.test(x)).sort()) {
     const f = fs.statSync(path.join(c, k)).isDirectory() && fs.readdirSync(path.join(c, k)).filter(x => /^frame-[\w.-]*\.png$/.test(x)).sort()[0];
     if (f) return path.join(c, k, f);
@@ -517,7 +603,7 @@ function dizilerCevap(kanal) {
   // a series from before the tone label shows the kit's assignment (dizi.ton_atamalari) or komik until the run writes it
   const diziler = (D.yukle(KOK, kanal).diziler || []).map(d => ({ ...d, ton: d.ton || (ayar.ton_atamalari || {})[d.id] || 'komik', metin_onay: D.metinOnay(d), bolumler: (d.bolumler || []).map(({ metin, ...b }) => {
     const j = b.video ? bek.find(x => x.video === b.video) : null;
-    return { ...b, ...(D.metinOnay(d) === 'bekliyor' ? { metin } : {}), kelime: String(metin || '').split(/\s+/).filter(Boolean).length, mp4: bolumMp4(b.video, j && j.mp4), kuyruk_id: j ? j.id : null, kuyruk_onay_gerekli: j ? !!j.onay_gerekli : null,
+    return { ...b, ...(D.metinOnay(d) === 'bekliyor' ? { metin } : {}), kelime: String(metin || '').split(/\s+/).filter(Boolean).length, mp4: bolumMp4(b.video, j && j.mp4), ...kapakAlan(b.video), kuyruk_id: j ? j.id : null, kuyruk_onay_gerekli: j ? !!j.onay_gerekli : null,
       izin: { devam: !D.kararHata(d, b.n, 'devam'), kes: !D.kararHata(d, b.n, 'kes'), tekrar: !D.tekrarHata(d, b.n) } };   // the same checks the POST routes use
   }) }));
   const red = (okuJ(path.join(KOK, 'kayit', 'dizi', kanal, 'reddedilen.json'), {}) || {}).reddedilen;
@@ -529,7 +615,7 @@ function dizilerCevap(kanal) {
     reyting: ry ? ry.diziler : null, reyting_gecici: ry ? ry.gecici : null, reyting_zaman: ry ? ry.zaman : null, plan: plan && typeof plan === 'object' && Array.isArray(plan.slotlar) ? plan : null };
 }
 // route -> server hop goes through this object so tests can stub the ssh / scp call
-const kanca = { mp4Sure: f => execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }), sunucuda: (...a) => sunucuda(...a), scp: (args, sure) => spawnSync('scp', args, { encoding: 'utf8', timeout: sure }) };
+const kanca = { mp4Sure: f => execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }), sunucuda: (...a) => sunucuda(...a), ffmpeg: (args, sure) => new Promise(ok => { const c = spawn('ffmpeg', args, { windowsHide: true, stdio: 'ignore' }), t = setTimeout(() => c.kill(), sure); c.on('error', () => { clearTimeout(t); ok(1); }); c.on('close', k => { clearTimeout(t); ok(k); }); }), scp: (args, sure) => new Promise(ok => { let err = ''; const c = spawn('scp', args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] }), t = setTimeout(() => c.kill(), sure); c.stderr.setEncoding('utf8'); c.stderr.on('data', d => { err += d; }); c.on('error', e => { clearTimeout(t); ok({ status: 1, stderr: e.message }); }); c.on('close', k => { clearTimeout(t); ok({ status: k, stderr: err }); }); }) };
 const kanalAdi = k => { if (typeof k !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(k)) throw new Error('kanal yok'); return k; };
 // a series has 2-5 episodes (dizi/bol.js MAX_SAYI); an n past this series' own count is refused by dizi.js ("bölüm n yok")
 const MAX_BOLUM = 5;
@@ -561,7 +647,24 @@ function diziTesekkur(b) {
 }
 const diziTekrarGovde = b => ({ kanal: kanalAdi(b.kanal), id: diziId(b.id), n: bolumNo(b.n) });
 const diziAyarGovde = b => ({ kanal: kanalAdi(b.kanal), ayar: diziAyarTemiz(b.ayar) });
-const sunucuJson = (bayrak, deger) => JSON.parse(kanca.sunucuda(`panel/panel.js ${bayrak} ${q(typeof deger === 'string' ? deger : JSON.stringify(deger))}`, 20e3));
+const sunucuKomut = (bayrak, deger) => `panel/panel.js ${bayrak} ${q(typeof deger === 'string' ? deger : JSON.stringify(deger))}`;
+// reads go through the short cache (taze: skip it); writes empty it
+const sunucuJson = async (bayrak, deger, taze) => JSON.parse(await sunucuOku(sunucuKomut(bayrak, deger), 20e3, taze));
+const sunucuJsonYaz = async (bayrak, deger) => JSON.parse(await sunucuYaz(sunucuKomut(bayrak, deger), 20e3));
+const ozetKomut = k => 'panel/panel.js --ozet' + (k ? ' --kanal ' + q(k) : '');
+// the first local answer (ozet) starts the server reads the opening page asks for next, so they run side by side;
+// the browser's own calls then join these runs (same command strings as the routes build). Failures are dropped here.
+function sunucuIsit(k) {
+  const bos = () => {};
+  sunucuOku(ozetKomut(k), 60e3).catch(bos);
+  if (!k) return;
+  sunucuOku(sunucuKomut('--diziler', kanalAdi(k)), 20e3).catch(bos);
+  let h = null; try { h = hesapGuvenli(kanalHesapOku(k)); } catch { }
+  if (!h) return;
+  sunucuOku(sunucuKomut('--instagram', hesapGovde(h)), 20e3).catch(bos);
+  sunucuOku(sunucuKomut('--takipci', hesapGovde(h)), 20e3).catch(bos);
+  sunucuOku(sunucuKomut('--istatistik', istatistikGovde({ hesap: h, gun: 7 })), 20e3).catch(bos);
+}
 const DiziDepo = () => require('../dizi/dizi.js');
 // manual decisions run under the scheduler's lock, so a running calistir cannot overwrite them
 function kilitli(kanal, fn) {
@@ -635,7 +738,7 @@ function onizlemeTemizle(tut) {
   const f = fs.readdirSync(ONIZLEME).filter(x => ONIZLEME_AD.test(x)).map(x => ({ x, t: fs.statSync(path.join(ONIZLEME, x)).mtimeMs })).sort((a, b) => b.t - a.t);
   for (const { x } of f.slice(ONIZLEME_EN_FAZLA)) if (path.join(ONIZLEME, x) !== tut) fs.rmSync(path.join(ONIZLEME, x), { force: true });
 }
-function sunucuVideo(yol) {
+async function sunucuVideo(yol) {
   const y = sunucuVideoYolu(yol), S = sunucuAyar();
   if (!S) throw new Error('Sunucu tanımlı değil (ayarlar/panel.json).');
   fs.mkdirSync(ONIZLEME, { recursive: true });
@@ -643,7 +746,7 @@ function sunucuVideo(yol) {
   if (fs.existsSync(f)) { const t = new Date(); fs.utimesSync(f, t, t); return f; }   // a fresh look counts as recent
   const gecici = f + '.part';
   let r;
-  try { r = kanca.scp(['-q', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${S.ssh}:${String(S.kok).replace(/\/+$/, '')}/${y}`, gecici], 600e3); }
+  try { r = await kanca.scp(['-q', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${S.ssh}:${String(S.kok).replace(/\/+$/, '')}/${y}`, gecici], 600e3); }
   catch (e) { r = { status: 1, stderr: e.message }; }
   if (!r || r.status !== 0 || !fs.existsSync(gecici)) { fs.rmSync(gecici, { force: true }); throw new Error('video sunucudan alınamadı: ' + String((r && (r.stderr || r.error)) || '').trim().slice(0, 200)); }
   fs.renameSync(gecici, f);
@@ -660,28 +763,28 @@ function ozetCevap(kanal) {
 async function api(req, u) {
   const yol = u.pathname.slice(5), GET = req.method === 'GET', b = GET ? {} : await govdeOku(req);
   const sunucu = (b.makine || u.searchParams.get('makine')) === 'sunucu';
-  if (GET && yol === 'ozet') return ozetCevap(u.searchParams.get('kanal') || undefined);
-  if (GET && yol === 'sunucu') { const k = u.searchParams.get('kanal'); if (k && !kanallar().includes(k)) throw new Error('kanal yok'); return JSON.parse(sunucuda('panel/panel.js --ozet' + (k ? ' --kanal ' + q(k) : ''))); }
+  if (GET && yol === 'ozet') { const k = u.searchParams.get('kanal') || undefined, o = ozetCevap(k); if (o.sunucu && !o.kanalYok) sunucuIsit(k); return o; }
+  if (GET && yol === 'sunucu') { const k = u.searchParams.get('kanal'); if (k && !kanallar().includes(k)) throw new Error('kanal yok'); return JSON.parse(await sunucuOku(ozetKomut(k), 60e3, u.searchParams.has('taze'))); }
   if (GET && yol === 'fikirler') return fikirler();
   if (GET && yol === 'uretim') return uretimler();
   if (GET && yol === 'rapor') return rapor(u.searchParams.get('p'));
   if (GET && yol === 'isler') return isListesi();
   // in server mode the home PC never reads Instagram: the server's hourly snapshots answer (same as istatistik)
-  if (GET && yol === 'instagram') return sunucu ? sunucuJson('--instagram', hesapGovde(u.searchParams.get('hesap'))) : instagram(u.searchParams.has('yenile'), u.searchParams.get('hesap'));
+  if (GET && yol === 'instagram') return sunucu ? sunucuJson('--instagram', hesapGovde(u.searchParams.get('hesap')), u.searchParams.has('yenile') || u.searchParams.has('taze')) : instagram(u.searchParams.has('yenile'), u.searchParams.get('hesap'));
   if (GET && yol === 'dersler') return okuJ(DERSLER, []);
-  if (GET && yol === 'takipci') return sunucu ? sunucuJson('--takipci', hesapGovde(u.searchParams.get('hesap'))) : takipci(u.searchParams.get('hesap'));
-  if (GET && yol === 'istatistik') { const g = istatistikGovde({ hesap: u.searchParams.get('hesap'), gun: u.searchParams.get('gun') }); return sunucu ? sunucuJson('--istatistik', g) : istatistikCevap(g); }
-  if (!GET && yol === 'istatistik/takip') return sunucu ? sunucuJson('--istatistik-takip', takipElleGovde(b)) : takipElle(b);
+  if (GET && yol === 'takipci') return sunucu ? sunucuJson('--takipci', hesapGovde(u.searchParams.get('hesap')), u.searchParams.has('taze')) : takipci(u.searchParams.get('hesap'));
+  if (GET && yol === 'istatistik') { const g = istatistikGovde({ hesap: u.searchParams.get('hesap'), gun: u.searchParams.get('gun') }); return sunucu ? sunucuJson('--istatistik', g, u.searchParams.has('taze')) : istatistikCevap(g); }
+  if (!GET && yol === 'istatistik/takip') return sunucu ? sunucuJsonYaz('--istatistik-takip', takipElleGovde(b)) : takipElle(b);
   if (GET && yol === 'asamalar') return asamalar(u.searchParams.get('kanal') || undefined);
-  if (GET && yol === 'diziler') return sunucu ? sunucuJson('--diziler', kanalAdi(u.searchParams.get('kanal'))) : dizilerCevap(u.searchParams.get('kanal'));
-  if (!GET && yol === 'dizi/karar') return sunucu ? sunucuJson('--dizi-karar', diziKararGovde(b)) : diziKarar(b);
-  if (!GET && yol === 'dizi/tekrar') return sunucu ? sunucuJson('--dizi-tekrar', diziTekrarGovde(b)) : diziTekrar(b);
-  if (!GET && yol === 'dizi/tesekkur') return sunucu ? sunucuJson('--dizi-tesekkur', diziTesekkurGovde(b)) : diziTesekkur(b);
-  if (!GET && yol === 'dizi/ayar') return sunucu ? sunucuJson('--dizi-ayar', diziAyarGovde(b)) : diziAyarYaz(b);
-  if (!GET && yol === 'dizi/metin') return sunucu ? sunucuJson('--dizi-metin', diziMetinGovde(b)) : diziMetin(b);
-  if (GET && yol === 'dizi/havuz') return sunucu ? sunucuJson('--dizi-havuz', kanalAdi(u.searchParams.get('kanal'))) : havuzCevap(u.searchParams.get('kanal'));
-  if (!GET && yol === 'dizi/havuz/ele') return sunucu ? sunucuJson('--dizi-havuz-ele', havuzEleGovde(b)) : havuzEle(b);
-  if (!GET && yol === 'dizi/havuz/one') return sunucu ? sunucuJson('--dizi-havuz-one', havuzOneGovde(b)) : havuzOne(b);
+  if (GET && yol === 'diziler') return sunucu ? sunucuJson('--diziler', kanalAdi(u.searchParams.get('kanal')), u.searchParams.has('taze')) : dizilerCevap(u.searchParams.get('kanal'));
+  if (!GET && yol === 'dizi/karar') return sunucu ? sunucuJsonYaz('--dizi-karar', diziKararGovde(b)) : diziKarar(b);
+  if (!GET && yol === 'dizi/tekrar') return sunucu ? sunucuJsonYaz('--dizi-tekrar', diziTekrarGovde(b)) : diziTekrar(b);
+  if (!GET && yol === 'dizi/tesekkur') return sunucu ? sunucuJsonYaz('--dizi-tesekkur', diziTesekkurGovde(b)) : diziTesekkur(b);
+  if (!GET && yol === 'dizi/ayar') return sunucu ? sunucuJsonYaz('--dizi-ayar', diziAyarGovde(b)) : diziAyarYaz(b);
+  if (!GET && yol === 'dizi/metin') return sunucu ? sunucuJsonYaz('--dizi-metin', diziMetinGovde(b)) : diziMetin(b);
+  if (GET && yol === 'dizi/havuz') return sunucu ? sunucuJson('--dizi-havuz', kanalAdi(u.searchParams.get('kanal')), u.searchParams.has('taze')) : havuzCevap(u.searchParams.get('kanal'));
+  if (!GET && yol === 'dizi/havuz/ele') return sunucu ? sunucuJsonYaz('--dizi-havuz-ele', havuzEleGovde(b)) : havuzEle(b);
+  if (!GET && yol === 'dizi/havuz/one') return sunucu ? sunucuJsonYaz('--dizi-havuz-one', havuzOneGovde(b)) : havuzOne(b);
   if (!GET && yol === 'is') return isBaslat(b.tur, b);
   // ideas
   if (!GET && yol === 'fikir') {
@@ -695,14 +798,14 @@ async function api(req, u) {
     const is = yol.split('/')[1];
     if (is === 'ekle') {
       const hesapEk = ekleHesap(b);
-      if (sunucu) return { mesaj: sunucuyaEkle(b) };
+      if (sunucu) { try { return { mesaj: sunucuyaEkle(b) }; } finally { sunucuBosalt(); } }
       const mp4 = path.resolve(KOK, b.mp4 || '');
       if (!icinde(mp4, path.join(KOK, 'videolar')) || !fs.existsSync(mp4)) throw new Error('video bulunamadı');
       return { mesaj: nodeCalistir(KUYRUK_JS, ['ekle', mp4, '--aciklama', String(b.aciklama || ''), ...(b.zaman ? ['--zaman', zamanMetni(b.zaman)] : []), ...(b.onay_gerekli ? ['--onay-gerekli'] : []), ...(hesapEk ? ['--hesap', hesapEk] : [])]) };
     }
     if (!/^[\w.-]+$/.test(String(b.id || ''))) throw new Error('kuyrukta böyle bir iş yok');
-    if (is === 'onayla' || is === 'iptal') return { mesaj: sunucu ? sunucuda(`kuyruk/kuyruk.js ${is} ${q(b.id)}`) : nodeCalistir(KUYRUK_JS, [is, b.id]) };
-    if (is === 'zaman') { if (sunucu) sunucuda(`panel/panel.js --zaman ${q(b.id)} ${q(zamanMetni(b.zaman))}`); else zamanDegistir(b.id, b.zaman); return { tamam: true }; }
+    if (is === 'onayla' || is === 'iptal') return { mesaj: sunucu ? await sunucuYaz(`kuyruk/kuyruk.js ${is} ${q(b.id)}`) : nodeCalistir(KUYRUK_JS, [is, b.id]) };
+    if (is === 'zaman') { if (sunucu) await sunucuYaz(`panel/panel.js --zaman ${q(b.id)} ${q(zamanMetni(b.zaman))}`); else zamanDegistir(b.id, b.zaman); return { tamam: true }; }
   }
   // lessons: into the second brain as a decision when it is installed (the agent reads it at every session start),
   // otherwise into the channel's lesson file
@@ -731,8 +834,13 @@ const sunucuYap = () => http.createServer(async (req, res) => {
     const korumali = u.pathname.startsWith('/api/') || u.pathname === '/dosya';
     if (korumali && (req.headers['x-panel'] || u.searchParams.get('k')) !== ANAHTAR) return gonder(res, 401, { hata: 'Paneli terminaldeki linkle aç.' });
     if (u.pathname === '/dosya') return dosyaVer(req, res, u.searchParams.get('p'));
-    if (u.pathname === '/api/sunucu-video' && req.method === 'GET') return mp4Akit(req, res, sunucuVideo(u.searchParams.get('yol')));
-    if (u.pathname === '/api/kapak' && req.method === 'GET') { const f = kapakYolu(u.searchParams.get('v')); return f ? gonder(res, 200, fs.readFileSync(f), 'image/png') : gonder(res, 404, { hata: 'kapak yok' }); }
+    if (u.pathname === '/api/sunucu-video' && req.method === 'GET') return mp4Akit(req, res, await sunucuVideo(u.searchParams.get('yol')));
+    if (u.pathname === '/api/kapak' && req.method === 'GET') {
+      let f = kapakYolu(u.searchParams.get('v')); if (!f) return gonder(res, 404, { hata: 'kapak yok' });
+      if (f.endsWith('-kapak.jpg')) { const y = path.relative(KOK, f).split(path.sep).join('/'); f = await kucukKapak(y, kapakImza(fs.statSync(f)), async h => fs.copyFileSync(f, h)); }
+      return gonder(res, 200, fs.readFileSync(f), f.endsWith('.jpg') ? 'image/jpeg' : 'image/png');
+    }
+    if (u.pathname === '/api/sunucu-kapak' && req.method === 'GET') return gonder(res, 200, fs.readFileSync(await sunucuKapak(u.searchParams.get('yol'), u.searchParams.get('i'))), 'image/jpeg');
     if (u.pathname.startsWith('/api/')) return gonder(res, 200, await api(req, u));
     const rel = u.pathname === '/' ? 'index.html' : u.pathname.slice(1), f = path.resolve(ARAYUZ, rel);
     if (!icinde(f, ARAYUZ) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) return gonder(res, 404, 'yok', 'text/plain; charset=utf-8');
@@ -740,7 +848,7 @@ const sunucuYap = () => http.createServer(async (req, res) => {
   } catch (e) { gonder(res, e.kod || 400, { hata: e.message }); }
 });
 
-module.exports = { kanca, planliBolumler, kuyrukOzet, instagram, takipci, istatistikCevap, takipElleGovde, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
+module.exports = { kanca, sunucuOku, sunucuJson, sunucuIsit, kapakJpgYolu, kapakAlan, kucukAd, KUCUK, SUNUCU_TTL, planliBolumler, kuyrukOzet, instagram, takipci, istatistikCevap, takipElleGovde, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
 if (require.main !== module) return;
 
   // ozellik: lets the home panel know which flags this copy has (an older one would not answer them)
@@ -773,6 +881,6 @@ sunucu.listen(PORT, '127.0.0.1', () => {
   console.log(`\nKontrol paneli açık:\n  ${link}\n\nKapatmak için bu pencerede Ctrl+C.`);
   if (!process.argv.includes('--acma')) {
     const ac = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', link]] : process.platform === 'darwin' ? ['open', [link]] : ['xdg-open', [link]];
-    spawn(ac[0], ac[1], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+    spawn(ac[0], ac[1], { stdio: 'ignore', detached: true, windowsHide: true }).on('error', () => {}).unref();
   }
 });
