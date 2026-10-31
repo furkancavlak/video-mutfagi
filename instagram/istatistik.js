@@ -538,6 +538,9 @@ function ozet({ kok = KOK0, hesap, gun = 28, simdi = Date.now(), ek = {} } = {})
     if (h) for (const k of HESAP_KITLE) if (sayi(h.hesap_insight[k]) != null) hk[k] = sayi(h.hesap_insight[k]);
     gunluk.push({ gun: g, views: Math.max(0, toplamAn(Math.min(gSon, simdi)) - toplamAn(gBas)), takipci: takipciAn(Math.min(gSon, simdi)), ...hk });
   }
+  // short periods: the same totals per whole hour, from the period start (rounded down to the hour) to now
+  const saatlik = [];
+  if (gun <= 3) for (let h = Math.floor(bas / SAAT) * SAAT; h < simdi; h += SAAT) saatlik.push({ saat: new Date(h).toISOString(), views: Math.max(0, toplamAn(Math.min(h + SAAT, simdi)) - toplamAn(h)), takipci: takipciAn(Math.min(h + SAAT, simdi)) });
   // per series: episodes in order with their views and the drop from the previous episode
   const diziler = (ek.diziler || []).map(d => {
     const bl = (d.bolumler || []).map(b => { const v = b.media_id ? videolar.find(x => x.id === String(b.media_id)) : null; const vs = v ? v.son.views : (b.metrik && sayi(b.metrik.views)); return { n: b.n, media_id: b.media_id || null, views: vs ?? null, durum: b.durum, karar: b.karar || null }; });
@@ -553,6 +556,7 @@ function ozet({ kok = KOK0, hesap, gun = 28, simdi = Date.now(), ek = {} } = {})
     takipci: son ? son.takipci : null, hesap_insight: son ? son.hesap_insight || null : null, hesap_insight_yok: son ? son.hesap_insight_yok || [] : [],
     kpi: { donem: kpi(bas, simdi), onceki: kpi(onceBas, bas) },
     gunluk,
+    ...(gun <= 3 ? { saatlik } : {}),
     videolar: videolar.filter(v => donemde(v) || (v.egri.length && Date.parse(v.egri[v.egri.length - 1][0]) >= bas) || takipEksik(v)),
     takip_eksik: videolar.filter(takipEksik).length,
     kitle: kitleOku(kok, hesap),

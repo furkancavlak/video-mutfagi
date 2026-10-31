@@ -622,8 +622,15 @@ function istatistikSayfaCiz() {
   // daily series: the snapshots' own; without them, views by posting day (said so)
   const gunler = []; for (let i = istGun - 1; i >= 0; i--) gunler.push(gunBas(simdi - i * gun));
   const G = istVar() ? ISV.gunluk || [] : null, gBul = d => G && G.find(g => ayniGun(new Date(g.gun + 'T12:00:00'), d));
+  // short periods with hourly data: one point per hour (every 3rd label for 3 days)
+  const SL = istVar() && istGun <= 3 && Array.isArray(ISV.saatlik) && ISV.saatlik.length ? ISV.saatlik : null;
+  const saatEt = (p, i) => { const t = new Date(p.saat), e = String(t.getHours()).padStart(2, '0') + ':00'; return istGun === 1 || i % 3 === 0 ? e : ' '; };
   let seri, etiket, not = '';
-  if (istGrafik === 'views') {
+  if (SL) {
+    const al = istGrafik === 'views' ? 'views' : 'takipci';
+    seri = SL.map((p, i) => ({ t: new Date(p.saat), v: p[al] != null ? p[al] : null, etiket: saatEt(p, i), sa: true }));
+    etiket = istGrafik === 'views' ? 'Saatlik izlenme' : 'Takipçi';
+  } else if (istGrafik === 'views') {
     seri = G ? gunler.map(d => { const x = gBul(d); return { t: d, v: x && x.views != null ? x.views : null }; }) : gunler.map(d => ({ t: d, v: bu.filter(x => ayniGun(x.t, d)).reduce((a, x) => a + (x.views || 0), 0) }));
     etiket = 'Günlük izlenme'; if (!G) not = 'Saatlik ölçüm gelene kadar: o gün paylaşılan videoların bugüne kadarki izlenmesi.';
   } else { seri = G ? gunler.map(d => { const x = gBul(d); return { t: d, v: x && x.takipci != null ? x.takipci : null }; }) : []; etiket = 'Takipçi'; }
@@ -1393,7 +1400,7 @@ document.addEventListener('mouseover', e => {
   const g = e.target.closest && e.target.closest('.ig-n'), ip = $('#ipucu');
   if (!g) { ip.hidden = true; return; }
   const p = (cizgi.seri || [])[+g.dataset.ii]; if (!p) return;
-  ip.innerHTML = `<b>${p.v == null ? '—' : esc(sayi(p.v))} ${esc((cizgi.etiket || '').replace(/^Günlük /, '').toLocaleLowerCase('tr'))}</b><span>${esc(p.t.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', weekday: 'short' }))}</span>`;
+  ip.innerHTML = `<b>${p.v == null ? '—' : esc(sayi(p.v))} ${esc((cizgi.etiket || '').replace(/^Günlük /, '').toLocaleLowerCase('tr'))}</b><span>${esc(p.t.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', weekday: 'short', ...(p.sa ? { hour: '2-digit', minute: '2-digit' } : {}) }))}</span>`;
   const r = g.getBoundingClientRect(); ip.hidden = false;
   ip.style.left = Math.min(window.innerWidth - ip.offsetWidth - 8, Math.max(8, r.left + r.width / 2 - ip.offsetWidth / 2)) + 'px';
   ip.style.top = Math.max(8, r.top - ip.offsetHeight - 8) + 'px';
