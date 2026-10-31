@@ -1,7 +1,7 @@
 // Series scheduler: crontab line, per-channel dedup, no collateral damage to the queue line (fake crontab, no real one is touched).
 const test = require('node:test'), assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path');
-const { olustur, kronSatiri, havuzKronSatiri, diziIsareti, havuzIsareti } = require('../zamanlayici.js');
+const { olustur, kronSatiri, havuzKronSatiri, istatistikKronSatiri, istatistikIsareti, diziIsareti, havuzIsareti } = require('../zamanlayici.js');
 const { kronSatiri: kuyrukSatiri } = require('../../kuyruk/kuyruk.js');
 
 const KOK = fs.mkdtempSync(path.join(os.tmpdir(), 'zaman-'));
@@ -34,7 +34,8 @@ test('kur: adds the line; reinstall replaces it (quoted path) instead of duplica
   const d = sahte(KUYRUK + '\n'), z = yap(d);
   z.kur('kanal_a'); z.kur('kanal_a'); z.kur('kanal_a');
   const l = d.tab.split('\n').filter(Boolean);
-  assert.equal(l.length, 3);
+  assert.equal(l.length, 4);
+  assert.equal(l.filter(x => istatistikIsareti.test(x)).length, 1, 'one hourly statistics line');
   assert.equal(l.filter(x => diziIsareti('kanal_a').test(x)).length, 1);
   assert.equal(l.filter(x => havuzIsareti('kanal_a').test(x)).length, 1, 'one weekly pool line');
   assert.ok(l.includes(KUYRUK), 'queue line untouched');
@@ -64,7 +65,7 @@ test('dedup matches an unquoted-path line written by hand', () => {
 
 test('durum: shows dizi lines and whether the queue line exists', () => {
   const d = sahte(KUYRUK + '\n'), z = yap(d);
-  assert.deepEqual(z.durum('kanal_a'), { dizi: [], kuyruk: true });
+  assert.deepEqual(z.durum('kanal_a'), { dizi: [], kuyruk: true, istatistik: false });
   z.kur('kanal_a');
   const s = z.durum();
   assert.equal(s.dizi.length, 2); assert.ok(s.dizi.every(x => x.includes('kanal_a'))); assert.equal(s.kuyruk, true);
@@ -131,4 +132,16 @@ test('havuz line: reinstall and kaldir dedup per channel, other channel and the 
   z.kaldir('kanal_a');
   assert.equal(say(havuzIsareti('kanal_a')), 0); assert.equal(say(diziIsareti('kanal_a')), 0);
   assert.equal(say(havuzIsareti('kanal_ab')), 1); assert.ok(d.tab.includes(KUYRUK));
+});
+
+// one Instagram read per hour (Furkan 31.10): one shared :05 snapshot line, whatever channels are installed
+test('istatistik line: :05 hourly, TZ + nice, one line for all channels, kaldir of a channel leaves it', () => {
+  assert.equal(istatistikKronSatiri('/r/vm', NODE), `5 * * * * cd "/r/vm" && TZ=Europe/Istanbul nice -n 19 "${NODE}" "/r/vm/instagram/istatistik.js" anlik >> "/r/vm/kayit/istatistik.log" 2>&1`);
+  const d = sahte(KUYRUK + '\n'), z = yap(d);
+  z.kur('kanal_a'); z.kur('kanal_ab'); z.kur('kanal_a');
+  assert.equal(d.tab.split('\n').filter(l => istatistikIsareti.test(l)).length, 1);
+  assert.equal(z.durum().istatistik, true);
+  z.kaldir('kanal_a');
+  assert.equal(d.tab.split('\n').filter(l => istatistikIsareti.test(l)).length, 1, 'shared line stays');
+  assert.ok(d.tab.includes(KUYRUK));
 });

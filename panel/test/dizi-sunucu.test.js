@@ -193,3 +193,10 @@ test('--dizi-metin: bad input is rejected before writing; a series not waiting i
   r = cli('--dizi-metin', JSON.stringify({ kanal: 'kanal_a', id: 'd1', karar: 'onayla' }));
   assert.equal(r.status, 1); assert.match(r.stderr, /^HATA: Bu hikâyenin metni onay beklemiyor/m);
 });
+
+test('--istatistik: the server answers the snapshot aggregate as JSON (no snapshots = empty but well-formed)', () => {
+  const r = cli('--istatistik', JSON.stringify({ hesap: 'yok_hesap', gun: 7 }));
+  assert.equal(r.status, 0, r.stderr);
+  const j = JSON.parse(r.stdout);
+  assert.deepEqual([j.hesap, j.gun, j.son_anlik, j.videolar, j.gunluk.length], ['yok_hesap', 7, null, [], 7]);
+});

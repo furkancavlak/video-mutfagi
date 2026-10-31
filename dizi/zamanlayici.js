@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Scheduler for the series runner: installs / removes / shows the hourly (:20) job for one channel, plus its weekly
-// story-pool fill (Monday 04:00 Istanbul time, dizi/havuz.js doldur).
+// story-pool fill (Monday 04:00 Istanbul time, dizi/havuz.js doldur). `kur` also installs the one hourly Instagram
+// statistics snapshot for all accounts (:05, instagram/istatistik.js anlik); it is shared, so `kaldir` leaves it.
 //   node dizi/zamanlayici.js kur [kanal] | kaldir [kanal] | durum [kanal]
 // Linux/Mac: one crontab line per channel. Windows: one Task Scheduler task per channel.
 // Each channel is found by its own marker (`dizi/calistir.js` + channel name), so installing or removing one channel never
@@ -50,6 +51,14 @@ function kronSatiri(kok, node, kanal) {
 
 // weekly pool fill: Monday 04:00 in Istanbul (UTC+3, no DST), written in the machine's own cron time
 // (yerelDk: this machine's UTC offset in minutes, e.g. 0 on a UTC server -> Monday 01:00)
+// hourly Instagram snapshot of every account (Furkan 31.10: one Instagram read per hour; the panel reads the snapshots)
+const istatistikIsareti = /instagram\/istatistik\.js"?\s+anlik(\s|$)/;
+function istatistikKronSatiri(kok, node) {
+  guvenliYol(kok, 'repo'); guvenliYol(node, 'node');
+  const betik = path.join(kok, 'instagram', 'istatistik.js').split(path.sep).join('/'), log = path.join(kok, 'kayit', 'istatistik.log').split(path.sep).join('/');
+  return `5 * * * * cd "${kok}" && ${ON} "${node}" "${betik}" anlik >> "${log}" 2>&1`;
+}
+
 function havuzKronSatiri(kok, node, kanal, yerelDk = -new Date().getTimezoneOffset()) {
   guvenliYol(kok, 'repo'); guvenliYol(node, 'node');
   let dk = 4 * 60 + (yerelDk - 180), gun = 1;
@@ -94,12 +103,20 @@ $s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -
 Register-ScheduledTask -TaskName '${havuzGorevAdi(kanal)}' -Action $a -Trigger $t -Settings $s -Description 'video-mutfagi: haftalik hikaye havuzu' -Force | Out-Null`;
       const r2 = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps2]);
       if (r2.status !== 0) throw new Error('havuz zamanlayıcısı kurulamadı: ' + String(r2.stderr || r2.stdout || '').trim().slice(0, 400));
+      const ib = path.join(kok, 'instagram', 'istatistik.js'), il = path.join(kok, 'kayit', 'istatistik.log');
+      const ps3 = `$a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c ""${t(node)}"" ""${t(ib)}"" anlik >> ""${t(il)}"" 2>&1' -WorkingDirectory '${t(kok)}';
+$n = Get-Date; $b = $n.Date.AddHours($n.Hour).AddMinutes(5); if ($b -le $n) { $b = $b.AddHours(1) };
+$t = New-ScheduledTaskTrigger -Once -At $b -RepetitionInterval (New-TimeSpan -Hours 1);
+$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew;
+Register-ScheduledTask -TaskName 'Video Mutfagi Istatistik' -Action $a -Trigger $t -Settings $s -Description 'video-mutfagi: saatlik Instagram anligi' -Force | Out-Null`;
+      const r3 = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps3]);
+      if (r3.status !== 0) throw new Error('istatistik zamanlayıcısı kurulamadı: ' + String(r3.stderr || r3.stdout || '').trim().slice(0, 400));
       return { kanal, mesaj: `Zamanlayıcı kuruldu (${gorevAdi(kanal)}): her saat 20. dakikada bir "${kanal}" dizisi çalışır. Kayıt: kayit/dizi-${kanal}.log. Hikâye havuzu her pazartesi 04:00'te dolar (${havuzGorevAdi(kanal)}).` };
     }
-    const isaret = diziIsareti(kanal), hIsaret = havuzIsareti(kanal), kalan = satirlar().filter(l => !isaret.test(l) && !hIsaret.test(l));
+    const isaret = diziIsareti(kanal), hIsaret = havuzIsareti(kanal), kalan = satirlar().filter(l => !isaret.test(l) && !hIsaret.test(l) && !istatistikIsareti.test(l));
     while (kalan.length && !kalan[kalan.length - 1].trim()) kalan.pop();   // trailing blanks only; inner ones stay
-    kronYaz(kalan.concat(kronSatiri(kok, node, kanal), havuzKronSatiri(kok, node, kanal, o.yerelDk)));
-    return { kanal, mesaj: `Zamanlayıcı kuruldu: her saat 20. dakikada bir "${kanal}" dizisi çalışır. Kayıt: kayit/dizi-${kanal}.log. Hikâye havuzu her pazartesi 04:00'te (İstanbul) dolar: kayit/havuz-${kanal}.log` };
+    kronYaz(kalan.concat(kronSatiri(kok, node, kanal), havuzKronSatiri(kok, node, kanal, o.yerelDk), istatistikKronSatiri(kok, node)));
+    return { kanal, mesaj: `Zamanlayıcı kuruldu: her saat 20. dakikada bir "${kanal}" dizisi çalışır. Kayıt: kayit/dizi-${kanal}.log. Hikâye havuzu her pazartesi 04:00'te (İstanbul) dolar: kayit/havuz-${kanal}.log. Instagram istatistiği her saat 05'te: kayit/istatistik.log` };
   }
 
   function kaldir(kanalAd) {
@@ -114,10 +131,10 @@ Register-ScheduledTask -TaskName '${havuzGorevAdi(kanal)}' -Action $a -Trigger $
     if (win) {
       const adlar = kanal ? [kanal] : kanallar(kok);
       const var_ = adlar.flatMap(k => [gorevAdi(k), havuzGorevAdi(k)]).filter(g => spawn('schtasks', ['/Query', '/TN', g]).status === 0);
-      return { dizi: var_, kuyruk: spawn('schtasks', ['/Query', '/TN', 'Video Mutfagi Kuyruk']).status === 0 };
+      return { dizi: var_, kuyruk: spawn('schtasks', ['/Query', '/TN', 'Video Mutfagi Kuyruk']).status === 0, istatistik: spawn('schtasks', ['/Query', '/TN', 'Video Mutfagi Istatistik']).status === 0 };
     }
     const l = satirlar(), isaret = kanal ? { test: x => diziIsareti(kanal).test(x) || havuzIsareti(kanal).test(x) } : herDiziSatiri;
-    return { dizi: l.filter(x => isaret.test(x)), kuyruk: l.some(kuyrukSatiriMi) };
+    return { dizi: l.filter(x => isaret.test(x)), kuyruk: l.some(kuyrukSatiriMi), istatistik: l.some(x => istatistikIsareti.test(x)) };
   }
   return { kur, kaldir, durum };
 }
@@ -135,5 +152,5 @@ function cli(argv = process.argv.slice(2), ortam = {}) {
   } catch (e) { console.error('\nHATA: ' + e.message + '\n'); process.exit(1); }
 }
 
-module.exports = { olustur, kronSatiri, havuzKronSatiri, diziIsareti, havuzIsareti, kanallar, kanalSec, ON };
+module.exports = { olustur, kronSatiri, havuzKronSatiri, istatistikKronSatiri, istatistikIsareti, diziIsareti, havuzIsareti, kanallar, kanalSec, ON };
 if (require.main === module) cli();

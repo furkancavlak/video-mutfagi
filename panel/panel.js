@@ -6,7 +6,7 @@
 //   node panel/panel.js [--port 4747] [--acma] [--kok <repo>]
 //   node panel/panel.js --ozet                    print the queue summary as JSON (the panel uses it over SSH)
 //   node panel/panel.js --zaman <is-id> "YYYY-MM-DD HH:MM"
-//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-metin <json>
+//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-metin <json> | --istatistik <json>
 //                                                 the Diziler page on a server: print JSON; on error "HATA: ..." and exit 1 (3 = lock busy, HTTP 409)
 //
 // Listens on 127.0.0.1 only; every API call carries a random key made at start (it is in the printed link).
@@ -225,12 +225,25 @@ function isListesi() {
   });
 }
 
-// ---------- Instagram: the account's own posts with their numbers (read only, at most once an hour, even when the refresh button is pressed)
+// ---------- Instagram: the account's own posts with their numbers. Furkan 31.10: the server snapshots Instagram once an
+// hour (instagram/istatistik.js); the panel reads the newest snapshot and never calls Instagram. Only when no snapshot
+// exists at all does it read Instagram itself, still at most once an hour.
+const IST = () => require('../instagram/istatistik.js');   // code from this repo, data from KOK
+function anliktanGonderiler(hesap) {
+  const ad = hesap || HESAP0, l = IST().anliklar(KOK, ad, 0, 8.64e15);
+  if (!l.length) return null;
+  const iyi = l.filter(x => !x.hata), s = iyi[iyi.length - 1], son = l[l.length - 1];
+  if (!s) return { zaman: son.zaman, bagli: false, hata: son.hata, gonderiler: [], kaynak: 'anlik' };
+  const gonderiler = (s.medya || []).filter(m => m.tur === 'reel').map(({ id, t, baslik, link, yorumlar, tur, ...m }) => ({ id, baslik, aciklama: baslik, link, zaman: t, ...m }));
+  return { zaman: s.zaman, bagli: true, hesap: s.kullanici || ad, gonderiler, kaynak: 'anlik', ...(son.hata ? { hata: son.hata, hata_zaman: son.zaman } : {}) };
+}
 const igSurer = new Map();
 // hesap: Instagram account (default oxygbio, whose cache keeps its old file name); P: paylas.js, injectable for tests
 async function instagram(yenile, hesap, P) {
   hesap = hesapGuvenli(hesapTemiz(hesap));
   const kendi = hesap && hesap !== HESAP0 ? hesap : null, onbellek = kendi ? path.join(KAYIT, `panel-instagram-${kendi}.json`) : ONBELLEK;
+  const an = anliktanGonderiler(kendi);
+  if (an) return an;
   const eski = okuJ(onbellek);
   if (eski && Date.now() - new Date(eski.zaman) < 60 * 60e3) return eski;   // Furkan: one Instagram read per hour, no more
   if (igSurer.has(onbellek)) return igSurer.get(onbellek);
@@ -267,6 +280,8 @@ const takipciOnbellek = new Map();
 async function takipci(hesap, P) {
   hesap = hesapGuvenli(hesapTemiz(hesap));
   const kendi = hesap && hesap !== HESAP0 ? hesap : null, ad = kendi || HESAP0, e = takipciOnbellek.get(ad);
+  const s = IST().sonAnlik(KOK, ad, { hatasiz: true });
+  if (s) return { bagli: true, takipci: s.takipci ?? null, zaman: s.zaman, kaynak: 'anlik' };
   if (e && Date.now() - e.t < 60 * 60e3) return e.j;
   P = P || igPaylas(); const a = P && P.readAyar(kendi || undefined);
   if (!a) return { bagli: false, takipci: null };
@@ -341,6 +356,17 @@ function bolumMp4(video, isMp4) {
   const c = v && path.join(v, 'cikti');
   if (c && fs.existsSync(c)) { const m = fs.readdirSync(c).filter(f => f.endsWith('.mp4')).sort((a, b) => /ucretli/.test(a) - /ucretli/.test(b)); if (m.length) return goreli(path.join(c, m[0])); }
   const j = dene(isMp4); return j && fs.existsSync(j) ? goreli(j) : null;
+}
+// ---------- İstatistikler: aggregates of the hourly snapshots (never Instagram), joined with the queue's posted jobs, the
+// series of every channel posting to this account and the video lengths (videolar/<ad>/ses/zaman.json → toplam)
+const istatistikGovde = b => { const h = hesapGuvenli(hesapTemiz(b.hesap)) || HESAP0, g = +b.gun; return { hesap: h, gun: [7, 28, 90].includes(g) ? g : 28 }; };
+function istatistikCevap(b) {
+  const { hesap, gun } = istatistikGovde(b);
+  const isler2 = ['paylasilan', 'bekleyen'].flatMap(k => isler(k)).filter(j => (isHesap(j) || HESAP0) === hesap);
+  const diziler = kanallar().filter(k => (kanalHesapOku(k) || HESAP0) === hesap).flatMap(k => { try { return DiziDepo().yukle(KOK, k).diziler || []; } catch (e) { return []; } });
+  const sure = {};
+  for (const j of isler2) if (j.video && /^videolar\/[\w.-]+$/.test(j.video)) { const z = okuJ(path.join(KOK, j.video, 'ses', 'zaman.json')); if (z && Number.isFinite(+z.toplam)) sure[j.video] = +(+z.toplam).toFixed(1); }
+  return IST().ozet({ kok: KOK, hesap, gun, ek: { isler: isler2, diziler, sure } });
 }
 // story-level text approval: onayla (with optional edited texts {n: text}, recap rule re-checked) or reddet (series cut,
 // story recorded in reddedilen.json). Under the series lock, like the other manual decisions.
@@ -530,6 +556,7 @@ async function api(req, u) {
   if (GET && yol === 'instagram') return instagram(u.searchParams.has('yenile'), u.searchParams.get('hesap'));
   if (GET && yol === 'dersler') return okuJ(DERSLER, []);
   if (GET && yol === 'takipci') return takipci(u.searchParams.get('hesap'));
+  if (GET && yol === 'istatistik') { const g = istatistikGovde({ hesap: u.searchParams.get('hesap'), gun: u.searchParams.get('gun') }); return sunucu ? sunucuJson('--istatistik', g) : istatistikCevap(g); }
   if (GET && yol === 'asamalar') return asamalar(u.searchParams.get('kanal') || undefined);
   if (GET && yol === 'diziler') return sunucu ? sunucuJson('--diziler', kanalAdi(u.searchParams.get('kanal'))) : dizilerCevap(u.searchParams.get('kanal'));
   if (!GET && yol === 'dizi/karar') return sunucu ? sunucuJson('--dizi-karar', diziKararGovde(b)) : diziKarar(b);
@@ -597,7 +624,7 @@ const sunucuYap = () => http.createServer(async (req, res) => {
   } catch (e) { gonder(res, e.kod || 400, { hata: e.message }); }
 });
 
-module.exports = { kanca, kuyrukOzet, instagram, takipci, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
+module.exports = { kanca, kuyrukOzet, instagram, takipci, istatistikCevap, asamalar, kanalBilgi, ekleHesap, ozetCevap, sunucuYap, onizlemeAd, ANAHTAR };
 if (require.main !== module) return;
 
   // ozellik: lets the home panel know this copy has the --dizi* flags
@@ -609,7 +636,7 @@ if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'
 
 // Diziler on a server: the panel on the home PC calls these over ssh (same functions as the local routes)
 const jsonArg = s => { let j; try { j = JSON.parse(s); } catch { throw new Error('bozuk istek'); } if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('bozuk istek'); return j; };
-for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))], ['--dizi-havuz-one', s => havuzOne(jsonArg(s))]]) {
+for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--istatistik', s => istatistikCevap(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))], ['--dizi-havuz-one', s => havuzOne(jsonArg(s))]]) {
   if (!process.argv.includes(bayrak)) continue;
   let cikti;
   try { cikti = JSON.stringify(fn(arg(bayrak))); } catch (e) { console.error('HATA: ' + e.message); process.exit(e.kod === 409 ? 3 : 1); }
