@@ -93,7 +93,7 @@ test('episode states: finished jobs wait for approval or the slot, Bolum.video e
   assert.strictEqual(u.o.onayGerekli, true);
   assert.strictEqual(u.o.kok, kok);
   assert.strictEqual(u.o.hazir.ad, 'eksi-42-b1');
-  assert.deepStrictEqual(u.o.hazir.video_ek, { dizi: 'eksi-42', bolum: 1, toplam_bolum: 3, etiket: 'DENEME HİKÂYE · BÖLÜM 1' });
+  assert.deepStrictEqual(u.o.hazir.video_ek, { dizi: 'eksi-42', ton: 'komik', bolum: 1, toplam_bolum: 3, etiket: 'DENEME HİKÂYE · BÖLÜM 1' });
   d = dizi(); await uretBolum(ctx, d, 3, { onayGerekli: false, kok, uret: (u = sahte('uretildi')), yaz: sessiz });
   assert.strictEqual(d.bolumler[2].durum, 'sirada');
   assert.match(u.o.hazir.aciklama_instagram, /Bölüm 3 · Final\./);
@@ -110,7 +110,7 @@ test('a 5-episode and a 2-episode series: total, label and description follow th
   const f = async (cx, id, o) => { f.o = o; return { durum: 'uretildi', dir: path.join(kok, 'videolar', `${cx.kanal}-${o.hazir.ad}`) }; };
   const d = dizi({ bolumler: [1, 2, 3, 4, 5].map(n => ({ n, metin: P.slice(0, 2).join('\n\n'), durum: 'metin' })) });
   await uretBolum(ctx, d, 4, { kok, uret: f, yaz: sessiz });
-  assert.deepStrictEqual(f.o.hazir.video_ek, { dizi: 'eksi-42', bolum: 4, toplam_bolum: 5, etiket: 'DENEME HİKÂYE · BÖLÜM 4' });
+  assert.deepStrictEqual(f.o.hazir.video_ek, { dizi: 'eksi-42', ton: 'komik', bolum: 4, toplam_bolum: 5, etiket: 'DENEME HİKÂYE · BÖLÜM 4' });
   assert.match(f.o.hazir.aciklama_instagram, /Bölüm 4 · Devamı yarın\./);
   await uretBolum(ctx, d, 5, { kok, uret: f, yaz: sessiz });
   assert.match(f.o.hazir.aciklama_instagram, /Bölüm 5 · Final\./);
@@ -281,4 +281,28 @@ test('a series episode on a channel without an account stops for a human before 
   assert.strictEqual(r.durum, 'kontrol_et');
   assert.match(d.bolumler[0].karar_neden, /kanalın Instagram hesabı tanımlı değil/);
   assert.deepStrictEqual(kuyrukDosyalari(kok), []);
+});
+
+// ---- tone (dizi/ton.js): caption, playful tags and the video's tone follow the series
+test('tone: a hüzünlü series gets no 👀 / #komik, no playful tags in the voiced script, ton in video.json', () => {
+  const { hazirYap } = require('../uret-bolum');
+  const d = dizi({ ton: 'hüzünlü', konu: 'aile', bolumler: [1, 2].map(n => ({ n, metin: n === 1 ? '[sarcastic] Annem hastalandı. [laughs softly] Hastaneye gittik.\n\n[sighs] Doktor konuştu.' : 'Önceki bölümde annem hastalandı.\n\nSonra.', durum: 'metin' })) });
+  const h = hazirYap(d, 1);
+  assert.strictEqual(h.video_ek.ton, 'hüzünlü');
+  const metin = h.satirlar.map(s => s.metin).join('\n');
+  assert.doesNotMatch(metin, /sarcastic|laughs/); assert.match(metin, /\[sighs\] Doktor konuştu\./); assert.match(metin, /^Annem hastalandı\. Hastaneye gittik\./);
+  assert.strictEqual(h.aciklama_instagram, 'Annem hastalandı.\nBölüm 1 · Devamı yarın.\n#yaşanmışhikaye #hikaye #anı #aile');
+  // komik (and a series from before the label) keeps the old caption and its tags
+  const k = hazirYap(dizi(), 1);
+  assert.strictEqual(k.video_ek.ton, 'komik'); assert.match(k.aciklama_instagram, / 👀\n.*\n#hikaye #yaşanmışhikaye #anı #komik$/);
+});
+
+test('ton.js: playful tags found and removed, soft ones kept; tags per tone and theme', () => {
+  const T = require('../ton');
+  assert.deepStrictEqual(T.sakaEtiketleri('[mischievously] a [sad] b [Laughs Softly] c [proudly] [whispers]'), ['[mischievously]', '[Laughs Softly]', '[proudly]']);
+  assert.strictEqual(T.sakaEtiketleriniSil('[excited] Buldum! [sighs] Ama geçti.'), 'Buldum! [sighs] Ama geçti.');
+  assert.strictEqual(T.etiketler('ciddi', 'ihanet'), '#yaşanmışhikaye #hikaye #anı #ihanet');
+  assert.strictEqual(T.etiketler('ürkütücü', 'bilinmeyen'), '#yaşanmışhikaye #hikaye #anı');
+  assert.strictEqual(T.etiketler('komik', 'aşk'), '#hikaye #yaşanmışhikaye #anı #komik');
+  assert.deepStrictEqual([T.ciddiMi('komik'), T.ciddiMi('hüzünlü'), T.ciddiMi(undefined)], [false, true, false]);
 });

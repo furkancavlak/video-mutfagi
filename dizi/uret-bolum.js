@@ -7,7 +7,7 @@
 const path = require('path');
 const O = require('../konu/ortak');
 
-const ETIKETLER = '#hikaye #yaşanmışhikaye #anı #komik';
+const TON = require('./ton');
 const temiz = s => String(s || '').replace(/\[[^\]]*\]\s*/g, '').replace(/\s+/g, ' ').trim();   // eleven_v3 audio tags out
 // sentences end at a single "." or at "!"/"?"; an ellipsis ("Bir sabah... tanımadığım") is a pause, not an end
 function cumleler(s) {
@@ -41,20 +41,23 @@ function satirlaraBol(metin) {
 }
 
 // a series has its own episode count (2-5): only its last episode says Final
-function aciklamaYaz(metin, n, toplam = 3) {
+// the caption follows the tone: 👀 and #komik only for a komik story; a sad or serious one gets neutral tags and no emoji
+function aciklamaYaz(metin, n, toplam = 3, ton = 'komik', konu = null) {
   const ilk = temiz(cumleler(temiz(metin))[0]);
-  return `${ilk} 👀\nBölüm ${n} · ${n < toplam ? 'Devamı yarın.' : 'Final.'}\n${ETIKETLER}`;
+  return `${ilk}${TON.ciddiMi(ton) ? '' : ' 👀'}\nBölüm ${n} · ${n < toplam ? 'Devamı yarın.' : 'Final.'}\n${TON.etiketler(ton, konu)}`;
 }
 
 function hazirYap(dizi, n) {
   const b = (dizi.bolumler || []).find(x => x.n === n);
   if (!b) throw new Error(`bölüm ${n} yok`);
+  // a series older than the tone label may still carry a playful audio tag: a non-komik story is never voiced with one
+  const ton = TON.tonDogru(dizi.ton) ? dizi.ton : 'komik', metin = TON.ciddiMi(ton) ? TON.sakaEtiketleriniSil(b.metin) : b.metin;
   return {
     ad: `${dizi.id}-b${n}`, baslik: `${dizi.baslik_kisa || dizi.baslik} · Bölüm ${n}`,
-    satirlar: satirlaraBol(b.metin).map(metin => ({ rol: 'anlatici', metin })),
+    satirlar: satirlaraBol(metin).map(m => ({ rol: 'anlatici', metin: m })),
     anlaticilar: { anlatici: dizi.anlatici.ses },
-    video_ek: { dizi: dizi.id, bolum: n, toplam_bolum: dizi.bolumler.length, etiket: `${String(dizi.baslik_kisa || dizi.baslik).toLocaleUpperCase('tr')} · BÖLÜM ${n}` },
-    aciklama_instagram: aciklamaYaz(b.metin, n, dizi.bolumler.length),
+    video_ek: { dizi: dizi.id, ton, bolum: n, toplam_bolum: dizi.bolumler.length, etiket: `${String(dizi.baslik_kisa || dizi.baslik).toLocaleUpperCase('tr')} · BÖLÜM ${n}` },
+    aciklama_instagram: aciklamaYaz(metin, n, dizi.bolumler.length, ton, dizi.konu),
   };
 }
 

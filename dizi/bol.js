@@ -1,10 +1,12 @@
 // Splits a found story into 2-5 faithful episodes (model) and checks nothing was invented (second model call).
 // The story's own turns set the cuts and the episode count; length is guidance (~1 min), never a rejection. Rejected:
 // a source too short to split at all (kisa), no story at all (hikaye_degil, own first call), a broken shape after one retry (bicim),
-// invention after one retry (sadakat).
+// invention after one retry (sadakat), a non-komik story that still reads mocking or identifying after one retry
+// (hassasiyet). The split labels the tone (dizi/ton.js): komik | hüzünlü | ürkütücü | ciddi.
 const fs = require('fs'), path = require('path');
 const LLM = require('../konu/llm');
 const { cumleler } = require('./uret-bolum');
+const TON = require('./ton');
 
 const MIN_KAYNAK = 250, MIN_SAYI = 2, MAX_SAYI = 5;
 const OZET_KELIME = 25, OZET_CUMLE = 2;              // hard limit for the recap; the prompt asks for 1 sentence, 15 words
@@ -17,9 +19,11 @@ const say = m => temiz(m).split(/\s+/).filter(Boolean).length;
 const paragraflar = m => String(m || '').split(/\n\s*\n/).map(x => x.trim()).filter(Boolean);
 const oneri = kelime => Math.max(MIN_SAYI, Math.min(MAX_SAYI, Math.round(kelime * .75 / BOLUM_KELIME)));
 
-function sesSec(anlatici, roster) {
+// narrator by gender and age; among those, one whose kit entry lists this tone (roster `ton: [...]`) comes first
+function sesSec(anlatici, roster, ton) {
   const a = anlatici || {};
-  const r = (roster || []).find(x => x.cinsiyet && x.yas && x.cinsiyet === a.cinsiyet && x.yas === a.yas);
+  const uyan = (roster || []).filter(x => x.cinsiyet && x.yas && x.cinsiyet === a.cinsiyet && x.yas === a.yas);
+  const r = (ton && uyan.find(x => Array.isArray(x.ton) && x.ton.includes(ton))) || uyan.find(x => !Array.isArray(x.ton) || !ton || x.ton.includes(ton)) || uyan[0];
   return r ? { ses: r.elevenlabs_voice, ad: r.ad } : { ...BURAK };
 }
 
@@ -36,7 +40,10 @@ function ornekOku(ctx) {
 // shape problems in Turkish (they go back to the model on the retry), [] when the split is usable
 function bicimHatalari(o) {
   if (!o || !Array.isArray(o.bolumler)) return ['bolumler listesi yok'];
-  const B = o.bolumler, h = [];
+  const B = o.bolumler, h = [], ton = o.ton && o.ton.deger;
+  if (!TON.tonDogru(ton)) h.push(`ton.deger ${JSON.stringify(ton || null)}: komik, hüzünlü, ürkütücü ya da ciddi olmalı`);
+  // a sad, eerie or serious story never gets a playful audio tag
+  if (TON.ciddiMi(ton)) B.forEach((b, i) => { const e = TON.sakaEtiketleri(b && b.metin); if (e.length) h.push(`Bölüm ${i + 1}: ${ton} bir hikâyede şakacı ses etiketi olmaz: ${[...new Set(e)].join(' ')}`); });
   if (B.length < MIN_SAYI || B.length > MAX_SAYI) h.push(`${B.length} bölüm var; ${MIN_SAYI}-${MAX_SAYI} bölüm olmalı`);
   B.forEach((b, i) => {
     const n = i + 1, m = b && typeof b.metin === 'string' ? b.metin.trim() : '';
@@ -66,6 +73,8 @@ async function bol(ctx, hikaye, { calistir } = {}) {
   const ortak = { ayar: llm, model: llm && llm.model_metin, efor: llm && llm.efor_metin, json: true, calistir };
   const ornek = ornekOku(ctx);
   const bolun = not => LLM.sor(LLM.istem('hikaye-bol', { dil: hikaye.dil || 'tr', baslik: hikaye.baslik || '', metin: hikaye.metin, kelime: String(kelime), oneri: String(oneri(kelime)), ornek, not }), { ...ortak, is: 'hikaye-bol' });
+  // the sensitivity check of a non-komik story: mocking wording, victim-blaming, gratuitous detail, identifying details
+  const hassas = o => LLM.sor(LLM.istem('hikaye-hassasiyet', { ton: o.ton.deger, kaynak: hikaye.metin, bolumler: o.bolumler.map((b, i) => `Bölüm ${i + 1}:\n${b.metin}`).join('\n\n'), isimler: JSON.stringify(o.degisen_isimler || {}) }), { ...ortak, is: 'hikaye-hassasiyet' });
   const denetle = o => LLM.sor(LLM.istem('hikaye-sadakat', { kaynak: hikaye.metin, bolumler: o.bolumler.map((b, i) => `Bölüm ${i + 1}:\n${b.metin}`).join('\n\n') }), { ...ortak, is: 'hikaye-sadakat' });
   const bicimNotu = h => '## Önceki denemenin biçim hataları (düzelt)\n\n' + h.map(x => '- ' + x).join('\n');
   const red = (cikti, h) => ({ ok: false, neden: 'bicim', ayrinti: { hatalar: h, kelimeler: cikti && Array.isArray(cikti.bolumler) ? cikti.bolumler.map(b => say(b && b.metin)) : [] } });
@@ -91,11 +100,30 @@ async function bol(ctx, hikaye, { calistir } = {}) {
     s = await denetle(cikti);
     if (!s.gecti) return { ok: false, neden: 'sadakat', ayrinti: Array.isArray(s.eklenenler) ? s.eklenenler : [] };
   }
+  // a flagged non-komik story is rewritten once (and checked for fidelity again); a second flag stops for Furkan
+  if (TON.ciddiMi(cikti.ton.deger)) {
+    let hs = await hassas(cikti);
+    if (!hs.gecti) {
+      const sorunlar = Array.isArray(hs.sorunlar) ? hs.sorunlar : [];
+      const not = `## Önceki denemenin hassasiyet sorunları (bu bir ${cikti.ton.deger} hikâye: saygıyla anlat)\n\n` + sorunlar.map(x => '- ' + x).join('\n') + '\n\nKaynakta olmayan hiçbir şey ekleme; isimleri değiştir, kişiyi ya da kurumu tanıtacak ayrıntıyı çıkar.';
+      ({ c: cikti, h } = await duzelt(not, await bolun(not)));
+      if (h.length) return red(cikti, h);
+      s = await denetle(cikti);
+      if (!s.gecti) return { ok: false, neden: 'sadakat', ayrinti: Array.isArray(s.eklenenler) ? s.eklenenler : [] };
+      if (TON.ciddiMi(cikti.ton.deger)) {
+        hs = await hassas(cikti);
+        if (!hs.gecti) return { ok: false, neden: 'hassasiyet', ayrinti: Array.isArray(hs.sorunlar) ? hs.sorunlar : [] };
+      }
+    }
+  }
+  const ton = cikti.ton.deger;
   const dizi = {
     id: hikaye.id, kanal: ctx.kanal, baslik: hikaye.baslik, baslik_kisa: cikti.baslik_kisa,
     kaynak: { tur: hikaye.tur, url: hikaye.url, puan: hikaye.puan, id: hikaye.id },
     durum: 'aktif', olusturma: new Date().toISOString(),
-    anlatici: sesSec(cikti.anlatici, ctx.kimlik && ctx.kimlik.anlaticilar),
+    ton, ton_neden: String(cikti.ton.neden || '').slice(0, 300),
+    ...(TON.ciddiMi(ton) ? { hassasiyet_notu: String(cikti.hassasiyet || '').slice(0, 600) } : {}),
+    anlatici: sesSec(cikti.anlatici, ctx.kimlik && ctx.kimlik.anlaticilar, ton),
     degisen_isimler: cikti.degisen_isimler || {},
     bolumler: cikti.bolumler.map((b, i) => ({ n: i + 1, metin: b.metin.trim(), durum: 'metin' })),
   };

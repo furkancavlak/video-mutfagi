@@ -10,14 +10,16 @@ const ctx = (kimlik = {}, dir = os.tmpdir()) => ({ kanal: 'k', dir, kimlik: { an
 const hikaye = n => ({ id: 'eksi-1', tur: 'eksi', url: 'https://x/1', baslik: 'b', metin: kelimeler(n), puan: 500, dil: 'tr' });
 // episodes 2+ open with a one-sentence recap paragraph, as the prompt asks
 const ozetli = (i, govde, ozet = 'Önceki bölümde kapı çalmıştı.') => i ? `${ozet}\n\n${govde}` : govde;
-const bolCikti = (n, adet = 3) => ({ baslik_kisa: 'Kısa', anlatici: { cinsiyet: 'erkek', yas: 'genc', ton: 'sakin' }, bolumler: Array.from({ length: adet }, (_, i) => ({ metin: ozetli(i, kelimeler(n)) })), degisen_isimler: { Ali: 'Kemal' } });
+const bolCikti = (n, adet = 3) => ({ baslik_kisa: 'Kısa', anlatici: { cinsiyet: 'erkek', yas: 'genc', ton: 'sakin' }, bolumler: Array.from({ length: adet }, (_, i) => ({ metin: ozetli(i, kelimeler(n)) })), degisen_isimler: { Ali: 'Kemal' }, ton: { deger: 'komik', neden: 'yazar gülerek anlatıyor' } });
 // split + fidelity calls go to f.calls; the story check (hikaye-mi, always first) to f.kontrol
-function stub(sadakat, bolum, hikaye = () => ({ hikaye: true, neden: 'anı' })) {
+// the sensitivity check (non-komik stories) goes to f.hassas
+function stub(sadakat, bolum, hikaye = () => ({ hikaye: true, neden: 'anı' }), hassasiyet = () => ({ gecti: true, sorunlar: [] })) {
   const f = async (istem) => {
     if (/"hikaye": true, "neden"/.test(istem)) { f.kontrol.push(istem); return { metin: JSON.stringify(hikaye()) }; }
+    if (/"gecti": true, "sorunlar"/.test(istem)) { f.hassas.push(istem); return { metin: JSON.stringify(hassasiyet()) }; }
     f.calls.push(istem); return { metin: JSON.stringify(/"gecti"/.test(istem) ? sadakat() : bolum()) };
   };
-  f.calls = []; f.kontrol = [];
+  f.calls = []; f.kontrol = []; f.hassas = [];
   return f;
 }
 
@@ -79,7 +81,7 @@ test('recap rule: still too long after the retry is "bicim" with the reasons', a
 });
 
 test('bicimHatalari: recap limits, recap paragraph, no recap in episode 1', () => {
-  const B = (...m) => ({ bolumler: m.map(metin => ({ metin })) });
+  const B = (...m) => ({ ton: { deger: 'komik' }, bolumler: m.map(metin => ({ metin })) });
   const govde = kelimeler(100);
   assert.deepStrictEqual(bicimHatalari(B(govde, 'Önceki bölümde kapı çalmıştı.\n\n' + govde)), []);
   // two sentences within 25 words still pass (hard limit), an ellipsis is no sentence end
@@ -153,4 +155,49 @@ test('hikayeMi: a real anecdote passes; the check runs once before the split', a
   const c2 = stub(() => ({ gecti: true, eklenenler: [] }), () => bolCikti(140));
   assert.strictEqual((await bol(ctx(), hikaye(500), { calistir: c2 })).ok, true);
   assert.strictEqual(c2.kontrol.length, 1);
+});
+
+// ---- tone (Furkan 31.10: serious stories are welcome, told with respect)
+const tonlu = (deger, ek = {}) => () => ({ ...bolCikti(140), ton: { deger, neden: 'kayıp' }, hassasiyet: 'gerçek bir ölüm var', ...ek });
+
+test('tone: stored on the Dizi with its reason; a non-komik story carries its sensitivity note, a komik one none', async () => {
+  const c = stub(() => ({ gecti: true, eklenenler: [] }), tonlu('hüzünlü'));
+  const r = await bol(ctx(), hikaye(500), { calistir: c });
+  assert.deepStrictEqual([r.ok, r.dizi.ton, r.dizi.ton_neden, r.dizi.hassasiyet_notu], [true, 'hüzünlü', 'kayıp', 'gerçek bir ölüm var']);
+  assert.strictEqual(c.hassas.length, 1, 'non-komik: one sensitivity check');
+  assert.match(c.calls[0], /Ton \(önce buna karar ver\)/);
+  const k = await bol(ctx(), hikaye(500), { calistir: stub(() => ({ gecti: true, eklenenler: [] }), () => bolCikti(140)) });
+  assert.deepStrictEqual([k.dizi.ton, 'hassasiyet_notu' in k.dizi], ['komik', false]);
+});
+
+test('tone: a missing/unknown tone and a playful tag in a sad story are shape errors (retried once)', () => {
+  const B = (deger, ...m) => ({ ton: deger ? { deger } : undefined, bolumler: m.map(metin => ({ metin })) });
+  const govde = kelimeler(100);
+  assert.match(bicimHatalari(B(null, govde, 'Önceki bölümde x oldu.\n\n' + govde))[0], /ton\.deger/);
+  assert.match(bicimHatalari(B('neşeli', govde, 'Önceki bölümde x oldu.\n\n' + govde))[0], /komik, hüzünlü, ürkütücü ya da ciddi/);
+  const h = bicimHatalari(B('hüzünlü', '[sarcastic] ' + govde, 'Önceki bölümde x oldu.\n\n[laughs softly] ' + govde + ' [sighs]'));
+  assert.deepStrictEqual(h, ['Bölüm 1: hüzünlü bir hikâyede şakacı ses etiketi olmaz: [sarcastic]', 'Bölüm 2: hüzünlü bir hikâyede şakacı ses etiketi olmaz: [laughs softly]']);
+  assert.deepStrictEqual(bicimHatalari(B('ciddi', '[softly] ' + govde + ' [whispers]', 'Önceki bölümde x oldu.\n\n[sad] ' + govde)), [], 'soft tags are fine');
+  assert.deepStrictEqual(bicimHatalari(B('komik', '[sarcastic] ' + govde, 'Önceki bölümde x oldu.\n\n' + govde)), [], 'a komik story may joke where the source does');
+});
+
+test('sensitivity: flagged once -> rewritten with the notes and checked again; flagged twice -> "hassasiyet"', async () => {
+  let n = 0;
+  const c = stub(() => ({ gecti: true, eklenenler: [] }), tonlu('ciddi'), undefined, () => (n++ === 0 ? { gecti: false, sorunlar: ['Bölüm 2: hastane adı geçiyor'] } : { gecti: true, sorunlar: [] }));
+  const r = await bol(ctx(), hikaye(500), { calistir: c });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(c.hassas.length, 2);
+  assert.match(c.calls.find(x => /hassasiyet sorunları/.test(x)), /hastane adı geçiyor/);
+  const c2 = stub(() => ({ gecti: true, eklenenler: [] }), tonlu('ürkütücü'), undefined, () => ({ gecti: false, sorunlar: ['Bölüm 1: alaycı'] }));
+  const r2 = await bol(ctx(), hikaye(500), { calistir: c2 });
+  assert.deepStrictEqual([r2.ok, r2.neden, r2.ayrinti], [false, 'hassasiyet', ['Bölüm 1: alaycı']]);
+  assert.strictEqual(c2.hassas.length, 2);
+  assert.match(c2.hassas[0], /ürkütücü bir gerçek hikâyeden/);
+});
+
+test('sesSec: among voices of the right gender and age, one that lists the tone comes first', () => {
+  const roster = [{ ad: 'Neşeli', elevenlabs_voice: 'V1', cinsiyet: 'erkek', yas: 'genc', ton: ['komik'] }, { ad: 'Sakin', elevenlabs_voice: 'V2', cinsiyet: 'erkek', yas: 'genc', ton: ['hüzünlü', 'ciddi'] }];
+  assert.strictEqual(sesSec({ cinsiyet: 'erkek', yas: 'genc' }, roster, 'hüzünlü').ad, 'Sakin');
+  assert.strictEqual(sesSec({ cinsiyet: 'erkek', yas: 'genc' }, roster, 'komik').ad, 'Neşeli');
+  assert.strictEqual(sesSec({ cinsiyet: 'erkek', yas: 'genc' }, roster, 'ürkütücü').ad, 'Neşeli', 'no voice lists it: the first of the right gender and age');
 });

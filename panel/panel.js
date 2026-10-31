@@ -225,14 +225,14 @@ function isListesi() {
   });
 }
 
-// ---------- Instagram: the account's own posts with their numbers (read only, cached 15 min)
+// ---------- Instagram: the account's own posts with their numbers (read only, cached 30 min)
 const igSurer = new Map();
 // hesap: Instagram account (default oxygbio, whose cache keeps its old file name); P: paylas.js, injectable for tests
 async function instagram(yenile, hesap, P) {
   hesap = hesapGuvenli(hesapTemiz(hesap));
   const kendi = hesap && hesap !== HESAP0 ? hesap : null, onbellek = kendi ? path.join(KAYIT, `panel-instagram-${kendi}.json`) : ONBELLEK;
   const eski = okuJ(onbellek);
-  if (!yenile && eski && Date.now() - new Date(eski.zaman) < 15 * 60e3) return eski;
+  if (!yenile && eski && Date.now() - new Date(eski.zaman) < 30 * 60e3) return eski;
   if (igSurer.has(onbellek)) return igSurer.get(onbellek);
   const is = (async () => {
     P = P || igPaylas(); const a = P && P.readAyar(kendi || undefined);
@@ -254,12 +254,12 @@ async function instagram(yenile, hesap, P) {
   return is;
 }
 
-// follower count for the calendar's numbers (read only, cached 15 min in memory); null when the API does not give it
+// follower count for the calendar's numbers (read only, cached 30 min in memory); null when the API does not give it
 const takipciOnbellek = new Map();
 async function takipci(hesap, P) {
   hesap = hesapGuvenli(hesapTemiz(hesap));
   const kendi = hesap && hesap !== HESAP0 ? hesap : null, ad = kendi || HESAP0, e = takipciOnbellek.get(ad);
-  if (e && Date.now() - e.t < 15 * 60e3) return e.j;
+  if (e && Date.now() - e.t < 30 * 60e3) return e.j;
   P = P || igPaylas(); const a = P && P.readAyar(kendi || undefined);
   if (!a) return { bagli: false, takipci: null };
   const m = await P.graph('GET', '/me', { fields: 'followers_count', access_token: a.token }).catch(() => null);
@@ -382,7 +382,8 @@ function dizilerCevap(kanal) {
   const D = DiziDepo();
   const bek = isler('bekleyen');
   // a series waiting for its text approval carries the episode texts (the panel edits them before approving)
-  const diziler = (D.yukle(KOK, kanal).diziler || []).map(d => ({ ...d, metin_onay: D.metinOnay(d), bolumler: (d.bolumler || []).map(({ metin, ...b }) => {
+  // a series from before the tone label shows the kit's assignment (dizi.ton_atamalari) or komik until the run writes it
+  const diziler = (D.yukle(KOK, kanal).diziler || []).map(d => ({ ...d, ton: d.ton || (ayar.ton_atamalari || {})[d.id] || 'komik', metin_onay: D.metinOnay(d), bolumler: (d.bolumler || []).map(({ metin, ...b }) => {
     const j = b.video ? bek.find(x => x.video === b.video) : null;
     return { ...b, ...(D.metinOnay(d) === 'bekliyor' ? { metin } : {}), kelime: String(metin || '').split(/\s+/).filter(Boolean).length, mp4: bolumMp4(b.video, j && j.mp4), kuyruk_id: j ? j.id : null, kuyruk_onay_gerekli: j ? !!j.onay_gerekli : null,
       izin: { devam: !D.kararHata(d, b.n, 'devam'), kes: !D.kararHata(d, b.n, 'kes'), tekrar: !D.tekrarHata(d, b.n) } };   // the same checks the POST routes use

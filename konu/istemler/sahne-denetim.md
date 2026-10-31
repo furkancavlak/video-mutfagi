@@ -6,6 +6,10 @@ Metin (satırlar 0'dan sayılır, köşeli parantezde satırın saniye aralığ�
 
 Kanalın görsel kimliği: {{gorsel_dil}}
 
+Hikâyenin tonu ve tonun kuralları (komik olmayan hikâyede kurala uymayan her kare `yuksek` ağırlıklı sorundur: çizgi film abartısı, komik ifade ya da tabela, zıplayan hareket, parlak neşeli renk, ölüm/hastalık/şiddetin çıplak gösterilmesi):
+
+{{ton}}
+
 Görsel kimlikte `kurallar` varsa her maddesi kesindir: bir kareyi her kurala karşı ayrı ayrı kontrol et. Kural çiğneyen her kare `yuksek` ağırlıklı sorundur ve sahne "tamam" olmaz.
 
 Altyazı kartı (alttaki krem kutu) ve sol üstteki marka etiketi otomatik gelir; onları değerlendirme, yalnız animasyonun onlara binip binmediğine bak.

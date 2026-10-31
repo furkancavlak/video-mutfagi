@@ -141,12 +141,22 @@ function kapanisYukle(kimlik, kimlikDir) {
   if (!fs.existsSync(f)) fail(`kapanış kartı yok: ${f} (kimlik.json → marka.kapanis)`);
   return guvenliYukle(f);
 }
+// ---- story tone (video.json ton: komik | hüzünlü | ürkütücü | ciddi; dizi/ton.js). Anything but komik is told with respect:
+// no comic sound, calmer voice settings, a softer closing bed (or none).
+const ciddiTon = ton => ['hüzünlü', 'ürkütücü', 'ciddi'].includes(ton);
+// the kit's tts settings for this tone (kimlik.json → tts.ton_ayarlari[ton] over tts.voice_settings)
+const tonSesAyari = (tts, ton) => ({ ...((tts || {}).voice_settings || {}), ...((((tts || {}).ton_ayarlari) || {})[ton] || {}) });
+// the closing bed: marka.kapanis_muzigi for komik, marka.kapanis_muzigi_ciddi (or nothing) for a serious tone
+const kapanisMuzigi = (marka, ton) => (ciddiTon(ton) ? (marka || {}).kapanis_muzigi_ciddi : (marka || {}).kapanis_muzigi) || null;
+
 // The card's sound effects ({sfx: [[name, time, volume]]}) as mix inputs: kanal/<kanal>/muzik/<name>.wav. A name that is
 // not a plain word or has no file is skipped, a non-numeric volume plays at 1 (the card still plays, just without that sound).
-function kapanisSesleri(k, kimlikDir) {
+// A serious tone keeps only soft effects (names starting with "yumusak"): no pop, whoosh, tick, ding or sting.
+function kapanisSesleri(k, kimlikDir, ton) {
   const out = [];
   for (const e of (k && k.sfx) || []) {
     const [ad, t, ses] = [].concat(e), f = /^[\w-]+$/.test(String(ad)) ? path.join(kimlikDir, 'muzik', ad + '.wav') : null;
+    if (ciddiTon(ton) && !/^yumusak/.test(String(ad))) continue;
     if (f && fs.existsSync(f) && isFinite(t)) out.push([f, Math.max(0, +t), isFinite(ses) && ses !== null && ses !== '' ? +ses : 1]);   // odd volume -> 1, never NaN
   }
   return out;
@@ -196,8 +206,9 @@ function markaKapanis(T, kimlik, C, { video = {}, kimlikDir } = {}) {
   const sonraki = bolum && (!toplam || bolum < toplam) ? bolum + 1 : null;
   const hesap = m.hesap || kimlik.hesap;
   // zaman.json from mix.js carries the card start; an older one without it gets the card at the very end
-  const bas = Z.kapanis != null ? Z.kapanis : T.END - kart({ C, at, bas: 0, sonraki, hesap }).sure;
-  const k = kart({ C, at, bas, sonraki, hesap });
+  const ton = video.ton || 'komik';
+  const bas = Z.kapanis != null ? Z.kapanis : T.END - kart({ C, at, bas: 0, sonraki, hesap, ton }).sure;
+  const k = kart({ C, at, bas, sonraki, hesap, ton });
   if (video.etiket) {
     // the episode marker always shows: a long title gets a smaller font, and only the title part is cut with "…"
     const { ad, ek, px } = etiketParcala(video.etiket, bolum);
@@ -273,4 +284,4 @@ function renderEt(hfDir, mixWav, outMp4, kodlama = KODLAMA) {
   console.log(`\nHAZIR: ${outMp4} (${(fs.statSync(outMp4).size / 1048576).toFixed(1)} MB)`);
 }
 
-module.exports = { etiketParcala, KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, kapanisSesleri, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };
+module.exports = { ciddiTon, tonSesAyari, kapanisMuzigi, etiketParcala, KOK, AYAR_DIR, W, H, FPS, fail, okuJson, sh, sure, videoYukle, guvenliYukle, anahtar, zamanlama, at, f1, tohum, palet, altyazi, marka, kapanisYukle, kapanisSesleri, KISA_FONT, esc, sayfaYaz, kareler, renderEt, norm };

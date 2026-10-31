@@ -545,12 +545,16 @@ function olayAc(e) {
   if (q('[data-m-tekrar]')) q('[data-m-tekrar]').onclick = () => { kapat(); dzTekrar({ did: ep.d.id, dn: ep.b.n }); };
 }
 // ---------------- Story text approval: read (and edit) every episode text, then approve the whole story or reject it
+// story tone chip (komik | hüzünlü | ürkütücü | ciddi) and, for a serious story, the sensitivity note
+const TON_AD = { 'komik': 'Komik', 'hüzünlü': 'Hüzünlü', 'ürkütücü': 'Ürkütücü', 'ciddi': 'Ciddi' };
+const tonCip = d => d && TON_AD[d.ton] ? `<span class="ton-cip ton-${esc(d.ton === 'hüzünlü' ? 'huzunlu' : d.ton === 'ürkütücü' ? 'urkutucu' : d.ton)}" title="${esc(d.ton_neden || '')}">${esc(TON_AD[d.ton])}</span>` : '';
 function metinAc(d) {
   const url = guvenli(d.kaynak && d.kaynak.url), B = d.bolumler || [];
   pencere(`<div class="mt-modal">
-    <div class="p-ust"><div class="m-cipler">${durumCip('metin')}${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${kanalRozet(true)}</div><button class="kapat" data-kapat aria-label="Kapat">✕</button></div>
+    <div class="p-ust"><div class="m-cipler">${durumCip('metin')}${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}${kanalRozet(true)}</div><button class="kapat" data-kapat aria-label="Kapat">✕</button></div>
     <h2>${esc(d.baslik_kisa || d.baslik)}</h2>
     <div class="mt-bilgi">${d.baslik && d.baslik !== d.baslik_kisa ? `<span>Kaynak başlık: ${esc(d.baslik)}</span>` : ''}${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Kaynağı aç</a>` : ''}${d.anlatici ? `<span>Ses: ${esc(d.anlatici.ad || d.anlatici.ses)}</span>` : ''}<span>${esc(B.length)} bölüm</span></div>
+    ${d.ton && d.ton !== 'komik' ? `<div class="mt-hassas"><b>Hassasiyet notu</b>${d.ton_neden ? `<span>Ton: ${esc(d.ton_neden)}</span>` : ''}<span>${esc(d.hassasiyet_notu || 'Bu hikâye komik değil: dalga geçen, hafife alan ya da kişiyi tanıtan bir söz kalmasın.')}</span></div>` : ''}
     <p class="ince-yazi">Metni oku, istersen düzelt. Onaylayınca bölümler sırayla seslendirilir; her videoyu paylaşmadan önce ayrıca onaylarsın. 2. bölümden itibaren ilk paragraf tek cümlelik "Önceki bölümde…" özetidir (en fazla 15 kelime).</p>
     <form id="mt-form" class="mt-form">${B.map(b => `<label class="mt-bolum"><span>Bölüm ${esc(b.n)}<small data-mt-say="${esc(b.n)}"></small></span><textarea name="b${esc(b.n)}" rows="9" data-ilk="${esc(b.metin || '')}">${esc(b.metin || '')}</textarea></label>`).join('')}
       <span class="dz-hata" id="mt-hata" role="alert"></span>
@@ -626,7 +630,7 @@ function dizilerCiz() {
   $('#dz-liste').innerHTML = DZ.diziler.length ? DZ.diziler.map(d => {
     const url = guvenli(d.kaynak && d.kaynak.url), top = hikayeToplam(d);
     return `<article class="kart hk hk-${esc(d.durum)}"><div class="hk-ust"><div class="hk-ad">
-        <div class="hk-cipler">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${d.metin_onay === 'bekliyor' && d.durum === 'aktif' ? `<span class="hk-durum hk-durum-metin">${ikon('kalem', 12)}Metin onayı bekliyor</span>` : `<span class="hk-durum hk-durum-${esc(d.durum)}">${esc(DIZI_DURUM[d.durum] || d.durum)}</span>`}</div>
+        <div class="hk-cipler">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}${d.metin_onay === 'bekliyor' && d.durum === 'aktif' ? `<span class="hk-durum hk-durum-metin">${ikon('kalem', 12)}Metin onayı bekliyor</span>` : `<span class="hk-durum hk-durum-${esc(d.durum)}">${esc(DIZI_DURUM[d.durum] || d.durum)}</span>`}</div>
         <h3>${esc(d.baslik_kisa || d.baslik)}</h3><small>${d.baslik && d.baslik !== d.baslik_kisa ? esc(d.baslik) + ' · ' : ''}${d.anlatici ? 'Ses: ' + esc(d.anlatici.ad || d.anlatici.ses) : ''}</small></div>
       <div class="hk-sag">${d.metin_onay === 'bekliyor' && d.durum === 'aktif' ? `<button class="dugme mor" data-metin-onay="${esc(d.id)}">${ikon('kalem', 15)}Metni oku ve onayla</button>` : `<span class="hk-top">${top != null ? esc(sayi(top)) : '—'}<small>hikâye izlenmesi</small></span>`}${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Kaynak</a>` : ''}</div></div>
       <div class="hk-bolumler" style="--n:${(d.bolumler || []).length}">${(d.bolumler || []).map(b => hkBolum(d, b)).join('')}</div></article>`;

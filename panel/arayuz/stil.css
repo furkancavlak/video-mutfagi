@@ -563,3 +563,12 @@ dialog{width:min(880px,94vw);margin:auto}
 .yuk .ik{animation:don 1.2s linear infinite}
 .iskelet{display:block;width:46px;height:20px;border-radius:6px;background:linear-gradient(90deg,var(--paper-2),var(--line-2),var(--paper-2));background-size:200% 100%;animation:iskelet 1.2s ease-in-out infinite}
 @keyframes iskelet{0%{background-position:100% 0}100%{background-position:-100% 0}}
+
+/* ===== story tone chip + sensitivity note (approval card, Hikâyeler) ===== */
+.ton-cip{display:inline-block;font:700 10.5px/1 var(--body);letter-spacing:.07em;text-transform:uppercase;padding:4px 7px;border-radius:6px;background:var(--line);color:var(--ink-2)}
+.ton-komik{background:var(--honey-soft);color:var(--sun-t)}
+.ton-huzunlu{background:var(--sky-soft);color:var(--sky-t)}
+.ton-urkutucu{background:var(--mor-soft);color:var(--mor-t)}
+.ton-ciddi{background:var(--slate-soft);color:var(--ink-2)}
+.mt-hassas{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line-2);border-left:4px solid var(--sky);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--ink-2)}
+.mt-hassas b{color:var(--ink);font-size:13px;letter-spacing:.04em;text-transform:uppercase}

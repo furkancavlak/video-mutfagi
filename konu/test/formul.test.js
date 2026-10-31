@@ -92,11 +92,11 @@ test('scene writing: own time limit (konu.json llm.sahne_zaman_asimi_dk, default
 test('scene prompts: channel rules (gorsel_dil.kurallar) and the four bans reach writer and reviewer', () => {
   const LLM = require('../llm');
   const gd = { cizgi: 'düz', kurallar: ['UYDURMA YAZI YOK: KURAL123'] };
-  const yaz = LLM.istem('sahne-yaz', { formul: '', renkler: {}, gorsel_dil: gd, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '', kurallar: U.kesinKurallar(gd), parca: '', kutuphane: '' });
+  const yaz = LLM.istem('sahne-yaz', { ton: '', formul: '', renkler: {}, gorsel_dil: gd, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '', kurallar: U.kesinKurallar(gd), parca: '', kutuphane: '' });
   assert.match(yaz, /KURAL123/);
   assert.match(yaz, /`kurallar` varsa her madde kesindir/);
   for (const re of [/Dolgu sahne yok/, /Metinde geçmeyen slogan/, /tam opak/, /ince çizgi/]) assert.match(yaz, re);
-  const den = LLM.istem('sahne-denetim', { sayfalar: 'a.jpg', gorsel_dil: gd, satirlar: '0: metin' });
+  const den = LLM.istem('sahne-denetim', { ton: '', sayfalar: 'a.jpg', gorsel_dil: gd, satirlar: '0: metin' });
   assert.match(den, /KURAL123/);
   assert.match(den, /Kural çiğneyen her kare `yuksek`/);
   for (const re of [/dolgu kare/, /uydurma yazı/, /yarı saydam katman/, /ince çizgi/]) assert.match(den, re);
@@ -169,7 +169,7 @@ test('kesinKurallar: channel rules as a list at the top of the scene prompt', ()
   assert.strictEqual(U.kesinKurallar({ kurallar: ['A', 'B'] }), '- A\n- B');
   assert.match(U.kesinKurallar({}), /ek kuralı yok/);
   const LLM = require('../llm');
-  const s = LLM.istem('sahne-yaz', { formul: '', renkler: {}, gorsel_dil: {}, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '', kurallar: '- KURAL9', parca: 'PARCA7', kutuphane: 'KUTUP3' });
+  const s = LLM.istem('sahne-yaz', { ton: 'TON5', formul: '', renkler: {}, gorsel_dil: {}, karakter: '', motor: '', satirlar: '', sure: '1', marka: '0', ornek: '', duzeltme: '', kurallar: '- KURAL9', parca: 'PARCA7', kutuphane: 'KUTUP3' });
   assert.ok(s.indexOf('KURAL9') < s.indexOf('## Kurallar (uy)') && s.indexOf('PARCA7') < s.indexOf('## Motor'), 'hard rules and the chunk note come first');
   assert.match(s, /Havada asılı nesne yok/);
 });
@@ -186,7 +186,7 @@ test('anlarMetni: the words heard just before a still; korSorunlari: every unrec
   // the blind prompts carry no script, the compare prompt does
   const LLM = require('../llm');
   assert.doesNotMatch(LLM.istem('kare-kor', { sayfalar: 'a.jpg' }), /söylenen/);
-  assert.match(LLM.istem('kare-karsilastir', { kareler: '- 64.0 sn | söylenen: "araba"' }), /"eksikler"/);
+  assert.match(LLM.istem('kare-karsilastir', { ton: '', kareler: '- 64.0 sn | söylenen: "araba"' }), /"eksikler"/);
 });
 
 test('kutuphane: approved characters of the channel and of this story only, sandboxed, usage noted', () => {
@@ -216,4 +216,20 @@ test('kutuphane: approved characters of the channel and of this story only, sand
   assert.deepStrictEqual(ids, ['anlatici', 'kiz']);
   Kut.kullanimEkle(dir, ids, 'videolar/k-d1-b2'); Kut.kullanimEkle(dir, ids, 'videolar/k-d1-b2');
   assert.deepStrictEqual(Kut.oku(dir).karakterler.find(x => x.id === 'kiz').bolumler, ['videolar/k-d1-b2']);
+});
+
+// ---- story tone in the scenes (Furkan 31.10)
+test('tonMetni: a serious tone gets the muted / gentle / respectful rules plus the kit lines; komik the usual note', () => {
+  const m = U.tonMetni('hüzünlü', { ton_kurallari: { 'hüzünlü': ['KITKURAL'] } });
+  assert.match(m, /tonu: \*\*hüzünlü\*\*/); assert.match(m, /ter damlası, şok çizgileri/); assert.match(m, /çıplak gösterilmez/); assert.match(m, /- KITKURAL$/);
+  assert.match(U.tonMetni('komik', {}), /komik: kanalın her zamanki/);
+  assert.match(U.tonMetni(undefined, {}), /komik/);
+  const LLM = require('../llm');
+  for (const [ad, deg] of [['sahne-denetim', { sayfalar: 'a', gorsel_dil: {}, satirlar: '' }], ['kare-karsilastir', { kareler: '' }]]) assert.match(LLM.istem(ad, { ...deg, ton: 'TONX' }), /TONX/);
+});
+
+test('korSorunlari: comic exaggeration seen by the blind reviewer in a serious story is a heavy issue', () => {
+  const s = U.korSorunlari([], [{ saniye: 12, sorun: 'cenazede ter damlalı yüz' }, { sorun: 'saniyesiz' }]);
+  assert.deepStrictEqual(s.map(x => [x.saniye, x.agirlik]), [[12, 'yuksek']]);
+  assert.match(s[0].sorun, /tonuna uymuyor: cenazede ter damlalı yüz/);
 });

@@ -219,3 +219,14 @@ test('metin onayı: list shows waiting texts; onayla with an edit, recap rule en
     assert.ok(oku('kayit/dizi/kanal_a/reddedilen.json').reddedilen.some(x => x.id === 'm2' && x.neden === 'metin reddedildi'));
   } finally { sifirla(); }
 });
+
+test('ton: the list shows each series tone; an old series gets the kit assignment (dizi.ton_atamalari) or komik', async () => {
+  const konu = JSON.parse(JSON.stringify(KONU)); konu.dizi.ton_atamalari = { d2: 'ciddi' };
+  yaz('kanal/kanal_a/konu.json', konu);
+  const v = taban(); v.diziler[2].ton = 'hüzünlü'; v.diziler[2].hassasiyet_notu = 'gerçek bir ölüm'; yaz(DZ, v);
+  try {
+    const l = await istek('GET', '/api/diziler?kanal=kanal_a');
+    assert.deepStrictEqual(l.j.diziler.map(d => [d.id, d.ton]), [['d1', 'komik'], ['d2', 'ciddi'], ['d3', 'hüzünlü'], ['d4', 'komik']]);
+    assert.strictEqual(l.j.diziler[2].hassasiyet_notu, 'gerçek bir ölüm');
+  } finally { yaz('kanal/kanal_a/konu.json', KONU); sifirla(); }
+});
