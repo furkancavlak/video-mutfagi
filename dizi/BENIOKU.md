@@ -43,6 +43,13 @@ Test: `node --test "dizi/test/*.test.js"`
 - Panel: `POST /api/dizi/metin {kanal, id, karar: 'onayla'|'reddet', metinler?: {n: metin}}` (kilitli). Düzeltilen metinde yalnız özet kuralı yeniden denetlenir (tek cümle, en fazla 15 kelime). `reddet`: dizi `kesildi` ("metin reddedildi"), hikâye `reddedilen.json`'a. Liste API'si `metin_onay`'ı ve bekleyen dizilerin metinlerini verir. Sunucu: `--dizi-metin`.
 - Bu özellikten önceki diziler (alan yok) `onaylandi` sayılır; `calistir` ilk koşuda alanı açıkça yazar.
 
+## Bölüm kapağı (dizi/kapak.js, uretim/kapak.js)
+
+- Kit `kimlik.json → marka.kapak` tanımlıysa her bölüm profil ızgarası için kendi kapağını alır; video yine doğrudan hikâyenin kancasıyla açılır.
+- `dizi.renk`: dizinin ilk üretilen bölümünde `marka.kapak.renkler` paletinden seçilir (tona uyan girdiler, son 20 dizinin renklerinden Lab ΔE ile en uzak, eşitlikte dizi id'siyle tohumlu seçim) ve hep kalır.
+- `dizi.kapak_baslik`: en fazla 28 karakter, 2-5 kelime, büyük harf kanca başlık. Bölme istemi 3 seçenek ister (`kapak_basliklari`); kurala uyan ve konunun kendisi olmayanların en kısası alınır. Yoksa ilk üretilen bölümde ayrı bir çağrı (`konu/istemler/kapak-baslik.md`), o da olmazsa `baslik_kisa`dan temizlenmiş kısa başlık. Var olan başlığa (panelde düzeltilen) dokunulmaz.
+- Bölüm üretimi `video.json → kapak { renk, baslik }` yazar; render sonrası `node uretim/kapak.js <video>` → `cikti/<ad>-kapak.jpg` (bölümün kendi sahnesi, en çok kişinin göründüğü an, altyazısız). Kapak başarısız olursa bölüm durmaz, kapaksız paylaşılır. Kuyruk işi `kapak` alanını taşır; paylaşım `cover_url` gönderir, reddedilirse bir kez kapaksız dener.
+
 ## Ton (dizi/ton.js)
 
 - Bölme hikâyenin tonunu etiketler: `komik | hüzünlü | ürkütücü | ciddi` (`ton`, `ton_neden`; komik değilse `hassasiyet_notu`). Komik olmayanda şakacı ses etiketi bölmede biçim hatasıdır; hassasiyet denetimi (`hikaye-hassasiyet.md`) alay, mağduru suçlama, gereksiz ayrıntı ve kimlik ele veren ayrıntıyı arar: bir kez yeniden yazılır, ikinci takılmada `hassasiyet` (reddedilen.json'da `furkan_baksin`).

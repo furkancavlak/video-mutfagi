@@ -23,6 +23,8 @@ node kuyruk/kuyruk.js zamanlayici kur | kaldir | durum
 
 Her hesabın kendi anahtarı olur: `oxygbio` (varsayılan) `~/.video-mutfagi/instagram.json`, diğerleri `instagram-<ad>.json`. Bağlamak için `node instagram/paylas.js kaydet <token-dosyasi> --hesap <ad>`; `kontrol`, `yenile`, `gonder` komutları da `--hesap <ad>` alır. Kuyruğa `ekle ... --hesap <ad>` ile atanan iş o hesaptan çıkar, `--hesap` yoksa `oxygbio` sayılır. `ayarlar/kuyruk.json` içindeki `hesaplar.<ad>` altına o hesabın `paylasim_saatleri` ve `gunluk_en_fazla` değerleri yazılır; yoksa hesabı o olan dizi kanalının `konu.json → dizi` bölümü (`saatler`, onay döneminde `onay_gunluk`, sonra `gunluk_hedef`), o da yoksa genel değerler geçerli (`kurulum/SUNUCU.md`). Günlük sınır ve boş saat hesabı her hesap için ayrı sayılır; bir hesabın dolması diğerini bekletmez. `durum` komutu bulunan her anahtar dosyası için süre uyarısı verir.
 
+İş dosyasında `kapak` (repoya göre jpg yolu, dizi bölümleri) varsa Instagram'a `cover_url` olarak gider: `klasor` yolunda jpg videonun yanına kendi rastgele adıyla kopyalanır ve videoyla birlikte silinir, `tunel` yolunda aynı tünelden verilir. Kapak reddedilirse video bir kez kapaksız denenir; kapak yüzünden paylaşım durmaz.
+
 ## Kurulum (ajan yapar, kullanıcı onaylar)
 
 1. `kuyruk/ayar-ornek.json` dosyasını `ayarlar/kuyruk.json` olarak kopyala. Kullanıcıya iki şey sor ve dosyaya yaz:
