@@ -683,6 +683,7 @@ function metinAc(d) {
     <div class="mt-bilgi">${d.baslik && d.baslik !== d.baslik_kisa ? `<span>Kaynak başlık: ${esc(d.baslik)}</span>` : ''}${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Kaynağı aç</a>` : ''}${d.anlatici ? `<span>Ses: ${esc(d.anlatici.ad || d.anlatici.ses)}</span>` : ''}<span>${esc(B.length)} bölüm</span></div>
     ${d.ton && d.ton !== 'komik' ? `<div class="mt-hassas"><b>Hassasiyet notu</b>${d.ton_neden ? `<span>Ton: ${esc(d.ton_neden)}</span>` : ''}<span>${esc(d.hassasiyet_notu || 'Bu hikâye komik değil: dalga geçen, hafife alan ya da kişiyi tanıtan bir söz kalmasın.')}</span></div>` : ''}
     <p class="ince-yazi">Metni oku, istersen düzelt. Onaylayınca bölümler sırayla seslendirilir; her videoyu paylaşmadan önce ayrıca onaylarsın. 2. bölümden itibaren ilk paragraf tek cümlelik "Önceki bölümde…" özetidir (en fazla 15 kelime).</p>
+    ${tesekkurBolum(d)}
     <form id="mt-form" class="mt-form">${B.map(b => `<label class="mt-bolum"><span>Bölüm ${esc(b.n)}<small data-mt-say="${esc(b.n)}"></small></span><textarea name="b${esc(b.n)}" rows="9" data-ilk="${esc(b.metin || '')}">${esc(b.metin || '')}</textarea></label>`).join('')}
       <span class="dz-hata" id="mt-hata" role="alert"></span>
       <div class="m-dugmeler"><button type="submit" class="dugme buyuk sari">${ikon('tik', 18)}Metni onayla</button><button type="button" class="dugme buyuk tehlike" data-mt-reddet>${ikon('carpi', 18)}Hikâyeyi reddet</button></div>
@@ -758,7 +759,7 @@ function dizilerCiz() {
     const url = guvenli(d.kaynak && d.kaynak.url), top = hikayeToplam(d);
     return `<article class="kart hk hk-${esc(d.durum)}"><div class="hk-ust"><div class="hk-ad">
         <div class="hk-cipler">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}${d.metin_onay === 'bekliyor' && d.durum === 'aktif' ? `<span class="hk-durum hk-durum-metin">${ikon('kalem', 12)}Metin onayı bekliyor</span>` : `<span class="hk-durum hk-durum-${esc(d.durum)}">${esc(DIZI_DURUM[d.durum] || d.durum)}</span>`}</div>
-        <h3>${esc(d.baslik_kisa || d.baslik)}</h3><small>${d.baslik && d.baslik !== d.baslik_kisa ? esc(d.baslik) + ' · ' : ''}${d.anlatici ? 'Ses: ' + esc(d.anlatici.ad || d.anlatici.ses) : ''}</small></div>
+        <h3><button class="hk-baslik-dugme" data-hikaye-ac="${esc(d.id)}" title="Hikâyenin ayrıntısı ve teşekkür listesi">${esc(d.baslik_kisa || d.baslik)}</button></h3><small>${d.baslik && d.baslik !== d.baslik_kisa ? esc(d.baslik) + ' · ' : ''}${d.anlatici ? 'Ses: ' + esc(d.anlatici.ad || d.anlatici.ses) : ''}</small></div>
       <div class="hk-sag">${d.metin_onay === 'bekliyor' && d.durum === 'aktif' ? `<button class="dugme mor" data-metin-onay="${esc(d.id)}">${ikon('kalem', 15)}Metni oku ve onayla</button>` : `<span class="hk-top">${top != null ? esc(sayi(top)) : '—'}<small>hikâye izlenmesi</small></span>`}${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Kaynak</a>` : ''}</div></div>
       <div class="hk-bolumler" style="--n:${(d.bolumler || []).length}">${(d.bolumler || []).map(b => hkBolum(d, b)).join('')}</div></article>`;
   }).join('') : '<div class="liste-bos">Henüz hikâye yok. Zamanlayıcı çalışınca ilk hikâyeler burada görünür.</div>';
@@ -826,6 +827,54 @@ async function dzKarar(d) {
   catch (err) { bildir(err.message, true); }
 }
 
+
+// ---------------- Teşekkür listesi: the commenters a story's last episode thanks by name (dizi.tesekkur). Furkan pastes
+// usernames from the app; they are cleaned exactly as the closing card reads them (no @, [\w.]{1,30}, unique).
+const tesekkurTemiz = t => [...new Set(String(t || '').split(/[\s,]+/).map(x => x.trim().replace(/^@+/, '')).filter(x => /^[\w.]{1,30}$/.test(x)))];
+const sonBolumUretildi = d => { const b = (d.bolumler || [])[(d.bolumler || []).length - 1]; return !!b && (!!b.video || ['onay-bekliyor', 'sirada', 'yayinda', 'olculdu', 'kontrol_et'].includes(b.durum)); };
+function tesekkurBolum(d) {
+  const L = Array.isArray(d.tesekkur) ? d.tesekkur : [], sunucuEski = dzM() === 'sunucu' && !svOzellik('tesekkur');
+  return `<section class="tsk" data-tsk-id="${esc(d.id)}">
+    <div class="tsk-ust"><h3>${ikon('kalem', 15)}Teşekkür listesi</h3><span class="tsk-say">${L.length} isim</span></div>
+    <p class="ince-yazi">Hikâyenin son bölümünün sonunda outro'da gösterilir; son bölüm üretilmeden önce ekle.</p>
+    ${sonBolumUretildi(d) ? `<div class="on-not">${ikon('uyari', 14)}<span>Son bölüm zaten üretildi: bu liste o videoda görünmez.</span></div>` : ''}
+    <textarea class="tsk-alan" rows="4" spellcheck="false" placeholder="kullanici_adi, @baska.kullanici …  (her satıra, virgülle ya da boşlukla ayır)" data-ilk="${esc(L.join('\n'))}">${esc(L.join('\n'))}</textarea>
+    <div class="tsk-alt"><span class="dz-hata" role="alert"></span>${sunucuEski ? '<span class="tsk-not">Sunucudaki panel güncellenince kaydedilebilir.</span>' : ''}<button type="button" class="dugme sari" data-tsk-kaydet ${sunucuEski ? 'disabled' : ''}>${ikon('tik', 15)}Kaydet</button></div>
+  </section>`;
+}
+function tesekkurBagla() {
+  document.addEventListener('input', e => {
+    const t = e.target; if (!t.classList || !t.classList.contains('tsk-alan')) return;
+    const n = tesekkurTemiz(t.value).length, s = t.closest('.tsk').querySelector('.tsk-say');
+    s.textContent = `${n} isim${t.value !== t.dataset.ilk ? ' · kaydedilmedi' : ''}`;
+  });
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('[data-tsk-kaydet]'); if (!b) return;
+    e.stopPropagation();
+    const kutu = b.closest('.tsk'), id = kutu.dataset.tskId, alan = kutu.querySelector('.tsk-alan'), h = kutu.querySelector('.dz-hata');
+    b.disabled = true; h.textContent = '';
+    try {
+      const r = await api('dizi/tesekkur', { kanal, makine: dzM(), id, isimler: alan.value });
+      const L = Array.isArray(r.tesekkur) ? r.tesekkur : tesekkurTemiz(alan.value);
+      const d = dzGecerli() && DZ.diziler.find(x => x.id === id); if (d) d.tesekkur = L;
+      alan.value = L.join('\n'); alan.dataset.ilk = alan.value; kutu.querySelector('.tsk-say').textContent = `${L.length} isim`;
+      bildir(`Teşekkür listesi kaydedildi: ${L.length} isim`);
+    } catch (err) { h.textContent = err.message; bildir(err.message, true); }
+    b.disabled = false;
+  }, true);
+}
+// a story's own window (from a Hikâyeler card): its facts, episodes and the thanks list
+function hikayeDetayAc(id) {
+  const d = dzGecerli() && DZ.diziler.find(x => x.id === id); if (!d) return;
+  const url = guvenli(d.kaynak && d.kaynak.url), top = hikayeToplam(d);
+  pencere(`<div class="gp"><div class="gp-ust"><div><span class="on-m-tur">Hikâye</span><h2>${esc(d.baslik_kisa || d.baslik)}</h2></div><button class="kapat" data-kapat aria-label="Kapat (Esc)">✕</button></div>
+    <div class="gp-liste on-m-govde">
+      <div class="m-cipler">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}<span class="hk-durum hk-durum-${esc(d.durum)}">${esc(DIZI_DURUM[d.durum] || d.durum)}</span><span class="on-bilgi">${esc((d.bolumler || []).length)} bölüm</span>${top != null ? `<span class="on-bilgi">${ikon('goz', 12)}${esc(sayi(top))} izlenme</span>` : ''}${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Kaynak</a>` : ''}</div>
+      ${d.baslik && d.baslik !== d.baslik_kisa ? `<div class="ince-yazi">Kaynak başlık: ${esc(d.baslik)}${d.anlatici ? ' · Ses: ' + esc(d.anlatici.ad || d.anlatici.ses) : ''}</div>` : ''}
+      <div class="hd-bolumler">${(d.bolumler || []).map(b => { const s = bolumDurum(b, d), v = bolumIzlenme(b); return `<button class="hd-b d-${s}" data-bolum="${esc(d.id)}|${esc(b.n)}"><b>Bölüm ${esc(b.n)}</b><span class="hd-d"><i class="nokta-d"></i>${esc(DURUM[s].ad)}</span><span>${v != null ? `${ikon('goz', 12)}${esc(sayi(v))}` : ''}</span></button>`; }).join('')}</div>
+      ${tesekkurBolum(d)}
+    </div><div class="gp-alt"><span></span><span class="ince-yazi">Esc ile kapat</span><span></span></div></div>`, 'gun-panel on-pencere on-d');
+}
 
 // ---------------- Onaylar: a calm inbox of everything that waits for Furkan. Each section is a grid of compact cards;
 // a card opens the whole item in the centred window (‹ › walk the section, Esc closes). After a text or video decision
@@ -913,6 +962,7 @@ function onAc(anahtarId) {
     govde = `<div class="m-cipler">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}<span class="on-bilgi">${esc(B.length)} bölüm</span>${d.anlatici ? `<span class="on-bilgi">Ses: ${esc(d.anlatici.ad || d.anlatici.ses)}</span>` : ''}${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Ekşi'de aç</a>` : ''}</div>
       ${d.baslik && d.baslik !== d.baslik_kisa ? `<div class="ince-yazi">Kaynak başlık: ${esc(d.baslik)}</div>` : ''}
       ${hassasMi(d) ? `<div class="mt-hassas"><b>Hassasiyet notu</b>${d.ton_neden ? `<span>Ton: ${esc(d.ton_neden)}</span>` : ''}<span>${esc(d.hassasiyet_notu || 'Bu hikâye komik değil: dalga geçen, hafife alan ya da kişiyi tanıtan bir söz kalmasın.')}</span></div>` : ''}
+      ${tesekkurBolum(d)}
       <form class="on-form" id="on-form">${B.map(b => `<label class="on-bolum"><span>Bölüm ${esc(b.n)}<small data-say>${kelimeSay(b.metin || '')} kelime</small></span><textarea name="b${esc(b.n)}" data-ilk="${esc(b.metin || '')}">${esc(b.metin || '')}</textarea></label>`).join('')}
         <span class="dz-hata" role="alert"></span>
         <div class="on-dugmeler"><button type="submit" class="dugme buyuk sari">${ikon('tik', 18)}Metni onayla</button><button type="button" class="dugme buyuk tehlike" data-on-reddet>${ikon('carpi', 18)}Hikâyeyi reddet</button></div></form>`;
@@ -1180,6 +1230,7 @@ document.addEventListener('click', e => {
   if (d.kapat !== undefined) $('#pencere').close();
   else if (d.olay !== undefined) { const x = OL[+d.olay]; if (x) olayAc(x); }
   else if (d.onaylarGit !== undefined) onaylaraGit(d.onaylarGit);
+  else if (d.hikayeAc) hikayeDetayAc(d.hikayeAc);
   else if (d.metinOnay) { const x = DZ && !DZ.hata && DZ.diziler.find(y => y.id === d.metinOnay); if (x) metinAc(x); }
   else if (d.bolum) { const [did, n] = d.bolum.split('|'); bolumAc(did, n); }
   else if (d.istGun) { istGun = +d.istGun; ISV = null; istatistikSayfaCiz(); istatistikYukle(); }
@@ -1239,6 +1290,7 @@ document.addEventListener('mouseover', e => {
 $('#fikir-ekle').addEventListener('submit', e => { e.preventDefault(); islem('fikir', { is: 'ekle', kanal, baslik: $('#fe-baslik').value, oncul: $('#fe-oncul').value }, 'Fikir eklendi').then(() => { $('#fikir-ekle').reset(); $('#fikir-ekle').hidden = true; }); });
 $('#dz-ayar').addEventListener('submit', dzKaydet);
 onaylarBagla();
+tesekkurBagla();
 $('#dz-ayar').addEventListener('input', () => { dzKirli = true; });
 let boyutT; window.addEventListener('resize', () => { clearTimeout(boyutT); boyutT = setTimeout(() => { if (O && $('#s-istatistik').classList.contains('on')) istatistikSayfaCiz(); }, 200); });
 $('#pencere').addEventListener('close', () => { const v = $('#pencere video'); if (v) v.pause(); });
