@@ -23,10 +23,16 @@ const paragraflar = m => String(m || '').split(/\n\s*\n/).map(x => x.trim()).fil
 const oneri = kelime => Math.max(MIN_SAYI, Math.min(MAX_SAYI, Math.round(kelime * .75 / BOLUM_KELIME)));
 
 // narrator by gender and age; among those, one whose kit entry lists this tone (roster `ton: [...]`) comes first
-function sesSec(anlatici, roster, ton) {
+// among the voices that fit equally well, the story id picks one (Furkan 01.11: not always Burak); the same story always
+// gets the same voice, and without an id the first one is kept
+function sesSec(anlatici, roster, ton, id) {
   const a = anlatici || {};
   const uyan = (roster || []).filter(x => x.cinsiyet && x.yas && x.cinsiyet === a.cinsiyet && x.yas === a.yas);
-  const r = (ton && uyan.find(x => Array.isArray(x.ton) && x.ton.includes(ton))) || uyan.find(x => !Array.isArray(x.ton) || !ton || x.ton.includes(ton)) || uyan[0];
+  const tonlu = ton ? uyan.filter(x => Array.isArray(x.ton) && x.ton.includes(ton)) : [];
+  const serbest = uyan.filter(x => !Array.isArray(x.ton) || !ton || x.ton.includes(ton));
+  const aday = tonlu.length ? tonlu : serbest.length ? serbest : uyan;
+  let h = 0; for (const c of String(id || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const r = aday.length ? aday[id ? h % aday.length : 0] : null;
   return r ? { ses: r.elevenlabs_voice, ad: r.ad } : { ...BURAK };
 }
 
@@ -134,7 +140,7 @@ async function bol(ctx, hikaye, { calistir } = {}) {
     durum: 'aktif', olusturma: new Date().toISOString(),
     ton, ton_neden: String(cikti.ton.neden || '').slice(0, 300),
     ...(TON.ciddiMi(ton) ? { hassasiyet_notu: String(cikti.hassasiyet || '').slice(0, 600) } : {}),
-    anlatici: sesSec(cikti.anlatici, ctx.kimlik && ctx.kimlik.anlaticilar, ton),
+    anlatici: sesSec(cikti.anlatici, ctx.kimlik && ctx.kimlik.anlaticilar, ton, hikaye.id),
     degisen_isimler: cikti.degisen_isimler || {},
     bolumler: cikti.bolumler.map((b, i) => ({ n: i + 1, metin: b.metin.trim(), durum: 'metin' })),
   };

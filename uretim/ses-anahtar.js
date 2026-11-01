@@ -30,7 +30,7 @@ const toplamYeter = (durumlar, karakter) => {
   const g = durumlar.filter(d => !d.gecersiz);
   return g.some(d => d.kalan == null) || g.reduce((a, d) => a + d.kalan, 0) >= karakter;
 };
-// the account ran out mid-step (another job spent it, or the estimate was low): try the next key
-const kotaBitti = (status, metin) => status === 401 && /quota_exceeded|character.?limit|credits/i.test(metin) || status === 402 && /quota|credits/i.test(metin);
+// the account ran out mid-step (another job spent it, or the estimate was low) or has an unpaid invoice: try the next key
+const kotaBitti = (status, metin) => (status === 401 || status === 402) && /quota_exceeded|character.?limit|credits|payment_issue|payment_required|failed or incomplete payment/i.test(metin);
 
 module.exports = { anahtarlar, durumOku, sec, toplamYeter, kotaBitti };
