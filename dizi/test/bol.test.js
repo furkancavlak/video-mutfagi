@@ -208,3 +208,12 @@ test('bicimHatalari: episode 1 opening on an eventless intro is sent back (openi
   assert.ok(bicimHatalari(o('Hâlâ hatırladıkça gülümsediğim bir hikâyem var. Uçaktaydım.')).some(h => /olaysız/.test(h)));
   assert.ok(!bicimHatalari(o('Tanımadığım bir numara beni 3-J velileri grubuna ekledi. Çocuğum yok.')).some(h => /olaysız/.test(h)));
 });
+
+test('sesSec: the story id spreads stories over the voices that fit; one story always gets the same voice', () => {
+  const roster = [{ ad: 'Burak', elevenlabs_voice: 'B', cinsiyet: 'erkek', yas: 'genc' }, { ad: 'Arman', elevenlabs_voice: 'A', cinsiyet: 'erkek', yas: 'genc' }, { ad: 'Yigit', elevenlabs_voice: 'Y', cinsiyet: 'erkek', yas: 'genc' }, { ad: 'Gokce', elevenlabs_voice: 'G', cinsiyet: 'kadin', yas: 'genc' }];
+  const ad = id => sesSec({ cinsiyet: 'erkek', yas: 'genc' }, roster, 'komik', id).ad;
+  const secilen = new Set(Array.from({ length: 30 }, (_, i) => ad('eksi-' + (1000 + i * 7919))));
+  assert.deepStrictEqual([...secilen].sort(), ['Arman', 'Burak', 'Yigit']);
+  assert.strictEqual(ad('eksi-42'), ad('eksi-42'));
+  assert.strictEqual(sesSec({ cinsiyet: 'kadin', yas: 'genc' }, roster, 'komik', 'eksi-42').ad, 'Gokce');
+});

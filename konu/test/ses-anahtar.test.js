@@ -36,5 +36,6 @@ test('sec / toplamYeter: the main remainder is used first, then the backup; unkn
 test('kotaBitti: quota errors move to the next key, other errors do not', () => {
   assert.ok(SA.kotaBitti(401, '{"detail":{"status":"quota_exceeded"}}'));
   assert.ok(!SA.kotaBitti(401, '{"detail":{"status":"invalid_api_key"}}'));
+  assert.ok(SA.kotaBitti(401, '{"detail":{"type":"payment_required","code":"payment_issue","message":"Your subscription has a failed or incomplete payment."}}'));
   assert.ok(!SA.kotaBitti(500, 'quota'));
 });
