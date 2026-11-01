@@ -97,7 +97,7 @@ function planYap({ diziler = [], reyting = null, isler = [], ayar = {}, simdi = 
     kararlar.push({ tur: 'isaret', dizi: s.d.id, neden: `reyting düşük (R ${Math.round(s.R)}), izleniyor` });
 
   const geri = s => { s.yedek = false; const e = G.diziler[s.d.id]; if (e) { delete e.yedek; delete e.zayif; } };
-  const ata = (sl, s, neden) => { sl.atanan = { dizi: s.d.id, bolum: s.kuyruk.shift() }; sl.neden = neden; s.son = sl.t; s.atandi++; if (s.stok) { s.stok = false; s.basladi = true; } };
+  const ata = (sl, s, neden, bn) => { if (bn != null) s.kuyruk.splice(s.kuyruk.indexOf(bn), 1); sl.atanan = { dizi: s.d.id, bolum: bn ?? s.kuyruk.shift() }; sl.neden = neden; s.son = sl.t; s.atandi++; if (s.stok) { s.stok = false; s.basladi = true; } };
   const bos = sl => !sl.atanan && !sl.kilitli && !sl.dolu;
   const uygun = (s, t) => s.kuyruk.length && (s.son == null || t - s.son >= MIN_ARA);
 
@@ -115,6 +115,16 @@ function planYap({ diziler = [], reyting = null, isler = [], ayar = {}, simdi = 
       if (s && s.kuyruk[0] === e.bolum) ata(sl, s, sl.neden); else sl.atanan = e ? { dizi: e.dizi, bolum: e.bolum } : null;
       if (!e) sl.dolu = true;
     } else if (!e) { sl.dolu = true; sl.neden = 'dizi dışı paylaşım (kuyrukta)'; }
+  }
+
+  // 1b. episodes pinned by hand (bolum.sabit_zaman, panel): their own locked slot at exactly that time, never reassigned
+  for (const s of S.values()) for (const bn of s.kuyruk.slice()) {
+    const t = D.sabitZaman((s.d.bolumler || []).find(x => x.n === bn)); if (t == null || t <= simdi || t > simdi + UFUK) continue;
+    const ayni = x => !!x.atanan && x.atanan.dizi === s.d.id && x.atanan.bolum === bn;
+    let sl = slotlar.find(x => Math.abs(x.t - t) < 30 * 60e3 && (ayni(x) || (!x.atanan && !x.dolu)));
+    if (!sl) { sl = { t, atanan: null, kilitli: false, neden: null, kuyrukta: null }; slotlar.push(sl); slotlar.sort((a, b) => a.t - b.t); }
+    sl.kilitli = true; sl.neden = 'saati sabit (elle)';
+    if (!ayni(sl)) ata(sl, s, sl.neden, bn); else if (s.kuyruk.includes(bn)) s.kuyruk.splice(s.kuyruk.indexOf(bn), 1);
   }
 
   // 2. continuity: every running series inside its 30 h, earliest feasible slot first

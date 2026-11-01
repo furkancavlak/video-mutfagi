@@ -302,7 +302,7 @@ function olaylar() {
     if (gorulen.has(`e:${p.dizi_id}:${p.n}`)) continue;
     gorulen.add(`e:${p.dizi_id}:${p.n}`);
     E.push({ tur: 'planli', planli: true, plan: p, makine: dzM(), t: new Date(p.slot), durum: 'planli', baslik: p.baslik, bolum: `Bölüm ${p.n}/${p.toplam}`, kisaBolum: `${p.n}/${p.toplam}`,
-      konu: p.konu || null, views: null, mp4: null, kapak: null, link: null, asama: null, aciklama: '', karar: p.karar ? new Date(p.karar) : null });
+      konu: p.konu || null, views: null, mp4: null, kapak: null, link: null, asama: null, aciklama: '', karar: p.karar ? new Date(p.karar) : null, sabit: !!p.sabit });
   }
   // only videos tied to a series episode or a queue job: loose production folders (tests) never show
   return E.sort((a, b) => (a.t ? +a.t : Infinity) - (b.t ? +b.t : Infinity));
@@ -320,11 +320,11 @@ const DURUM_SATIR = { planli: 'Planlı', paylasildi: 'Paylaşıldı', sirada: 'S
 const kucukKapak = e => `<span class="sat-kapak"${e.konu ? ` style="--k:${konuRenk(e.konu)}"` : ''}>${kapakSrc(e) ? `<img src="${kapakSrc(e)}" alt="" loading="lazy" onerror="this.remove()">` : ''}${ikon(e.mp4 || e.link ? 'oynat' : DURUM[e.durum].ikon, 12)}</span>`;
 // one video = one compact row: small still, time, one-line title, status dot + word
 function satir(e, genis) {
-  if (e.planli) return `<button class="sat sat-planli" data-hikaye-ac="${esc(e.plan.dizi_id)}" title="${esc(planEtiket(e))}"><span class="sat-ic"><span class="sat-ust"><b>${esc(saat(e.t))}</b></span><span class="sat-ad">${esc(e.baslik)} <small>${esc(e.kisaBolum)}</small></span><span class="sat-durum">${esc(e.karar ? `Planlı · karar ${saat(e.karar)}` : 'Planlı')}</span></span></button>`;
+  if (e.planli) return `<button class="sat sat-planli" data-hikaye-ac="${esc(e.plan.dizi_id)}" title="${esc(planEtiket(e))}"><span class="sat-ic"><span class="sat-ust"><b>${kilitIk(e)}${esc(saat(e.t))}</b></span><span class="sat-ad">${esc(e.baslik)} <small>${esc(e.kisaBolum)}</small></span><span class="sat-durum">${esc(e.karar ? `Planlı · karar ${saat(e.karar)}` : 'Planlı')}</span></span></button>`;
   const i = OL.indexOf(e), zaman = e.t ? saat(e.t) : e.durum === 'hazirlaniyor' ? 'bugün' : 'saat yok', ht = e.ep ? hikayeToplam(e.ep.d) : null;
   const ipucu = [e.baslik, e.bolum, DURUM_SATIR[e.durum], e.views != null ? sayi(e.views) + ' izlenme' : '', e.ep ? 'Hikâye: ' + (ht != null ? sayi(ht) + ' izlenme' : '—') : ''].filter(Boolean).join(' · ');
   return `<button class="sat d-${e.durum}${genis ? ' genis' : ''}" data-olay="${i}" title="${esc(ipucu)}">${kucukKapak(e)}
-    <span class="sat-ic"><span class="sat-ust"><b>${esc(zaman)}</b>${e.views != null ? `<span class="sat-izl">${ikon('goz', 11)}${esc(sayi(e.views))}</span>` : ''}</span>
+    <span class="sat-ic"><span class="sat-ust"><b>${kilitIk(e)}${esc(zaman)}</b>${e.views != null ? `<span class="sat-izl">${ikon('goz', 11)}${esc(sayi(e.views))}</span>` : ''}</span>
       <span class="sat-ad">${e.konu ? `<i class="nokta-k" style="--k:${konuRenk(e.konu)}"></i>` : ''}${esc(e.baslik)}${e.kisaBolum ? ` <small>${esc(e.kisaBolum)}</small>` : ''}</span>
       <span class="sat-durum">${e.durum === 'onay' ? '<i class="nabiz-nokta"></i>' : '<i class="nokta-d"></i>'}${esc(DURUM_SATIR[e.durum])}</span>
       ${e.durum === 'hazirlaniyor' && e.asama ? asamaCubuk(e.asama) : ''}
@@ -342,10 +342,12 @@ function aralik() {
   bas.setDate(bas.getDate() - 7 + 7 * ayKaydir); const son = new Date(bas); son.setDate(bas.getDate() + 7 * HAFTA - 1); return [bas, son];
 }
 const goster = e => (durumFiltre === 'hepsi' || e.durum === durumFiltre) && (!konuFiltre || e.konu === konuFiltre);
-const planEtiket = e => `Planlı · ${e.bolum}${e.karar ? ` · karar ${saat(e.karar)}'de` : ' · önceki bölüm bekliyor'}`;
+// 🔒 = the owner pinned this episode's time (bolum.sabit_zaman); automatic ones carry no marker
+const kilitIk = e => (e.planli ? e.plan && e.plan.sabit : e.ep && e.ep.b && e.ep.b.sabit_zaman && !e.ep.b.paylasildi) ? '🔒 ' : '';
+const planEtiket = e => `Planlı${e.sabit ? ' · saati sabit' : ''} · ${e.bolum}${e.karar ? ` · karar ${saat(e.karar)}'de` : ' · önceki bölüm bekliyor'}`;
 // a planned episode: a dashed ghost card, no still; it opens the series window
 const planliKart = e => `<button class="hk-k hk-planli" data-hikaye-ac="${esc(e.plan.dizi_id)}" title="${esc(planEtiket(e))}">
-    <span class="hk-k-ic"><b class="hk-k-saat">${esc(saat(e.t))}</b><span class="hk-k-ad">${esc(e.baslik)}</span>
+    <span class="hk-k-ic"><b class="hk-k-saat">${kilitIk(e)}${esc(saat(e.t))}</b><span class="hk-k-ad">${esc(e.baslik)}</span>
       <span class="hk-k-alt">${e.konu ? `<span class="konu-cip" style="--k:${konuRenk(e.konu)}">${esc(e.konu)}</span>` : ''}</span>
       <span class="hk-k-durum">${ikon('saat', 13)}${esc(planEtiket(e))}</span></span></button>`;
 // the week view's card: a 9:16 cover, time, story, episode, theme, coloured status, views
@@ -354,7 +356,7 @@ function haftaKart(e) {
   const i = OL.indexOf(e), zaman = e.t ? saat(e.t) : e.durum === 'hazirlaniyor' ? 'bugün' : 'saat yok';
   return `<button class="hk-k d-${e.durum}" data-olay="${i}">
     <span class="hk-k-kapak"${e.konu ? ` style="--k:${konuRenk(e.konu)}"` : ''}>${kapakSrc(e) ? `<img src="${kapakSrc(e)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<span class="hk-k-yer">${esc(e.baslik)}</span>${e.mp4 || e.link ? `<span class="gkk-oynat">${ikon('oynat', 13)}</span>` : ''}</span>
-    <span class="hk-k-ic"><b class="hk-k-saat">${esc(zaman)}</b>
+    <span class="hk-k-ic"><b class="hk-k-saat">${kilitIk(e)}${esc(zaman)}</b>
       <span class="hk-k-ad">${esc(e.baslik)}</span>
       <span class="hk-k-alt">${e.bolum ? `<span>${esc(e.bolum)}</span>` : ''}${e.konu ? `<span class="konu-cip" style="--k:${konuRenk(e.konu)}">${esc(e.konu)}</span>` : ''}</span>
       <span class="hk-k-durum">${e.durum === 'onay' ? '<i class="nabiz-nokta"></i>' : '<i class="nokta-d"></i>'}${esc(DURUM_SATIR[e.durum])}</span>
@@ -443,7 +445,7 @@ function acikPencereyiTazele() {
   }
 }
 function gunKart(e) {
-  if (e.planli) return `<article class="gp-kart gp-planli"><div class="gp-bilgi"><div class="gp-satir1"><b>${esc(saat(e.t))}</b><span class="durum d-planli">${ikon('saat', 13)}Planlı</span></div><h3>${esc(e.baslik)}</h3>
+  if (e.planli) return `<article class="gp-kart gp-planli"><div class="gp-bilgi"><div class="gp-satir1"><b>${kilitIk(e)}${esc(saat(e.t))}</b><span class="durum d-planli">${ikon('saat', 13)}Planlı</span></div><h3>${esc(e.baslik)}</h3>
     <div class="gp-cipler">${e.konu ? `<span class="konu-cip">${esc(e.konu)}</span>` : ''}<span class="gp-bolum">${esc(e.bolum)}</span></div>
     <div class="ince-yazi">${e.karar ? `Önceki bölümün izlenmesine ${esc(tarih(e.karar))} bakılır; devam kararı çıkarsa bu bölüm hazırlanır.` : 'Önceki bölüm onay ya da sıra bekliyor; o paylaşılınca bu bölümün saati kesinleşir.'}</div>
     <div class="gp-dugmeler"><button class="dugme" data-hikaye-ac="${esc(e.plan.dizi_id)}">Hikâyeyi aç</button></div></div></article>`;
@@ -1039,6 +1041,41 @@ function tesekkurBagla() {
     b.disabled = false;
   }, true);
 }
+// ---------------- Times set by hand: the story's own hour (dizi.saat, empty = automatic) and a pinned time per episode that is
+// not posted yet (bolum.sabit_zaman, 🔒). Shown in the story window.
+const SABIT_KAPALI = ['yayinda', 'olculdu', 'atlandi', 'kontrol_et'];
+function zamanBolum(d) {
+  const eski = dzM() === 'sunucu' && !svOzellik('dizi-saat'), ac = d.durum === 'aktif' && !eski;
+  const B = (d.bolumler || []).filter(b => !b.paylasildi && !SABIT_KAPALI.includes(b.durum));
+  return `<section class="zmn" data-zmn-id="${esc(d.id)}">
+    <div class="tsk-ust"><h3>${ikon('saat', 15)}Saat</h3></div>
+    <p class="ince-yazi">Hikâyenin saati: sonraki bölümler de bu saatte çıkar. Boş bırakırsan otomatik seçilir.</p>
+    <div class="tsk-alt"><input type="time" class="zmn-saat" value="${esc(d.saat || '')}" ${ac ? '' : 'disabled'} aria-label="Hikâye saati"><button type="button" class="dugme sari" data-zmn-saat ${ac ? '' : 'disabled'}>${ikon('tik', 15)}Kaydet</button><button type="button" class="dugme ince" data-zmn-saat-sil ${ac && d.saat ? '' : 'disabled'}>Otomatiğe dön</button></div>
+    ${B.length ? `<p class="ince-yazi">Bir bölümü tam bir saate sabitle (🔒): başka bölümler onun etrafından kayar.</p>${B.map(b => `<div class="tsk-alt" data-zmn-bolum="${esc(b.n)}"><b>${b.sabit_zaman ? '🔒 ' : ''}Bölüm ${esc(b.n)}</b><input type="datetime-local" class="zmn-zaman" value="${b.sabit_zaman ? yerel(b.sabit_zaman) : ''}" ${ac ? '' : 'disabled'} aria-label="Bölüm ${esc(b.n)} saati"><button type="button" class="dugme sari" data-zmn-sabit ${ac ? '' : 'disabled'}>Sabitle</button><button type="button" class="dugme ince" data-zmn-sabit-sil ${ac && b.sabit_zaman ? '' : 'disabled'}>Kaldır</button></div>`).join('')}` : ''}
+    <span class="dz-hata" role="alert"></span></section>`;
+}
+function zamanBagla() {
+  document.addEventListener('click', async e => {
+    const t = e.target.closest('[data-zmn-saat],[data-zmn-saat-sil],[data-zmn-sabit],[data-zmn-sabit-sil]'); if (!t) return;
+    e.stopPropagation();
+    const kutu = t.closest('.zmn'), id = kutu.dataset.zmnId, h = kutu.querySelector('.dz-hata'), satir = t.closest('[data-zmn-bolum]');
+    h.textContent = ''; t.disabled = true;
+    try {
+      if (satir) {
+        const v = t.hasAttribute('data-zmn-sabit') ? satir.querySelector('.zmn-zaman').value : '';
+        if (t.hasAttribute('data-zmn-sabit') && !v) throw new Error('Önce bir saat seç');
+        await api('dizi/bolum-zaman', { kanal, makine: dzM(), id, n: +satir.dataset.zmnBolum, zaman: v ? ofsetli(v) : null });
+        bildir(v ? 'Saat sabitlendi 🔒' : 'Sabit saat kaldırıldı');
+      } else {
+        const v = t.hasAttribute('data-zmn-saat') ? kutu.querySelector('.zmn-saat').value : '';
+        if (t.hasAttribute('data-zmn-saat') && !v) throw new Error('Önce bir saat seç ya da "Otomatiğe dön"e bas');
+        await api('dizi/saat', { kanal, makine: dzM(), id, saat: v || null });
+        bildir(v ? `Hikâye saati ${v} oldu` : 'Hikâye saati otomatik');
+      }
+      await dizilerYukle(); if (dzGecerli()) hikayeDetayAc(id);
+    } catch (err) { h.textContent = err.message; bildir(err.message, true); t.disabled = false; }
+  }, true);
+}
 // a story's own window (from a Hikâyeler card): its facts, episodes and the thanks list
 function hikayeDetayAc(id) {
   const d = dzGecerli() && DZ.diziler.find(x => x.id === id); if (!d) return;
@@ -1048,6 +1085,7 @@ function hikayeDetayAc(id) {
       <div class="m-cipler">${d.konu ? `<span class="konu-cip">${esc(d.konu)}</span>` : ''}${tonCip(d)}<span class="hk-durum hk-durum-${esc(d.durum)}">${esc(DIZI_DURUM[d.durum] || d.durum)}</span><span class="on-bilgi">${esc((d.bolumler || []).length)} bölüm</span>${top != null ? `<span class="on-bilgi">${ikon('goz', 12)}${esc(sayi(top))} izlenme</span>` : ''}${url ? `<a class="dugme ince" href="${esc(url)}" target="_blank" rel="noopener">${ikon('dis', 14)}Kaynak</a>` : ''}</div>
       ${d.baslik && d.baslik !== d.baslik_kisa ? `<div class="ince-yazi">Kaynak başlık: ${esc(d.baslik)}${d.anlatici ? ' · Ses: ' + esc(d.anlatici.ad || d.anlatici.ses) : ''}</div>` : ''}
       <div class="hd-bolumler">${(d.bolumler || []).map(b => { const s = bolumDurum(b, d), v = bolumIzlenme(b); return `<button class="hd-b d-${s}" data-bolum="${esc(d.id)}|${esc(b.n)}"><b>Bölüm ${esc(b.n)}</b><span class="hd-d"><i class="nokta-d"></i>${esc(DURUM[s].ad)}</span><span>${v != null ? `${ikon('goz', 12)}${esc(sayi(v))}` : ''}</span></button>`; }).join('')}</div>
+      ${zamanBolum(d)}
       ${tesekkurBolum(d)}
     </div><div class="gp-alt"><span></span><span class="ince-yazi">Esc ile kapat</span><span></span></div></div>`, 'gun-panel on-pencere on-d');
 }
@@ -1503,6 +1541,7 @@ $('#fikir-ekle').addEventListener('submit', e => { e.preventDefault(); islem('fi
 $('#dz-ayar').addEventListener('submit', dzKaydet);
 onaylarBagla();
 tesekkurBagla();
+zamanBagla();
 $('#dz-ayar').addEventListener('input', () => { dzKirli = true; });
 let boyutT; window.addEventListener('resize', () => { clearTimeout(boyutT); boyutT = setTimeout(() => { if (O && $('#s-istatistik').classList.contains('on')) istatistikSayfaCiz(); }, 200); });
 $('#pencere').addEventListener('close', () => { const v = $('#pencere video'); if (v) v.pause(); });
