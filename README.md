@@ -29,6 +29,8 @@ Kod bilmen gerekmez. Bu repoyu, Furkan Cavlak kanalında kendi videolarını nas
 
 Yapay zekâsız işler (sıra, takvim, fikir seçme, sonuçlar) için tarayıcıda bir kontrol paneli de var: `node panel/panel.js` ([panel/BENIOKU.md](panel/BENIOKU.md)).
 
+İnternetteki gerçek anıları bölüm bölüm anlatan, tutmayan hikâyeyi kendisi kesen bir **hikâye dizisi kanalı** da kurabilirsin. Neden ve nasıl yaptığımızı, web panelinin bu iş için nasıl çalıştığını [DIZI.md](DIZI.md) anlatıyor.
+
 Ajanın okuduğu talimatlar `AGENTS.md` dosyasında. Kurulum adımları `kurulum/KURULUM.md` dosyasında.
 
 ## Ajansız kurulum (tek tık)
