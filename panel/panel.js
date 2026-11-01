@@ -6,7 +6,7 @@
 //   node panel/panel.js [--port 4747] [--acma] [--kok <repo>]
 //   node panel/panel.js --ozet                    print the queue summary as JSON (the panel uses it over SSH)
 //   node panel/panel.js --zaman <is-id> "YYYY-MM-DD HH:MM"
-//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-tesekkur <json> | --dizi-metin <json> | --istatistik <json> | --istatistik-takip <json> | --instagram <json> | --takipci <json>
+//   node panel/panel.js --diziler <kanal> | --dizi-karar <json> | --dizi-tekrar <json> | --dizi-ayar <json> | --dizi-havuz <kanal> | --dizi-havuz-ele <json> | --dizi-havuz-one <json> | --dizi-tesekkur <json> | --dizi-metin <json> | --dizi-saat <json> | --dizi-bolum-zaman <json> | --istatistik <json> | --istatistik-takip <json> | --instagram <json> | --takipci <json>
 //                                                 the Diziler page on a server: print JSON; on error "HATA: ..." and exit 1 (3 = lock busy, HTTP 409)
 //
 // Listens on 127.0.0.1 only; every API call carries a random key made at start (it is in the printed link).
@@ -563,6 +563,8 @@ function havuzEle(b) {
 function planliBolumler(diziler, ayar, bek, simdi = Date.now()) {
   const D = DiziDepo(); if (typeof D.hedefSlot !== 'function' || typeof D.olcumZamani !== 'function') return [];
   ayar = ayar || {}; const out = [], dolu = (bek || []).map(j => Date.parse(j.ne_zaman || '')).filter(Number.isFinite);
+  // hand-pinned episodes (sabit_zaman) of listed series hold their time: the automatic ones move around them
+  for (const d of diziler || []) if (d && d.durum === 'aktif') for (const x of d.bolumler || []) { const t = x.paylasildi ? null : D.sabitZaman(x); if (t != null) dolu.push(t); }
   for (const d of diziler || []) {
     if (!d || d.durum !== 'aktif' || D.metinOnay(d) === 'bekliyor' || D.metinOnay(d) === 'reddedildi') continue;
     const B = [...(d.bolumler || [])].sort((a, b) => a.n - b.n);
@@ -575,15 +577,17 @@ function planliBolumler(diziler, ayar, bek, simdi = Date.now()) {
     else if (once.durum === 'onay-bekliyor' || once.durum === 'sirada') {
       // the previous episode is due at its job's time: the same gap and decision rule as after a real post
       const j = (bek || []).find(x => once.video && x.video === once.video), t0 = j && j.ne_zaman ? Date.parse(j.ne_zaman) : simdi;
-      const sanki = { paylasildi: new Date(Math.max(t0, simdi)).toISOString() };
+      const sanki = { n: once.n, paylasildi: new Date(Math.max(t0, simdi)).toISOString() };
       slot = D.hedefSlot(sanki, ayar, d); karar = D.olcumZamani(sanki, ayar, d);
     } else continue;
     if (!Number.isFinite(slot)) continue;
     // one video per slot: a time held by a queued job or an earlier plan moves to the next free configured hour
-    for (let k = 0; k < 40 && dolu.some(t => Math.abs(t - slot) < 30 * 60e3); k++) slot = D.sonrakiSlotSaati(slot + 60e3, ayar.saatler || saat);
-    dolu.push(slot);
+    const sabit = D.sabitZaman(b);
+    if (sabit != null) slot = sabit;   // pinned: exact, never moved
+    else for (let k = 0; k < 40 && dolu.some(t => Math.abs(t - slot) < 30 * 60e3); k++) slot = D.sonrakiSlotSaati(slot + 60e3, ayar.saatler || saat);
+    if (sabit == null) dolu.push(slot);
     out.push({ planli: true, dizi_id: d.id, baslik: d.baslik_kisa || d.baslik, n: b.n, toplam: B.length, ton: d.ton || null, konu: d.konu || null,
-      slot: new Date(slot).toISOString(), karar: Number.isFinite(karar) ? new Date(karar).toISOString() : null });
+      slot: new Date(slot).toISOString(), karar: Number.isFinite(karar) ? new Date(karar).toISOString() : null, ...(sabit != null ? { sabit: true } : {}) });
   }
   return out;
 }
@@ -700,6 +704,40 @@ function diziTekrar(b) {
   if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
   return kilitli(b.kanal, D => { const { veri, d } = diziBul(D, b); D.tekrarDene(d, b.n); D.kaydet(KOK, b.kanal, veri); return { ok: true }; }, b.id);
 }
+// a story's own hour (dizi.saat, "HH:MM" or null = automatic): its later episodes follow it (dizi.js diziSaati)
+function diziSaatGovde(b) {
+  const saat = b.saat === null || b.saat === undefined || b.saat === '' ? null : typeof b.saat === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.saat.trim()) ? b.saat.trim() : undefined;
+  if (saat === undefined) throw new Error('Saat SS:DD olmalı (örn. 19:30)');
+  return { kanal: kanalAdi(b.kanal), id: diziId(b.id), saat };
+}
+function diziSaat(b) {
+  const g = diziSaatGovde(b);
+  if (!kanallar().includes(g.kanal)) throw new Error('kanal yok');
+  return kilitli(g.kanal, D => {
+    const veri = D.yukle(KOK, g.kanal), d = (veri.diziler || []).find(x => x.id === g.id);
+    if (!d) throw new Error('böyle bir dizi yok');
+    D.saatUygula(d, g.saat); D.kaydet(KOK, g.kanal, veri);
+    return { ok: true, saat: d.saat || null };
+  }, g.id);
+}
+// one episode pinned to an exact time (bolum.sabit_zaman, ISO with the browser's offset; null/'' clears). A job already
+// waiting in the queue for this episode moves to that time too.
+function diziBolumZamanGovde(b) {
+  const bos = b.zaman === null || b.zaman === undefined || b.zaman === '';
+  return { kanal: kanalAdi(b.kanal), id: diziId(b.id), n: bolumNo(b.n), zaman: bos ? null : zamanMetni(b.zaman) };
+}
+function diziBolumZaman(b) {
+  const g = diziBolumZamanGovde(b);
+  if (!kanallar().includes(g.kanal)) throw new Error('kanal yok');
+  return kilitli(g.kanal, D => {
+    const veri = D.yukle(KOK, g.kanal), d = (veri.diziler || []).find(x => x.id === g.id);
+    if (!d) throw new Error('böyle bir dizi yok');
+    const x = D.bolumZamanUygula(d, g.n, g.zaman), j = g.zaman && x.video ? isler('bekleyen').find(y => y.video === x.video) : null;
+    if (j) zamanDegistir(j.id, g.zaman);
+    D.kaydet(KOK, g.kanal, veri);
+    return { ok: true, sabit_zaman: x.sabit_zaman || null, kuyruk_tasindi: !!j };
+  }, g.id);
+}
 // only the given keys change; the rest of konu.json is kept (read, merge, write to a temp file, rename)
 function diziAyarYaz(b) {
   if (!kanallar().includes(b.kanal)) throw new Error('kanal yok');
@@ -787,6 +825,8 @@ async function api(req, u) {
   if (!GET && yol === 'dizi/tekrar') return sunucu ? sunucuJsonYaz('--dizi-tekrar', diziTekrarGovde(b)) : diziTekrar(b);
   if (!GET && yol === 'dizi/tesekkur') return sunucu ? sunucuJsonYaz('--dizi-tesekkur', diziTesekkurGovde(b)) : diziTesekkur(b);
   if (!GET && yol === 'dizi/ayar') return sunucu ? sunucuJsonYaz('--dizi-ayar', diziAyarGovde(b)) : diziAyarYaz(b);
+  if (!GET && yol === 'dizi/saat') return sunucu ? sunucuJsonYaz('--dizi-saat', diziSaatGovde(b)) : diziSaat(b);
+  if (!GET && yol === 'dizi/bolum-zaman') return sunucu ? sunucuJsonYaz('--dizi-bolum-zaman', diziBolumZamanGovde(b)) : diziBolumZaman(b);
   if (!GET && yol === 'dizi/metin') return sunucu ? sunucuJsonYaz('--dizi-metin', diziMetinGovde(b)) : diziMetin(b);
   if (GET && yol === 'dizi/havuz') return sunucu ? sunucuJson('--dizi-havuz', kanalAdi(u.searchParams.get('kanal')), u.searchParams.has('taze')) : havuzCevap(u.searchParams.get('kanal'));
   if (!GET && yol === 'dizi/havuz/ele') return sunucu ? sunucuJsonYaz('--dizi-havuz-ele', havuzEleGovde(b)) : havuzEle(b);
@@ -859,14 +899,14 @@ if (require.main !== module) return;
 
   // ozellik: lets the home panel know which flags this copy has (an older one would not answer them)
 if (process.argv.includes('--ozet')) {
-  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler', 'istatistik', 'instagram', 'tesekkur', 'istatistik-takip'] })); process.exit(0); }
+  try { process.stdout.write(JSON.stringify({ ...kuyrukOzet(arg('--kanal') || undefined), ozellik: ['diziler', 'istatistik', 'instagram', 'tesekkur', 'istatistik-takip', 'dizi-saat'] })); process.exit(0); }
   catch (e) { console.error('HATA: ' + e.message); process.exit(1); }
 }
 if (process.argv.includes('--zaman')) { const i = process.argv.indexOf('--zaman'); zamanDegistir(process.argv[i + 1], process.argv[i + 2]); console.log('Saat değişti.'); process.exit(0); }
 
 // Diziler on a server: the panel on the home PC calls these over ssh (same functions as the local routes)
 const jsonArg = s => { let j; try { j = JSON.parse(s); } catch { throw new Error('bozuk istek'); } if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('bozuk istek'); return j; };
-for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-tesekkur', s => diziTesekkur(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--istatistik', s => istatistikCevap(jsonArg(s))], ['--istatistik-takip', s => takipElle(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))], ['--dizi-havuz-one', s => havuzOne(jsonArg(s))]]) {
+for (const [bayrak, fn] of [['--diziler', k => dizilerCevap(kanalAdi(k))], ['--dizi-karar', s => diziKarar(jsonArg(s))], ['--dizi-tekrar', s => diziTekrar(jsonArg(s))], ['--dizi-tesekkur', s => diziTesekkur(jsonArg(s))], ['--dizi-ayar', s => diziAyarYaz(jsonArg(s))], ['--dizi-havuz', k => havuzCevap(kanalAdi(k))], ['--dizi-metin', s => diziMetin(jsonArg(s))], ['--dizi-saat', s => diziSaat(jsonArg(s))], ['--dizi-bolum-zaman', s => diziBolumZaman(jsonArg(s))], ['--istatistik', s => istatistikCevap(jsonArg(s))], ['--istatistik-takip', s => takipElle(jsonArg(s))], ['--dizi-havuz-ele', s => havuzEle(jsonArg(s))], ['--dizi-havuz-one', s => havuzOne(jsonArg(s))]]) {
   if (!process.argv.includes(bayrak)) continue;
   let cikti;
   try { cikti = JSON.stringify(fn(arg(bayrak))); } catch (e) { console.error('HATA: ' + e.message); process.exit(e.kod === 409 ? 3 : 1); }

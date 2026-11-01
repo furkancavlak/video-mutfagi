@@ -146,14 +146,51 @@ function sonrakiSlotSaati(t0, saatler) {
 // its first episode is produced (a configured hour no other active series holds); its next episode goes out at that hour.
 const SAAT = /^([01]\d|2[0-3]):[0-5]\d$/;
 const diziSaati = dz => (dz && SAAT.test(String(dz.saat || ''))) ? [dz.saat] : null;
-// the next episode's slot after episode b: the series' own hour (or the configured hours) at least bolum_arasi_saat later
-const hedefSlot = (b, ayar = {}, dz = null) => sonrakiSlotSaati(new Date(b.paylasildi).getTime() + (ayar.bolum_arasi_saat ?? 20) * 3600e3, diziSaati(dz) || ayar.saatler);
+// An episode pinned by hand (Furkan 01.11, panel "saati sabit"): bolum.sabit_zaman, an ISO time; ms or null. Never moved by
+// a slot clash and exempt from bolum_arasi_saat: the owner's explicit choice.
+const sabitZaman = b => { const t = b && b.sabit_zaman ? Date.parse(b.sabit_zaman) : NaN; return Number.isFinite(t) ? t : null; };
+// the next episode's slot after episode b: its pin if it has one, else the series' own hour (or the configured hours) at least bolum_arasi_saat later
+const hedefSlot = (b, ayar = {}, dz = null) => { const s = ((dz && dz.bolumler) || []).find(x => x.n === b.n + 1), p = s && !s.paylasildi ? sabitZaman(s) : null; return p ?? hedefSlotOto(b, ayar, dz); };
+const hedefSlotOto = (b, ayar = {}, dz = null) => sonrakiSlotSaati(new Date(b.paylasildi).getTime() + (ayar.bolum_arasi_saat ?? 20) * 3600e3, diziSaati(dz) || ayar.saatler);
 function olcumZamani(b, ayar = {}, dz = null) {
   const p = new Date(b.paylasildi).getTime();
   if (!(ayar.olcum_once_saat > 0)) return p + (ayar.bekle_saat || 0) * 3600e3;
   return Math.max(p + 6 * 3600e3, hedefSlot(b, ayar, dz) - ayar.olcum_once_saat * 3600e3);   // never on fewer than 6 hours of data
 }
 const olcumGecen = (b, ayar, simdi, dz = null) => (new Date(simdi).getTime() - olcumZamani(b, ayar, dz)) / 3600e3;
+// ---- manual times (panel). The caller holds kilitAl and the series busy check.
+// dizi.saat: "HH:MM" or null (back to automatic); later episodes follow it through diziSaati
+function saatHata(d, saat) {
+  if (!d) return 'böyle bir dizi yok';
+  if (d.durum !== 'aktif') return 'Yalnız etkin hikâyenin saati değiştirilir';
+  if (saat !== null && !SAAT.test(String(saat))) return 'Saat SS:DD olmalı (örn. 19:30)';
+  return null;
+}
+function saatUygula(d, saat) {
+  const e = saatHata(d, saat); if (e) throw new Error(e);
+  if (saat === null) delete d.saat; else d.saat = saat;
+  return d;
+}
+// bolum.sabit_zaman: only an episode that is not posted yet; a set time must be in the future, null clears
+const SABIT_KAPALI = ['yayinda', 'olculdu', 'atlandi', 'kontrol_et'];
+function bolumZamanHata(d, n, zaman, simdi = Date.now()) {
+  const b = bul(d || {}, n);
+  if (!b) return `bölüm ${n} yok`;
+  if (d.durum !== 'aktif') return 'Yalnız etkin hikâyenin saati sabitlenir';
+  if (b.paylasildi || SABIT_KAPALI.includes(b.durum)) return 'Bu bölüm artık sabitlenemez (yayında ya da kapanmış)';
+  if (zaman === null) return null;
+  const t = typeof zaman === 'string' ? Date.parse(zaman) : NaN;
+  if (!Number.isFinite(t)) return 'zaman anlaşılmadı';
+  if (t <= new Date(simdi).getTime()) return 'geçmiş bir saat seçilemez';
+  return null;
+}
+function bolumZamanUygula(d, n, zaman, simdi = Date.now()) {
+  const e = bolumZamanHata(d, n, zaman, simdi); if (e) throw new Error(e);
+  const b = bul(d, n);
+  if (zaman === null) delete b.sabit_zaman; else b.sabit_zaman = new Date(zaman).toISOString();
+  return b;
+}
+
 // an hour for a new series: the first configured one no other active series holds, else the least used
 function bosSaat(diziler, ayar = {}, haric = null) {
   const ss = (ayar.saatler || []).filter(s => SAAT.test(s));
@@ -239,4 +276,4 @@ const diziKilitYer = (kok, kanal, id) => kilitYer(kok, kanal, '.kilit-' + String
 const diziKilitAl = (kok, kanal, id) => kilitDosyaAl(diziKilitYer(kok, kanal, id));
 const diziMesgul = (kok, kanal, id) => !!kilitMesaj(diziKilitYer(kok, kanal, id));
 
-module.exports = { olcumZamani, olcumGecen, sonrakiSlotSaati, hedefSlot, bosSaat, yukle, kaydet, kararVer, elleKarar, kilitAl, kosuKilitAl, diziKilitAl, diziMesgul, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi, tonGoc };
+module.exports = { sabitZaman, saatHata, saatUygula, bolumZamanHata, bolumZamanUygula, olcumZamani, olcumGecen, sonrakiSlotSaati, hedefSlot, bosSaat, yukle, kaydet, kararVer, elleKarar, kilitAl, kosuKilitAl, diziKilitAl, diziMesgul, kararHata, tekrarHata, kararUygula, tekrarDene, metinOnay, metinKarar, metinOnayGoc, ozetHatasi, tonGoc };
